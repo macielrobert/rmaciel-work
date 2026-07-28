@@ -1,0 +1,2789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<!-- theme follows the DEVICE system setting; "light dark" keeps the UA's
+     default canvas on-scheme before the stylesheet parses (no flash) -->
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<title>SVG Noise Lab — v80</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  /* WebKit inflates text on rotation to landscape unless told not to —
+     this pins every size to its authored px value in both orientations */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  @media (prefers-color-scheme: light) {
+    html, body { background: #fff; }
+  }
+
+  #noiselab {
+    /* the whole theme is these two values — .light swaps them */
+    --bg:  #000;
+    --ink: #fff;
+    /* l-grid cell width. Fixed like the icon cell — only the column COUNT
+       responds to width. min(...,100%) is the one concession: below ~250px
+       of window there is no room for a 200px cell, so it gives way. */
+    --g-cell: 200px;
+    /* below this viewport width a 200px cell no longer fits even once, so the
+       grid pins to 2 flexible columns instead of dropping to 1 (see l-grid).
+       479 = two 200px cells + gap need inner 410px -> viewport 479. */
+    /* collapsed height of a long body in l-grid — 4 lines at 11px / 1.9.
+       Past this the copy clamps and the caret appears. */
+    --body-clamp: 84px;
+    /* widest a HERO image may draw. Unlike the wordmark's conservative cap,
+       a lead image is content and earns room — but it still stops growing
+       so a 27in monitor gains surrounding space, not a bigger picture. */
+    --hero-max: 720px;
+    /* THE TASKBAR RULE, APPLIED TO TYPE. The icon cell stops at 50px, the
+       wordmark at 320, the hero at 720, the l-grid cell at 200 — body copy
+       was the last element still growing with the viewport. It stops too
+       now, and the extra room becomes space rather than longer lines.
+
+       In a monospace face `ch` IS the character advance, so 66ch is EXACTLY
+       66 characters — not an estimate. It resolves against the window's 11px
+       text, so a later type-size change widens the column on its own and the
+       character COUNT holds. And because it CAPS rather than switches, no
+       breakpoint is needed: a phone in portrait only reaches 48ch and never
+       feels it. 66 is the middle of the comfortable 45-75 range. */
+    --measure: 66ch;
+    /* THE SAME IDEA, DIFFERENT JOB. --measure is a fact about READING: a line
+       of prose stops being comfortable past ~75 characters. A form is not
+       prose — its fields are targets to hit, not lines to follow — so the
+       reading measure only makes them needlessly small. The form gets its own,
+       wider cap.
+       Still a CAP, still in ch, still absolute: the taskbar rule holds, only
+       the number changes. 96ch lands at roughly the left half of a laptop
+       window and stops there, so a 27" monitor gains space around the form
+       rather than a wider one. */
+    --measure-form: 96ch;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;                           /* mobile address-bar aware */
+    background: var(--bg);
+    color: var(--ink);
+    font-family: monospace;
+    display: flex;
+    /* Orientation is now FIXED: contact top, menu bottom, all screens.
+       (Was menu-top on desktop; the contact brief pins the top half.) */
+    flex-direction: column-reverse;
+    overflow: hidden;
+    position: relative;                       /* anchors #nl-window */
+  }
+  #noiselab.light { --bg: #fff; --ink: #000; }
+  /* pre-boot correctness on light-scheme devices (JS re-applies at boot).
+     Must come AFTER the base #noiselab rule or the dark defaults win. */
+  @media (prefers-color-scheme: light) {
+    #noiselab { --bg: #fff; --ink: #000; }
+  }
+  #noiselab * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* the two halves — no longer a fixed 50/50: the GRID half is sized by JS to
+     exactly (canvas height + footer reserve), so the seam FOLLOWS the grid;
+     the content half takes whatever remains */
+  #nl-grid, #nl-content {
+    min-height: 0;                            /* let flex children hold their box, not content height */
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  #nl-content { flex: 1 1 auto; }
+  #nl-grid    { flex: 0 0 auto; height: 50%; /* pre-boot fallback; JS overwrites */ }
+
+  /* menu half — the icon grid (canvas sized in JS) */
+  /* the hairline is the seam between the halves — accent grey holds on both themes */
+  #nl-grid  { display: flex; align-items: center; justify-content: center;
+              border-top: 1px solid rgba(143,143,153,0.5); }
+  /* canvas anchors to the BOTTOM of the half: it sits flush against the
+     footer reserve (padding-bottom, set in boot), i.e. on top of the footer.
+     position: relative so the keyboard layer can be placed onto the canvas. */
+  #nl-stage { width: 100%; height: 100%; display: flex; align-items: flex-end; justify-content: center;
+              position: relative; }
+  #nl-gl    { display: block; cursor: pointer; background: var(--bg); }
+
+  /* ------------------------------------- keyboard / screen-reader grid layer
+     The canvas is PIXELS: it cannot be tabbed into, and a screen reader meets
+     one image where there are thirteen projects. This layer is the answer —
+     one empty focusable span per icon, laid onto that icon's RESTING cell box
+     and carrying the project title as its accessible name. The spans read the
+     same pxCx / pxCy / cellPxCss that the pointer hit-test reads, so pointer
+     and keyboard targets cannot drift apart, and they re-place on resize for
+     free.
+
+     `pointer-events: none` is LOAD-BEARING. The spans must never intercept a
+     tap: the canvas keeps the entire pointer path it already had, untouched,
+     and this layer is reached by keyboard only. An element with pointer events
+     off can still take keyboard focus, which is exactly the asymmetry wanted. */
+  #nl-keys { position: absolute; pointer-events: none; }
+  #nl-keys [data-key] { position: absolute; display: block; outline: none; }
+  /* THE FOCUS MARK — a DOM hairline on the cell, drawn in the structural
+     accent, the same stroke as the seam. :focus-visible, so it appears for
+     keyboard use and never behind a tap. It is a CONTROL, so by the standing
+     rule it stays resolved: it does not churn with the art underneath it. */
+  #nl-keys [data-key]:focus-visible {
+    outline: 1px solid rgba(143,143,153,0.9);
+    outline-offset: 2px;
+  }
+
+  /* ------------------------------------------------------- no-WebGL fallback
+     WebGL2 can be missing for reasons that have nothing to do with the
+     visitor: an old Android build, hardware acceleration switched off, a GPU
+     on a driver blocklist, a locked-down managed browser. A couple of percent
+     of people. That used to take the WHOLE SITE with it — the context failed,
+     boot() returned, and nothing else was ever wired: no footer, no ABOUT, no
+     CONTACT, no way to read a single word. The worst kind of failure, too,
+     because those visitors leave without ever appearing in an analytics
+     number you would think to look at.
+
+     So the shader is an ENHANCEMENT now, and this is the site without it.
+     The fallback is not a second page or a second navigation — it is the KEY
+     LAYER, the DOM twin that already existed for the keyboard and screen
+     readers, made visible and allowed to flow as a wrapped list of titles.
+     One menu, two renderings; the accessibility work paid for this for free.
+
+     The coherence rule survives the translation: the selected project is INK
+     and the rest stay grey. That is what the frozen icon means, said in type
+     instead of pixels. */
+  #noiselab.nogl #nl-gl    { display: none; }
+  #noiselab.nogl #nl-stage { align-items: center; }
+  #noiselab.nogl #nl-keys {
+    position: static;                          /* placeKeys() never runs here */
+    pointer-events: auto;                      /* now the real menu, so it
+                                                  takes taps itself — there is
+                                                  no canvas beneath to take them */
+    display: flex; flex-wrap: wrap;
+    align-content: center; justify-content: center;
+    width: 100%; max-height: 100%;
+    overflow-y: auto;
+    /* the site's one spacing value, same as every other margin. The half is
+       sized to this list's measured height, so any padding here is real space
+       that the seam then accounts for — nothing is left over. */
+    padding: 0 var(--nl-m, 12px);
+    scrollbar-width: none;
+  }
+  #noiselab.nogl #nl-keys::-webkit-scrollbar { display: none; }
+  #noiselab.nogl #nl-keys [data-key] {
+    position: static;
+    width: auto; height: auto;
+    /* tight: the tap target comes from the padding, and the padding IS the
+       separation between titles — the same trick the footer nav uses instead
+       of commas. Anything looser reads as the list being adrift. */
+    padding: 4px 8px;
+    font-size: 11px; line-height: 1.5; letter-spacing: 0.05em;
+    color: rgba(143,143,153,0.9);
+    cursor: pointer;
+  }
+  /* the coherent one, in text */
+  #noiselab.nogl #nl-keys [data-key][aria-selected="true"] { color: var(--ink); }
+  @media (hover: hover) {
+    #noiselab.nogl #nl-keys [data-key]:hover { color: var(--ink); }
+  }
+
+  /* ------------------------------------------------ contact: inactive (about) */
+  /* Centered in the contact half. Empty at rest (slot kept for future copy);
+     non-interactive. */
+  #nl-about {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    font-size: 11px; line-height: 1.8; letter-spacing: 0.05em;
+    pointer-events: none;
+    padding: 0 24px;
+  }
+  #nl-about .in { max-width: 36ch; }
+
+  /* ------------------------------------------------ contact: active (window) */
+  /* Absolutely positioned in #noiselab so it can span past the 50% seam.
+     Borderless — the text floats on the black field. All four offsets come
+     from ONE value derived from the grid itself: --nl-m = pitch * MARGIN_RATIO
+     (set in resize()). Bottom is computed so the gap between the window and
+     the RESTING grid's top cell edge is also --nl-m. */
+  #nl-window {
+    position: absolute;
+    top:    var(--nl-m, 24px);
+    left:   var(--nl-m, 24px);
+    right:  var(--nl-m, 24px);
+    bottom: var(--nl-win-bottom, 55%);
+    padding: 20px 22px;
+    font-size: 11px; line-height: 1.9; letter-spacing: 0.05em;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+    /* two fixed regions: text above (constant height, scrolls on overflow,
+       empty space when short), carousel pinned below — same place always */
+    display: flex;
+    flex-direction: column;
+  }
+  /* the flexing region: text below, expand layer above it when open */
+  #nl-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+  }
+  #nl-window-text {
+    height: 100%;
+    /* THE MEASURE. One cap, every layout, both orientations — the window
+       keeps growing with the viewport, the line length does not. */
+    max-width: var(--measure);
+    overflow-y: auto;
+    pointer-events: auto;            /* vertical scroll needs it; exits are
+                                        the ×, the frozen icon, gaps, Esc */
+    scrollbar-width: none;
+  }
+  #nl-window-text::-webkit-scrollbar { display: none; }
+  /* WHERE the capped column sits: FLUSH LEFT, in every layout and both
+     orientations. There is deliberately no rule here — left is what a block
+     of text does on its own, and the point is that it does the same thing
+     everywhere. Cap the width, never move the left edge.
+     The reason it is the LEFT edge specifically: in a left-to-right reading
+     that is where every line begins, so it is the edge the eye returns to.
+     Pinning it to a margin keeps that return point FIXED — the copy starts in
+     the same place whatever the window is doing. The slack the cap gives back
+     always falls on the right, as space. Same logic as the fixed icon cell:
+     hold the thing still, let the room around it grow. */
+
+  /* ------------------------------------------------ expanded image layer */
+  /* IN-FLOW, not an overlay: expanding display-swaps the text region for
+     this view (same hard cut as before). Interaction props live on the
+     CHILDREN because landscape uses display:contents on this element. */
+  #nl-expand {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+  }
+  #nl-window.x #nl-expand { display: flex; }
+  #nl-window.x #nl-window-text { display: none; }
+  #nl-exp-top, #nl-exp-stage, #nl-exp-cap {
+    pointer-events: auto;
+    user-select: none; -webkit-user-select: none;
+  }
+  #nl-exp-stage { touch-action: none; }        /* swipes are read manually */
+
+  /* LANDSCAPE: the window is ALWAYS two-column inside the margins, expanded
+     or not, so the two states share one geometry.
+     UNEXPANDED: project info text fills the RIGHT half (wrapping, scrolling
+     on overflow — the same slot the image takes when expanded); the
+     carousel sits bottom-LEFT at half width. Rows above it stay open.
+     EXPANDED: overrides below — breadcrumb + caption stack in the left
+     column, the image takes the right at full height. */
+  @media (orientation: landscape) {
+    #nl-window {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) var(--car-h, 25%);
+      column-gap: var(--nl-m, 24px);
+      row-gap: 10px;
+    }
+    #nl-main { display: contents; }
+    #nl-window-text { grid-column: 2; grid-row: 1 / span 2;
+      /* STRETCH, then let max-width do the stopping. A grid item told to
+         `start` sizes to FIT-CONTENT, which is the wrong question to ask: the
+         width should come from the measure, not from the copy.
+
+         The difference is invisible for prose — a paragraph's natural width is
+         enormous, so it hits the cap either way — and catastrophic for anything
+         short. The contact form is the clear case: its labels are single words
+         and its `width: 100%` inputs contribute almost nothing to intrinsic
+         width, so under `start` the whole form collapsed to about the size of
+         one default input and never reached its cap at all.
+
+         Stretched, the item fills its column, max-width clamps it at the
+         measure, and — because it then CANNOT stretch — alignment falls back
+         to start on its own. So the left edge still sits on the gutter and
+         still holds still as the screen grows; that behaviour was never what
+         `start` was buying. */
+      justify-self: stretch; }
+    #nl-car         { grid-column: 1; grid-row: 2; margin: 0; }
+    /* LAYOUTS 'text' and 'form': no image strip, so the copy takes both
+       columns. What each does with that width differs — see l-form below. */
+    #nl-window.l-text #nl-window-text,
+    #nl-window.l-form #nl-window-text { grid-column: 1 / span 2; }
+
+    /* LAYOUT 'grid' is stacked, not columnar: undo the grid container so the
+       portrait arrangement (text above, images below) holds on wide screens
+       too. The image grid wants full width more than the text wants a column. */
+    #nl-window.l-grid            { display: flex; flex-direction: column; }
+    #nl-window.l-grid #nl-main   { display: block; position: relative; }
+    #nl-window.l-grid.x #nl-expand { display: flex; }
+    #nl-window.l-grid.x #nl-exp-stage { margin-top: 10px; }
+
+    /* expanded overrides */
+    #nl-window.x { grid-template-rows: auto minmax(0, 1fr) var(--car-h, 25%); }
+    #nl-window.x #nl-expand { display: contents; }
+    #nl-window.x #nl-exp-top   { grid-column: 1; grid-row: 1; }
+    #nl-window.x #nl-exp-cap   { grid-column: 1; grid-row: 2; align-self: start; max-height: none; }
+    #nl-window.x #nl-exp-stage { grid-column: 2; grid-row: 1 / span 3; margin-top: 0; }
+    #nl-window.x #nl-car       { grid-row: 3; }
+  }
+  #nl-exp-top { display: flex; align-items: center; gap: 8px; }
+  /* the LOCAL exit — up one layer (image -> project overview). Mirrors the ×
+     spatially; the × stays the GLOBAL eject. Only exists in the image view,
+     so the two marks document the layer structure. Static, like the ×. */
+  #nl-back {
+    padding: 6px 10px 6px 0;                   /* fat tap target */
+    font-size: 13px; line-height: 1;
+    color: rgba(143,143,153,0.9);
+    cursor: pointer;
+    user-select: none;
+  }
+  #nl-back:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-back:hover { color: var(--ink); } }
+  #nl-exp-hd { color: rgba(143,143,153,0.9); }
+  #nl-exp-stage {
+    flex: 1 1 auto; min-height: 0;
+    margin-top: 10px;
+    display: flex; flex-direction: column;
+  }
+  #nl-exp-fit {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* the WHOLE image is always visible, scaled UP until its larger fit meets
+     the closest boundary — never cropped. width/height 100% is load-bearing:
+     without an explicit layout box, object-fit has nothing to fill and the
+     img sits at its intrinsic size (the old square rendered at a tiny
+     120x120 for exactly this reason). */
+  #nl-exp-img { width: 100%; height: 100%; object-fit: contain; }
+  /* caption: a bare grey line — no bar, no border — RESERVED below the image
+     area. STATIC: always visible when the image has caption content, no
+     show/hide interaction. Wraps to multiple lines (the image area yields);
+     past ~4 lines it scrolls rather than eating the image. */
+  #nl-exp-cap {
+    flex: 0 0 auto;
+    min-height: 21px;
+    max-height: 84px;
+    /* a caption is copy, so it takes the same measure as the body */
+    max-width: var(--measure);
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding-top: 6px;
+    color: rgba(143,143,153,0.9);
+    visibility: hidden;
+  }
+  #nl-exp-cap::-webkit-scrollbar { display: none; }
+  #nl-window .hd { color: rgba(143,143,153,0.9); }
+
+  /* ---------------------------------------------------------- LAYOUTS
+     Each window entry carries a LAYOUT name from the CMS; the window wears it
+     as an `l-<name>` class and the rules below restructure accordingly. Two
+     exist today (both were hardcoded conditions before they were named):
+
+       l-standard  the default — carousel strip pinned at the foot, text above
+                   (portrait) or in the right column (landscape), wordmark
+                   centered in the open left area.
+       l-text      no imagery. Copy takes the full window width. Used by ABOUT
+                   and by any entry with no images.
+       l-form      the contact form. Structurally identical to l-text — it was
+                   borrowing that name until the two needed to differ — but it
+                   takes the WIDER --measure-form instead of the reading
+                   measure, because a field is not a line of prose.
+       l-grid      image GRID instead of the strip: the icon grid's rule
+                   applied to pictures — fixed 16:9 cells (--g-cell, 200px
+                   wide), column count adapting to whatever width exists,
+                   never the cell size. Stacked in BOTH orientations: text
+                   above, grid filling the rest and scrolling vertically.
+                   Cells crop to fill (cover), so the grid stays uniform
+                   regardless of what shape the source images are.
+
+     A new layout is: one name in LAYOUTS, one block of rules here, and the
+     name typed into a project's `layout` field. Nothing else changes — the
+     expand view, churn swap, and carousel machinery are layout-agnostic.
+     `.x` (image expanded) composes ON TOP of any layout. */
+
+  /* --------------------------------------------------- layout: l-grid */
+  /* Stacked in both orientations, so the landscape two-column rules further
+     down are explicitly undone for this layout. Text keeps its natural
+     height at the top; the grid takes everything left and scrolls. */
+  #nl-window.l-grid #nl-main       { flex: 0 0 auto; }
+  #nl-window.l-grid #nl-window-text{ height: auto; overflow: visible; }
+  #nl-window.l-grid #nl-car {
+    flex: 1 1 auto;
+    height: auto; min-height: 0;
+    margin-top: 14px;
+  }
+  #nl-window.l-grid .car {
+    display: grid;
+    /* DEFAULT: fixed cells, adaptive count — the icon grid's rule, in the DOM.
+       Below --g-2up the phone can't fit even one 200px cell (inner width is
+       ~321px in portrait), so it would drop to a single column that reads too
+       close to the standard mobile layout. The override below pins portrait
+       phones to exactly TWO flexible columns instead — the one place the grid
+       guarantees a COUNT rather than a SIZE. */
+    grid-template-columns: repeat(auto-fill, min(var(--g-cell), 100%));
+    justify-content: center;
+    align-content: start;
+    gap: 10px;
+    height: 100%;
+    overflow-x: hidden; overflow-y: auto;
+    scroll-snap-type: none;
+  }
+  /* PORTRAIT PHONE: force 2 columns, cells flex to fit (each ~155px at 390px).
+     Gated on width so a wider portrait tablet keeps the fixed-cell default. */
+  @media (max-width: 479px) {
+    #nl-window.l-grid .car { grid-template-columns: repeat(2, 1fr); }
+  }
+  #nl-window.l-grid .car .ph {
+    width: 100%; height: auto;
+    flex: none;
+    scroll-snap-align: none;
+  }
+  /* not expandable -> not a control: no pointer, no focus affordance */
+  #nl-window.l-grid .car .ph.static { cursor: default; }
+
+  /* LONG COPY inside l-grid. A project here may run to several paragraphs,
+     but the grid needs the room — so the body clamps to --body-clamp and a
+     caret opens it. Opening lets the text take the whole content area and the
+     grid steps aside, the same trade the expanded image makes. Only l-grid
+     needs this: the standard layout's text region already scrolls in place.
+     The caret is a CONTROL, not content — it never churns (it lives outside
+     the entry, so spanify never reaches it), exactly like the x and the back
+     mark. */
+  #nl-window.l-grid .body      { max-height: var(--body-clamp, 84px); overflow: hidden; }
+  #nl-window.l-grid.more .body { max-height: none; overflow: visible; }
+  #nl-window.l-grid.more #nl-main        { flex: 1 1 auto; min-height: 0; }
+  #nl-window.l-grid.more #nl-window-text { height: 100%; overflow-y: auto; }
+  #nl-window.l-grid.more #nl-car         { display: none; }   /* copy covers the grid */
+
+  #nl-more {
+    display: none;
+    flex: 0 0 auto; align-self: flex-start;
+    margin-top: 2px;
+    padding: 4px 12px 4px 0;                   /* fat tap target */
+    font-size: 13px; line-height: 1;
+    color: rgba(143,143,153,0.9);
+    pointer-events: auto; cursor: pointer;
+    user-select: none;
+  }
+  /* shown only when the copy actually overflows its clamp */
+  #nl-window.l-grid #nl-more.on   { display: block; }
+  #nl-window.l-grid.x #nl-more    { display: none; }
+  #nl-more:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-more:hover { color: var(--ink); } }
+
+  /* EXPANDED inside l-grid. The grid steps aside and the view becomes the
+     standard expanded one: image filling the content area inside the margins,
+     and the strip returns as the FILMSTRIP at the foot so the rest of the set
+     stays reachable — a grid of forty pieces is exactly where you need to keep
+     moving without going back out.
+     #nl-main must flex here: outside the expanded state l-grid pins it to its
+     natural height (text sits on top of the grid), but with no height to fill,
+     the image view collapses instead of filling. */
+  #nl-window.l-grid.x #nl-main   { flex: 1 1 auto; min-height: 0; }
+  #nl-window.l-grid.x #nl-expand { display: flex; flex-direction: column; }
+  #nl-window.l-grid.x #nl-car {
+    display: block;
+    flex: 0 0 var(--car-h, 25%);
+    height: var(--car-h, 25%);
+    margin: 12px 0 0;
+  }
+  /* the cells stop being a grid and become a horizontal strip again: height
+     drives the box and the inline 16:9 aspect ratio gives the width */
+  #nl-window.l-grid.x .car {
+    display: flex;
+    gap: 10px;
+    height: 100%;
+    justify-content: flex-start;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x proximity;
+  }
+  #nl-window.l-grid.x .car .ph {
+    width: auto; height: 100%;
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  /* --------------------------------------------------- layout: l-form */
+  /* One rule, and it is the whole reason this layout has its own name: the
+     form takes the FORM measure, not the reading one. Everything else about
+     it is l-text, which is why it borrowed that name until now. */
+  #nl-window.l-form #nl-window-text { max-width: var(--measure-form); }
+
+  /* ------------------------------------------------ content-area wordmark */
+  /* The brand's FULL mark, centered in the open area above the carousel —
+     the left column's empty row in landscape. Its counterpart in the grid
+     below is the compact lettermark/icon; this is the spelled-out version.
+     LANDSCAPE ONLY: portrait has no such void (text and carousel already
+     fill the single column), so the element stays display:none there.
+     ALPHA IS THE SHAPE: the art is used as a MASK filled with var(--ink) —
+     the DOM analog of the shader's `uInk * alpha`. One file serves both
+     themes, and brand colors resolve to ink exactly like the grid icons.
+     Authoring constraint follows from that: transparent-background art,
+     real counterforms, no white knockouts. */
+  #nl-mark {
+    display: none;
+    background-color: var(--ink);
+    -webkit-mask-repeat: no-repeat;   mask-repeat: no-repeat;
+    -webkit-mask-position: center;    mask-position: center;
+    -webkit-mask-size: contain;       mask-size: contain;
+    pointer-events: none;             /* purely presentational */
+  }
+  /* HERO FALLBACK: no wordmark supplied, so the project's FIRST image takes
+     the same slot. It is NOT masked — a photograph has to read as itself, so
+     the ink fill and the mask are both switched off and the picture is drawn
+     directly, CONTAINED so nothing is cropped. Same slot, two treatments:
+     a mark becomes ink, an image stays an image. */
+  #nl-mark.hero {
+    background-color: transparent;
+    -webkit-mask-image: none;         mask-image: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+  }
+  @media (orientation: landscape) {
+    /* not shown while an image is expanded (that cell becomes the
+       breadcrumb) or on carless entries (ABOUT / the form span both
+       columns — there is no left column to sit in) */
+    #nl-window:not(.x):not(.l-text):not(.l-form):not(.l-grid) #nl-mark {
+      display: block;
+      grid-column: 1; grid-row: 1;
+      justify-self: center; align-self: center;
+      /* ABSOLUTE caps, the taskbar rule applied to imagery: the mark stops
+         growing once the window passes laptop width, so a 27" monitor gets
+         more surrounding space, not a bigger logo. Percentages keep it
+         proportionate on short landscape phones. Deliberately conservative —
+         a little too small beats a little too big. */
+      width:  min(50%, 320px);
+      height: min(40%, 110px);
+    }
+    /* a hero earns more of the open area than a wordmark does */
+    #nl-window:not(.x):not(.l-text):not(.l-form):not(.l-grid) #nl-mark.hero {
+      width:  min(100%, var(--hero-max, 720px));
+      height: 100%;
+    }
+  }
+
+  /* ------------------------------------------------ image carousels (static) */
+  /* #nl-car is the HOST: it owns the pinned footprint at the window's foot —
+     ~25% of the window (--car-h from resize()), same place for every
+     selection. Inside it, ONE strip PER ENTRY (unique images per project),
+     display-swapped with the text. STATIC for now — scroll/snap only, no
+     modal or expansion. Pointer events on so swiping never closes the window. */
+  #nl-car {
+    flex: 0 0 var(--car-h, 25%);
+    height: var(--car-h, 25%);
+    margin: 12px 0 0;
+  }
+  #nl-car .car {
+    height: 100%;
+    display: flex; gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    pointer-events: auto;
+    scrollbar-width: none;
+  }
+  #nl-car .car::-webkit-scrollbar { display: none; }
+  #nl-car .ph {
+    flex: 0 0 auto;
+    height: 100%;
+    /* aspect-ratio is set PER THUMB inline: from the image record's stored
+       ratio, or measured on decode when the record omits it */
+    background: #808080;                       /* 50% grey base — shows while the image loads */
+    background-size: cover;                    /* thumbs render the image itself (background-image
+                                                  set inline from the entry's image src) */
+    background-position: center;
+    scroll-snap-align: start;
+    cursor: pointer;
+  }
+  /* while expanded, the strip doubles as the filmstrip: the active thumb
+     holds full presence, the rest degrade — coherent vs. degraded, in image
+     terms */
+  #nl-car .car.expanded .ph { opacity: 0.4; }
+  #nl-car .car.expanded .ph.on { opacity: 1; }
+
+  /* the visible exit: one × for every entry, pinned to the window's corner.
+     It does NOT churn — it's a global control, not content: it appears and
+     disappears with the window but is always resolved and always in the same
+     place. Alongside it: the frozen icon, grid gaps, and Esc. */
+  #nl-close {
+    position: absolute;
+    top: 8px; right: 10px;
+    z-index: 1;                                /* stays above the expand layer */
+    padding: 8px 10px;                         /* fat tap target */
+    font-size: 13px; line-height: 1;
+    color: rgba(143,143,153,0.9);
+    pointer-events: auto; cursor: pointer;
+    user-select: none;
+  }
+  #nl-close:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-close:hover { color: var(--ink); } }
+
+  /* ------------------------------------------------ contact form (last icon) */
+  /* Fields are bare — no boxes, just the accent underline, ink on focus.
+     (Pointer events come from #nl-window-text; no per-entry rule needed.) */
+  #nl-window label {
+    display: block; margin: 8px 0 0;
+    color: rgba(143,143,153,0.9); letter-spacing: 0.05em;
+  }
+  #nl-window input, #nl-window textarea {
+    display: block; width: 100%;
+    background: transparent; color: var(--ink);
+    border: 0; border-bottom: 1px solid rgba(143,143,153,0.5);
+    border-radius: 0; outline: none;
+    font: inherit; letter-spacing: inherit;
+    padding: 4px 0 5px; margin-top: 1px;
+  }
+  #nl-window textarea { resize: none; }
+  #nl-window input:focus, #nl-window textarea:focus { border-bottom-color: var(--ink); }
+  #nl-window .send {
+    display: inline-block; margin-top: 14px;
+    color: rgba(143,143,153,0.9); cursor: pointer; letter-spacing: 0.15em;
+  }
+  #nl-window .send:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-window .send:hover { color: var(--ink); } }
+
+  /* ------------------------------------------------ copyright (right margin)
+     The horizontal footer strip is spent on navigation, so the second footer
+     line turns 90° and stands in the RIGHT MARGIN instead — the one piece of
+     page furniture in the site that runs vertically.
+
+     It occupies the same --nl-m strip every other margin uses, centered across
+     it, and sits one margin above the SEAM between grid and content. So its
+     three placement values are all the single spacing value: the strip it
+     lives in, the centering across it, and the gap above the line.
+
+     Reads BOTTOM-TO-TOP, so it rises off the seam rather than running down
+     into it. writing-mode rather than a bare rotate() because it gives the
+     element a genuinely tall, narrow LAYOUT box — it can then be positioned
+     and centered like anything else, instead of being nudged into place after
+     the fact. The 180° flip is what turns vertical-rl's downward reading
+     upward; delete that one line to run it the other way.
+
+     Non-churn, like the footer and the marks: page furniture, not content.
+     (It sits outside every element spanify touches, so this is automatic.) */
+  #nl-copy {
+    position: absolute;
+    right: 0;
+    bottom: var(--nl-m, 24px);
+    width:  var(--nl-m, 24px);                 /* the margin strip itself */
+    display: flex;
+    justify-content: center;                   /* centered ACROSS the strip */
+    color: rgba(143,143,153,0.5);              /* the footer's grey */
+    pointer-events: none;
+    user-select: none;
+  }
+  #nl-copy span {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);                 /* bottom-to-top */
+    font-size: 11px;
+    line-height: 1;                            /* LOAD-BEARING: in vertical text
+                                                  the line box becomes the WIDTH,
+                                                  so this is what fits 11px of
+                                                  type inside the 12.5px strip.
+                                                  At the default ~1.2 it would be
+                                                  13px and overhang both edges. */
+    letter-spacing: 0.15em;                    /* the footer's tracking */
+    white-space: nowrap;
+  }
+
+  /* ------------------------------------------------ footer line (site nav) */
+  /* The footer is the site's PRIMARY NAVIGATION. Three sections (BUILD /
+     DESIGN / ART) each load their own icon set into the grid; CONTACT and
+     ABOUT are fixtures that take the window without a grid icon — both moved
+     here OUT of the icon grid, so the grid holds work and nothing else.
+     Separators are spacing, not commas: five labels at the old 0.25em with
+     commas measured 358px and overflowed narrow phones. At 0.15em with 8px
+     side padding the row is 295px — it clears a 320px viewport. */
+  #nl-fns {
+    position: absolute; left: 0; right: 0;
+    bottom: 20px;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    text-align: center;
+    font-size: 11px; letter-spacing: 0.15em;
+    color: rgba(143,143,153,0.5);              /* project accent — legible on both fields */
+    pointer-events: none;                      /* only the words are live */
+    user-select: none;
+  }
+  #nl-fns [data-nav] {
+    color: inherit;
+    pointer-events: auto; cursor: pointer;
+    padding: 6px 8px;                          /* tap target AND the separation
+                                                  that the commas used to give */
+  }
+  #nl-fns [data-nav]:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-fns [data-nav]:hover { color: var(--ink); } }
+  /* the active section reads as the coherent one — ink against the grey row.
+     (applied by JS once section switching is wired) */
+  #nl-fns [data-nav].on { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div id="noiselab">
+  <div id="nl-grid">
+    <div id="nl-stage">
+      <!-- the canvas is the DRAWING only; its semantics live in #nl-keys
+           below, which is the same grid in focusable, labelled DOM -->
+      <canvas id="nl-gl" aria-hidden="true"></canvas>
+      <!-- one empty focusable span per icon, positioned onto the canvas in
+           placeKeys(). Exactly one thing is selected at a time, which is what
+           a listbox means — the coherence rule, stated in ARIA. -->
+      <div id="nl-keys" role="listbox" aria-label="Projects"></div>
+    </div>
+  </div>
+  <div id="nl-content">
+    <div id="nl-about">
+      <div class="in" id="nl-about-text"><!-- empty at rest; kept for future copy --></div>
+    </div>
+    <!-- copyright: the second footer line, turned into the right margin
+         because the horizontal strip is spent on navigation. Text set in
+         boot() from CONTENT.copyright. -->
+    <div id="nl-copy"><span></span></div>
+  </div>
+
+  <div id="nl-window">
+    <span id="nl-close" role="button" tabindex="0" aria-label="Close">&#x00D7;</span>
+    <div id="nl-main">
+      <!-- content-area wordmark: centered in the open left column on wide
+           screens; hidden in portrait, while expanded, and on carless
+           entries. Non-churn material, like the images and the marks. -->
+      <div id="nl-mark" role="img"></div>
+      <div id="nl-window-text"><!-- per-entry TEXT built in boot() from CONTENT via the adapter --></div>
+      <!-- expanded-image view: display-swaps with the text region ('x' class).
+           Swipe = prev/next; captions are static content below the image. -->
+      <div id="nl-expand">
+        <div id="nl-exp-top">
+          <span id="nl-back" role="button" tabindex="0" aria-label="Back to project">&#x2190;</span>
+          <span class="hd" id="nl-exp-hd"></span>
+        </div>
+        <div id="nl-exp-stage">
+          <div id="nl-exp-fit">
+            <img id="nl-exp-img" alt="" draggable="false">
+          </div>
+        </div>
+        <div id="nl-exp-cap"></div>
+      </div>
+    </div>
+    <!-- 'read more' caret: opens a clamped body to full height in l-grid.
+         Sits between the text region and the images because that is exactly
+         where it acts. Non-churn: it is a control, not copy. -->
+    <span id="nl-more" role="button" tabindex="0" aria-expanded="false" aria-label="Read more">&#x2304;</span>
+    <!-- carousel HOST, pinned to the window's foot — the POSITION is shared,
+         the carousels are not: one strip per entry is built in boot() from
+         each entry's images and display-swapped in sync with the text. The
+         contact form has none (the host collapses and the form takes the
+         full height). -->
+    <div id="nl-car"></div>
+  </div>
+
+  <!-- primary navigation. BUILD / DESIGN / ART switch the grid's icon set;
+       CONTACT / ABOUT open the window without a grid selection. Behaviour is
+       NOT wired yet — see the stub handlers in the script. -->
+  <div id="nl-fns"><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span></div>
+</div>
+
+<script>
+/* -------------------------------------------------------------------------
+   SVG Noise Lab — architecture map (mobile-first; desktop pass in progress)
+
+   - EDITABLE CONTENT: all copy lives in ONE labelled block, CONTENT, near the
+     top of the IIFE — about / contact / sections, in plain-language fields
+     (title, details, summary, images, wordmark, layout, expand). A thin
+     ADAPTER (buildData) turns that authoring shape into the internal shape the
+     rest of the code runs on. That adapter is the seam a CMS plugs into: same
+     authoring shape in, no change to anything downstream.
+   - SECTIONS: the work is three lists — BUILD / DESIGN / ART — each with its
+     own icon set. The footer switches between them; switching churns the whole
+     grid over and exchanges the set at the midpoint, so all sections are baked
+     up front. ABOUT and CONTACT are FIXTURES: footer entries that take the
+     window with no grid icon behind them. Window entries are one flat list
+     ([...sections, ABOUT, form]) so switching is always a display swap.
+   - STATE is three values: activeSection (which icon set), selected (which
+     project is frozen), fixture (ABOUT/CONTACT holding the window). They feed
+     one winTarget() so grid taps and footer taps share the same machinery.
+     Exactly one thing is coherent at any moment — with a fixture open that
+     thing is the footer label, and the whole grid churns.
+   - WebGL grid: entry icons baked to textures; simplex-warp shader; selection
+     = coherence (selected icon freezes, all others churn). Icon size is FIXED
+     in CSS px (the taskbar rule: CELL_PX); ONLY column/row count adapts to
+     width — wide screens collapse to a single menu-bar row.
+   - GRID KEYBOARD / SCREEN READER: the canvas is pixels, so a parallel DOM
+     layer (#nl-keys) carries the semantics — one empty focusable span per
+     icon, laid onto that icon's resting cell box, labelled with its title.
+     A listbox with a roving tabindex: one tab stop, arrows move focus, Enter
+     commits. Focus is deliberately NOT selection.
+   - NO-WEBGL FALLBACK: the shader is an ENHANCEMENT. If the context, the
+     shader compile, or the bake fails, `gl` goes null, #noiselab gains .nogl,
+     and that same key layer becomes the VISIBLE menu — a wrapped list of
+     titles, selected one in ink. Everything else (window, layouts, churn,
+     footer, form, theme) is untouched and runs identically. boot() never
+     returns early any more.
+   - THE MEASURE: the same rule applied to TYPE. Body copy caps at --measure
+     (66ch) rather than tracking the window, so a wide screen gains space and
+     not longer lines. CSS only — see the token at the top of the stylesheet.
+   - WINDOW LAYOUTS, named and chosen per project by the `layout` field; the
+     window wears the name as an `l-<name>` class and CSS restructures:
+       standard  carousel strip at the foot; wordmark (or, absent one, the
+                 first image as a hero) centred in the open landscape column
+       grid      fixed 16:9 cells, column count adapting; text above, images
+                 below. Long copy clamps with a caret that opens it over the
+                 grid. Portrait phones pin to 2 columns (count, not size).
+       text      copy only, full width — ABOUT and the contact form
+     `.x` (image expanded) composes on top of any layout.
+   - Image expand: in-flow display swap ('x' class); swipe = prev/next;
+     captions static below the image; the strip becomes the filmstrip.
+     Per-entry `expand` decides whether images open at all.
+   - IMAGES: one upload each; the strip loads a host-resized version via
+     IMAGE_TRANSFORM (the deploy seam), the expanded view loads the original.
+     Records carry `ratio` so the page never downloads an image to measure it.
+   - ROUTING: state has an ADDRESS. #section/slug/image mirrors the three
+     state values; applyRoute() drives the same setters the pointer does, so
+     there is one code path per transition, not two. Slugs come from titles
+     (survive reordering). Deeper = push, sibling = replace, so back pops a
+     LEVEL: image -> project -> rest, the same ladder as Escape.
+   - Theme: system prefers-color-scheme -> CSS vars + GL clear / uInk.
+   - COPYRIGHT: the second footer line, rotated 90° into the right margin,
+     reading bottom-to-top, one margin above the seam. The horizontal strip
+     was already spent on navigation. Text lives in CONTENT.copyright.
+   - Coherence swap: one churn mechanism drives window open/close/switch and
+     the section change — text dissolves to noise, hard-cuts at the midpoint,
+     re-forms. Controls (x, back, caret, thumbs) never churn.
+
+   All tunable knobs live in the config block at the top of the IIFE.
+------------------------------------------------------------------------- */
+(function () {
+  // ---------------------------------------------------------------- config
+  // COLS / ROWS are now derived per orientation (see resize), not fixed.
+  let COLS = 4, ROWS = 4;       // set per screen width in resize() (see column knobs)
+  const BAKE_PX = 320;          // per-icon bake resolution (crispness vs size)
+
+  // Render resolution (supersampling). The canvas backing store is sized at this
+  // multiple of CSS px. Low-DPI screens (most desktops, dpr 1) otherwise render
+  // the warp soft; flooring at 2 keeps icons crisp there. High-DPI phones are
+  // capped at 2 for lightness — they already looked sharp.
+  const RENDER_SCALE_MIN = 2;   // floor — supersamples 1x (desktop) displays
+  const RENDER_SCALE_MAX = 2;   // ceiling — caps cost on 2x/3x phones
+
+  // transition timing (asymmetric: snap on, ease off)
+  const ON_TIME  = 0.12;        // seconds, off -> on
+  const OFF_TIME = 0.80;        // seconds, on  -> off
+
+  // the contact text settles slower than the grid: its close (window -> about)
+  // runs at 2x the icon OFF_TIME. Opening still shares ON_TIME.
+  const CONTACT_OFF_TIME = OFF_TIME * 2;   // 1.60s
+
+  // the one effect, parameterised. off = breathe, on = degrade.
+  // amp is in UV units (fraction of an icon). these are the knobs to taste.
+  const AMP_OFF  = 0.018, AMP_ON  = 0.38;   // displacement magnitude
+  const FREQ_OFF = 1.6,   FREQ_ON = 5.5;    // noise frequency across the icon
+  const SPEED_OFF= 0.18,  SPEED_ON= 0.95;   // noise evolution (per second)
+
+  // --------------------------------------------------------- layout knobs
+  // Expressed relative to the cell PITCH (cell + gap), not to the canvas, so
+  // cells stay square and gaps stay uniform in BOTH orientations.
+  const GAP_RATIO    = 0.20;      // gap as a fraction of one pitch
+  const MARGIN_RATIO = GAP_RATIO; // outer padding EQUALS the icon gap — one
+                                  // spacing value everywhere (also feeds --nl-m)
+
+  // THE TASKBAR RULE. The icon cell is a FIXED size in CSS px — like an OS
+  // taskbar, it does not grow because the window or monitor did. The ONLY
+  // thing that responds to available width is the column count (and with it
+  // the row count): narrow = more rows; wide enough for every icon = a
+  // single bottom row above the footer, and the content window takes the
+  // freed height (its bottom already derives from the grid's top edge).
+  // 50 reproduces the reference phone layout (390px portrait -> 6x3) exactly.
+  // Accessibility comes free: CSS px track browser zoom and OS display
+  // scaling, so user-level size preferences scale the icons; raw window
+  // real estate never does.
+  const CELL_PX = 50;
+
+  // Strip reserved below the grid for the single-line footer (FN slots now,
+  // copyright later). The canvas sits flush on top of it.
+  const FOOTER_RESERVE = 52;      // px
+
+  // LAST-RESORT cap: the grid half (canvas + footer reserve) may take at most
+  // this fraction of the page, so the contact half always keeps working room.
+  // With fixed cells this should rarely bite (very short viewports, or a much
+  // longer project list); when it does, the canvas shrinks uniformly — the
+  // one case where icons give up their fixed size rather than evict the
+  // content half.
+  const GRID_MAX_FRAC = 0.60;
+
+  // Baked content fill: source art occupies this fraction of its tile,
+  // leaving a transparent ring for the warp to spill into.
+  const BAKE_FILL = 0.64;       // bumped from 0.55 — larger, sharper icons per cell
+
+  // ------------------------------------------------------- dynamic shrink
+  // As noise activates, each icon scales down using the SAME eased value
+  // that drives the warp (so it shrinks at the same time and rate). At
+  // SCALE_ON === BAKE_FILL, a fully-warped icon — whose content can reach
+  // its quad edge — lands no further out than the calm icon's silhouette
+  // did. i.e. the gap you see in the OFF state is the gap you keep in the
+  // ON state. Nudge SCALE_ON up toward ~0.65 to let a little warp peek past.
+  const SCALE_OFF = 1.0;        // footprint-filling at rest
+  const SCALE_ON  = BAKE_FILL;  // tracks BAKE_FILL — the buffer-preserving value
+
+  // ------------------------------------------------------- placeholder art
+  // Test icon sources — each is referenced by ONE entry below; swapping an
+  // entry's icon for a client mark is a data edit. The bake step makes the
+  // source kind irrelevant to everything downstream.
+  const svgURL = s => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+  const SVG_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="#fff"/></svg>`;
+  const SVG_TRI    = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><polygon points="50,8 92,86 8,86" fill="#fff"/></svg>`;
+  const SVG_RING   = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="none" stroke="#fff" stroke-width="12"/></svg>`;
+  const SVG_SQUARE = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="16" y="16" width="68" height="68" fill="#fff"/></svg>`;
+  const SVG_DIAMOND= `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><polygon points="50,6 94,50 50,94 6,50" fill="#fff"/></svg>`;
+
+  function makeTestPNG(kind) {           // genuine image/png, decoded via <img>
+    const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d'); x.clearRect(0, 0, S, S);
+    x.fillStyle = '#fff'; x.strokeStyle = '#fff';
+    if (kind === 'blob') {
+      const g = x.createRadialGradient(S/2, S/2, 3, S/2, S/2, S*0.5);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.6, 'rgba(255,255,255,0.85)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(S/2, S/2, S*0.5, 0, 7); x.fill();
+    } else if (kind === 'squares') {
+      x.lineWidth = 8;
+      for (let r = S*0.46; r > 6; r -= 18) x.strokeRect(S/2 - r, S/2 - r, 2*r, 2*r);
+    } else if (kind === 'rings') {
+      x.lineWidth = 7;
+      for (let r = S*0.42; r > 8; r -= 16) { x.beginPath(); x.arc(S/2, S/2, r, 0, 7); x.stroke(); }
+    } else if (kind === 'bars') {
+      const n = 5, bw = S*0.1, gp = (S - n*bw)/(n+1);
+      for (let i = 0; i < n; i++) x.fillRect(gp + i*(bw+gp), S*0.18, bw, S*0.64);
+    } else { // dots
+      const n = 6, gap = S/(n+1), rad = gap*0.28;
+      for (let i = 1; i <= n; i++) for (let j = 1; j <= n; j++) {
+        x.beginPath(); x.arc(i*gap, j*gap, rad, 0, 7); x.fill();
+      }
+    }
+    return c.toDataURL('image/png');
+  }
+
+  // ratio-true grey placeholder image — stands in for real project imagery
+  // in both the thumbs and the expanded view (one src, two uses)
+  const PH = (r) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${r[0] * 120}" height="${r[1] * 120}"><rect width="100%" height="100%" fill="#808080"/></svg>`);
+
+  // Placeholder image records for one entry: 4 DISTINCT aspect ratios from a
+  // shuffle SEEDED by the entry index (mulberry32) — every entry gets its own
+  // mix, identical across loads. Filler captions on images 1-3; the last
+  // stays captionless to demonstrate the empty state. Real records replace
+  // these wholesale: { src, caption, alt, ratio:[w,h] } — ratio optional
+  // (stored = stable layout; omitted = measured on decode, settles once).
+  const RATIOS = [[4,3],[3,4],[16,9],[2,3],[3,2],[1,1],[9,16]];
+  const seededRnd = (seed) => () => {           // mulberry32 — tiny seeded PRNG
+    seed = (seed + 0x6D2B79F5) | 0;
+    let z = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+    return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
+  };
+  // Placeholder wordmark: abstract letterform blocks at roughly 4:1, seeded
+  // by entry index so each project reads as a different mark and is identical
+  // across loads. White on transparent — the mask only reads alpha. Drawn as
+  // shapes, never SVG <text>: rasterising text-in-SVG is the known-bad path
+  // in this codebase (same reason the icon bake draws glyphs to canvas).
+  function placeholderWordmark(i, title) {
+    const rnd = seededRnd(i * 7919 + 13);
+    const W = 400, H = 100;
+    let bars = '', x = 14;
+    while (x < W - 30) {
+      const w = 18 + Math.round(rnd() * 44);
+      if (x + w > W - 14) break;
+      const h = 34 + Math.round(rnd() * 30);
+      bars += `<rect x="${x}" y="${((H - h) / 2).toFixed(1)}" width="${w}" height="${h}" rx="3" fill="#fff"/>`;
+      x += w + 11;
+    }
+    return {
+      src: svgURL(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bars}</svg>`),
+      alt: title + ' — placeholder wordmark',
+    };
+  }
+
+  function placeholderImages(i, hd, count) {
+    const rnd = seededRnd(i * 1013 + 7);
+    const pool = RATIOS.slice();                // per-entry deterministic shuffle
+    for (let j = pool.length - 1; j > 0; j--) {
+      const q = (rnd() * (j + 1)) | 0;
+      [pool[j], pool[q]] = [pool[q], pool[j]];
+    }
+    const n = count || 4;
+    while (pool.length < n) pool.push(RATIOS[(rnd() * RATIOS.length) | 0]);
+    return pool.slice(0, n).map((r, k) => ({
+      src: PH(r),
+      ratio: r,                                 // always present -> no probe, no measuring fetch
+      caption: k < 3 ? `${hd} — detail 0${k + 1}, placeholder caption.` : '',   // last ones bare: the empty state
+      alt: `${hd} — placeholder image ${k + 1}`,
+    }));
+  }
+
+  /* =======================================================================
+     EDITABLE CONTENT  —  edit the text between the quotes; leave the rest.
+     =======================================================================
+     WHERE THIS LIVES, AND WHY (inline, not a separate content file):
+       - This site is ONE file with zero outside dependencies. A separate
+         content file would have to be FETCHED when the page loads, and
+         browsers BLOCK fetching a local file when you just open the HTML
+         directly — you'd need a running web server just to preview a wording
+         change. Inline keeps it "double-click to preview, drag-to-deploy,"
+         and keeps the self-contained character of the piece.
+       - The trade-off of inline: the words share a file with the code. THIS
+         BLOCK is the answer to that — every editable word is gathered HERE,
+         in one place, labelled. Nothing below this block needs touching to
+         change copy.
+       - This block is ALSO the exact shape a CMS emits later. When you add
+         one (e.g. Decap), it writes to this structure and the code below does
+         not change. So choosing inline now costs nothing later — the only
+         thing that ever moves is WHERE these bytes sit, never their shape.
+         The one thing that reads this block (buildData, just under it) is the
+         seam a CMS plugs into.
+
+     THE FIELDS (same for a project and for ABOUT):
+       title    — the header, shown in grey
+       details  — the three short lines under it (material / edition / year…)
+       summary  — the description. A single string, OR a LIST of strings for
+                  multi-paragraph copy. In the 'grid' layout a long body is
+                  clamped and opened by a caret; elsewhere it simply runs on.
+       icon     — placeholder art for now; becomes a client mark later. You
+                  won't edit these until real marks exist. 'placeholder' art
+                  is generated; 'glyph' is a single typed character.
+       images   — OPTIONAL. Leave it out for no image strip (ABOUT has none).
+                  Omitting it auto-fills placeholders so layout can be judged.
+                  Each image is one record:
+
+                    src     ONE uploaded file, full size. You do NOT export or
+                            store small versions — the host resizes on demand
+                            (see IMAGE_TRANSFORM below the CONTENT block).
+                    ratio   [width, height] of that file, e.g. [4,3] or
+                            [1600,1200]. NOT optional in practice: without it
+                            the page has to DOWNLOAD every image on the site
+                            at load just to measure its shape, which throws
+                            away the on-demand loading everything else relies
+                            on. Any CMS knows the dimensions of what it
+                            stored — have it write them here.
+                    caption Optional. Shown under the expanded image; omit it
+                            and no caption line appears.
+                    alt     Screen-reader description of the image.
+                    thumb   Optional override. Only needed if you ever want a
+                            hand-picked crop in the strip instead of the
+                            automatic resize of `src`.
+       layout   — OPTIONAL. Which window arrangement this project uses, by
+                  name: 'standard' (default), 'grid', or 'text'. A section can
+                  set its own default via `layout` on the section; a project's
+                  own value always wins. Unknown names fall back to standard.
+                    standard  carousel strip at the foot, wordmark beside it
+                    grid      fixed 16:9 cells, column count adapts to width;
+                              text above, grid fills the rest and scrolls
+                    text      copy only, full width
+       expand   — OPTIONAL true/false. Whether tapping an image opens it full
+                  size. Defaults to TRUE on 'standard' and FALSE on 'grid' —
+                  in a grid the pictures are usually the presentation, not a
+                  set of doors. Set it either way to override.
+       wordmark — OPTIONAL. If OMITTED, the project's FIRST image is used as a
+                  hero in the same slot instead (shown as a picture, not an
+                  ink silhouette). Client work supplies a mark; self-authored
+                  work usually will not, and gets the hero.
+                  When supplied: the spelled-out brand mark, shown centered in the
+                  open area on WIDE screens only (its compact counterpart is
+                  the `icon` in the grid). Like the icons, it is drawn as a
+                  SILHOUETTE in the site's ink — supply transparent-background
+                  art with real counterforms; brand colors are discarded.
+                  Omitting it auto-fills a placeholder so layout can be seen.
+
+     SECTIONS: the work is split into three — BUILD / DESIGN / ART. Each is
+     its own list with its own icons; the footer switches between them. Order
+     of `sections` = order of the footer labels; order of a section's
+     `projects` = order in the grid. Adding a fourth section is one more
+     object here (plus its footer label).
+     ABOUT and CONTACT are fixtures ("chrome"): they belong to no section and
+     sit apart from the lists entirely.
+     ======================================================================= */
+  const CONTENT = {
+    // shown in the browser tab and in the history menu; each open project
+    // prepends its own title to this. Also the seed for the share/search
+    // metadata when that lands.
+    siteTitle: 'Robert Maciel',
+
+    about: {
+      title:   'ABOUT',
+      details: ['Technical designer', 'New York, NY', 'Since 2016'],
+      summary: 'Objects, environments, and the systems that fabricate them — practice grounded in social ritual.',
+      // no `images` — ABOUT shows text only. No `icon` either: ABOUT lives in
+      // the footer, not the grid.
+    },
+
+    contact: {
+      email: 'hello@studio.xyz',                  // where SEND delivers (placeholder — set the real address)
+    },
+
+    // the vertical line standing in the right margin. Keep it SHORT: it runs
+    // the height of the content half, and a long one will reach the top edge
+    // on a short landscape phone.
+    copyright: '© 2026 ROBERT MACIEL',
+
+    sections: [
+      { id:'build',  label:'BUILD',  projects: [
+        // --- worked example (the first entry shows every field spelled out) ---
+        {
+          title:   'VESSEL SERIES',
+          details: ['Slipcast porcelain', 'Edition of 12', '2025'],
+          summary: 'Repeatable cast forms built around pouring, serving, and the table as commons.',
+          icon:    { kind:'placeholder', shape:'circle' },
+          // wordmark: { src:'vessel-wordmark.svg', alt:'Vessel Series' },
+          // images and wordmark omitted -> placeholders are filled in
+          // automatically, so the layout can be judged before real art exists
+        },
+        { title:'CANTILEVER LAMP', details:['Machined aluminum','Prototype','2025'],          summary:'A counterweighted task lamp balancing reach against footprint on a single pivot.',                icon:{ kind:'placeholder', shape:'blob'    } },
+        { title:'FIGURE-8 CHAIR',  details:['AlSi10Mg, SLM','One-off','2026'],                summary:'Hollow printed tube frame resolving two loops through a single waist junction.',                  icon:{ kind:'glyph', char:'\u03A9'         } },
+        { title:'PICNIC BASKET',   details:['Porcelain + PLA','MFA thesis','2016'],           summary:'Shared-experience objects pairing printed lattice with slipcast interiors for open-air meals.',    icon:{ kind:'placeholder', shape:'tri'     } },
+        { title:'ROOM #___',       details:['Risograph zine','Issue 01: Studio','2026'],      summary:'A publication on creative space as a site for connection, one room per issue.',                    icon:{ kind:'placeholder', shape:'squares' } },
+        { title:'RETAIL PROPS',    details:['PETG, H2D fleet','400 units','2026'],            summary:'Production-tracked print rollout of display props scheduled by completed pieces per week.',        icon:{ kind:'glyph', char:'\u6C38'         } },
+        { title:'DINNERWARE',      details:['Stoneware','Seeking chef partner','Ongoing'],    summary:'Course-mapped plates and drinkware developed against a working menu, not a catalog.',              icon:{ kind:'placeholder', shape:'ring'    } },
+        { title:'INK FIELDS',      details:['Ink on paper','Series of 30','2025'],            summary:'Dense line drawings testing how far repetition can go before it reads as tone.',                  icon:{ kind:'placeholder', shape:'dots'    } },
+        { title:'FLATLAY TOOL',    details:['Rhino / Python','Internal tooling','2025'],      summary:'Sheet-good part detection, BOM generation, and nested layouts driven by layer syntax.',           icon:{ kind:'glyph', char:'\u2318'         } },
+        { title:'NOISE GRID',      details:['WebGL2 / GLSL','This site','2026'],              summary:'A menu where selection is coherence: the chosen icon holds still, the rest churn.',               icon:{ kind:'placeholder', shape:'square'  } },
+        { title:'EXHIBITION',      details:['Vacant RV center','6 artists','2026'],           summary:'Group show upstate on family, community, and connectedness in a leftover commercial shell.',       icon:{ kind:'placeholder', shape:'rings'   } },
+        { title:'MOLD STUDIO',     details:['Plaster + silicone','Home studio','Ongoing'],    summary:'FDM masters finished to casting grade without hand sanding, then run in plaster.',                 icon:{ kind:'glyph', char:'\u042F'         } },
+        { title:'GLYPH STUDY',     details:['Type specimens','Print + screen','2025'],        summary:'Single characters treated as objects: baked, warped, and read at grid scale.',                    icon:{ kind:'placeholder', shape:'diamond' } },
+      ] },
+
+      { id:'design', label:'DESIGN', projects: [
+      { title:'WAYFINDING SYSTEM', details:['Signage program','Institutional','2025'],     summary:'A room-numbering and directional scheme legible at walking speed from either end.',        icon:{ kind:'placeholder', shape:'square'  } },
+      { title:'IDENTITY: FIELD',   details:['Visual identity','Small press','2026'],         summary:'Marks and a type program for a publisher printing short runs on found stock.',             icon:{ kind:'glyph', char:'\u25A3'        } },
+      { title:'TERMINAL UI',       details:['Design system','Internal tool','2025'],         summary:'Monospace interface language for shop software read under bad light, fast.',              icon:{ kind:'placeholder', shape:'bars'    } },
+      { title:'FORM STUDY',        details:['Parametric','Rhino + Grasshopper','2024'],      summary:'Definition-driven shell variants evaluated against draft angle and mold split.',           icon:{ kind:'glyph', char:'\u0394'        } },
+      { title:'PACKAGING SPEC',    details:['Structural','Direct-to-consumer','2026'],       summary:'Single-material carton opening flat, protecting glaze edges, folding without tape.',       icon:{ kind:'placeholder', shape:'ring'    } },
+      { title:'GRID PRIMER',       details:['Editorial','Teaching material','2025'],         summary:'A short course on measure, leading, and column logic taught through misuse.',              icon:{ kind:'glyph', char:'\u25D0'        } },
+      { title:'KIOSK FLOW',        details:['Service design','Retail pilot','2026'],         summary:'Order path rebuilt around what people already do while waiting in line.',                  icon:{ kind:'placeholder', shape:'diamond' } },
+      { title:'SPEC SHEETS',       details:['Documentation','Shop standard','Ongoing'],      summary:'One-page part drawings a fabricator can work from without a phone call.',                  icon:{ kind:'glyph', char:'\u039E'        } },
+      { title:'COLOR OPS',         details:['Process tooling','Studio','2025'],              summary:'Glaze and pigment records kept as data so a batch can be repeated years later.',           icon:{ kind:'placeholder', shape:'squares' } },
+      { title:'TYPE HARNESS',      details:['Variable type','Experiment','2026'],            summary:'A test rig driving weight and width axes against real text, not specimens.',               icon:{ kind:'glyph', char:'\u2295'        } },
+      { title:'SEATING PROGRAM',   details:['Furniture','Contract','2024'],                  summary:'Stacking chair family sized to three table heights and one truck pallet.',                 icon:{ kind:'placeholder', shape:'circle'  } },
+      ] },
+
+      { id:'art',    label:'ART',    projects: [
+      { title:'DEGRADE',         details:['Digital painting','Series of 40','2026'],         summary:[
+          'Source images pushed through noise until the subject survives only as structure.',
+          'The series began as a test: how far can a familiar image be degraded before it stops being that image? Each piece runs the same source through increasing displacement, and the answer turned out to be much further than expected — recognition survives long after detail does not.',
+          'Working at forty pieces forced a discipline that a handful never would. The middle of the series is where it gets interesting: coherent enough to read, damaged enough to doubt.',
+          'Printed at scale the noise reads as tooth rather than error, which was not planned and is now the point.',
+        ], icon:{ kind:'glyph', char:'\u2726'        }, layout:'grid', expand:true },
+      { title:'PLATE STUDIES',   details:['Drypoint','Edition varies','2025'],               summary:'Burr held until it collapses, printing the same plate as it wears away.',                  icon:{ kind:'placeholder', shape:'blob'    }, layout:'grid' },
+      { title:'NIGHT SHIFT',     details:['35mm','Ongoing','Since 2019'],                    summary:'Industrial interiors photographed between shifts, lit only by what stayed on.',            icon:{ kind:'glyph', char:'\u221E'        } },
+      { title:'FIELD RECORDINGS',details:['Cyanotype','Site series','2024'],                 summary:'Paper exposed on location, developed in whatever water the site provided.',                icon:{ kind:'placeholder', shape:'dots'    }, layout:'grid' },
+      { title:'SUBTRACT',        details:['Graphite','Large format','2025'],                 summary:'Full-sheet grounds worked back with erasers until the drawing is what remains.',           icon:{ kind:'glyph', char:'\u2248'        } },
+      { title:'STATIC GARDEN',   details:['Installation','Two rooms','2026'],                summary:'Cast forms arranged so the second room repeats the first, slightly wrong.',               icon:{ kind:'placeholder', shape:'rings'   } },
+      { title:'TRANSFER',        details:['Monotype','Series of 18','2024'],                 summary:'One-pull prints pulled twice, keeping the ghost instead of the first impression.',         icon:{ kind:'glyph', char:'\u03A8'        }, layout:'grid' },
+      { title:'LONG EXPOSURE',   details:['Photography','Print series','2025'],              summary:'Hour-long frames of rooms in use, holding only what never moved.',                        icon:{ kind:'placeholder', shape:'tri'     } },
+      { title:'HANDS',           details:['Oil on panel','Ongoing','Since 2023'],            summary:'Small panels of working hands, painted from life at the bench.',                          icon:{ kind:'glyph', char:'\u2756'        } },
+      ] },
+    ],
+  };
+
+  /* ------------------------------------------------- host image transform
+     THE DEPLOY SEAM — set this once, when the host is chosen.
+
+     Static hosts resize images on demand from a single uploaded file: ask for
+     the same photo at 480px and the CDN generates, caches, and serves it. That
+     is what keeps ONE upload per image and NO size variants to manage locally.
+
+     Point this at the host's URL format and every thumbnail derives itself —
+     the `thumb` field stays empty forever. Formats to VERIFY against the
+     host's current docs at setup (they change):
+       Netlify     (src, w) => `/.netlify/images?url=${encodeURIComponent(src)}&w=${w}&fm=webp`
+       Cloudflare  (src, w) => `/cdn-cgi/image/width=${w},format=auto/${src}`
+
+     null = no transform, `src` serves both roles. That is correct today (the
+     placeholders are inline data, nothing to resize) and correct for local
+     preview, where no CDN exists to do the resizing. */
+  // Valid layout names. Add here AND add matching `.l-<name>` CSS rules.
+  // 'form' is not selectable from CONTENT — the contact form is hand-built and
+  // assigns it directly — but it lives here so applyLayout() clears it like
+  // any other layout class.
+  const LAYOUTS = ['standard', 'text', 'grid', 'form'];
+  const DEFAULT_LAYOUT = 'standard';
+
+  const IMAGE_TRANSFORM = null;
+
+  // Request widths, each set to what the element can actually SHOW at 2x.
+  // Anything displayed small asks for a small file; the expanded image is
+  // the one place that deliberately asks for the original.
+  const THUMB_W = 480;   // carousel strip — 240px box at 2x
+  const MARK_W  = 640;   // wordmark — capped at 320px wide by CSS, at 2x
+  const HERO_W  = 1440;  // hero image — capped at 720px wide by CSS, at 2x
+
+  // any source URL -> the URL to actually load at a given display width.
+  // Data URIs pass through untouched: there is no file for a CDN to fetch.
+  function sized(src, w) {
+    if (!src) return src;
+    if (IMAGE_TRANSFORM && !src.startsWith('data:')) return IMAGE_TRANSFORM(src, w);
+    return src;
+  }
+  // one image record -> the URL the STRIP should load (explicit thumb wins)
+  function thumbURL(im) { return im.thumb || sized(im.src, THUMB_W); }
+
+  // ------------------------------------------------------------ data adapter
+  // THE SEAM. Reads the editable CONTENT block above (authoring shape: title /
+  // details / summary) and produces the internal shape the rest of the code
+  // runs on (hd / lines / blurb / images). A CMS later feeds this same adapter
+  // the same authoring shape — so the code below the adapter never changes.
+  // Grid order = each section's `projects` order; everything downstream (the
+  // per-section icon sets, window text, carousels, expand view) derives from
+  // the adapter's output. ABOUT and CONTACT are fixtures with NO grid icon —
+  // they live in the footer and sit at the end of the flat window list.
+  // Runs LAZILY in boot(): resolving a 'placeholder'
+  // icon calls makeTestPNG (canvas + toDataURL), which is too heavy for script
+  // eval on mobile — it would delay first paint.
+  // WHICH SECTION the grid is showing (index into CONTENT.sections). The
+  // footer will drive this once switching is wired; until then it stays 0.
+  let activeSection = 0;
+
+  // copy may be one string or a list of paragraphs — normalise to a list
+  const paras = v => Array.isArray(v) ? v : [v];
+
+  // TITLE -> URL SLUG. Derived from the title, not from the entry's position,
+  // so reordering a section never breaks a link someone already sent. Change a
+  // title and its URL changes — that is the trade, and it is the right one:
+  // positions shift constantly while titles rarely do.
+  const slugify = s => String(s).toLowerCase()
+    .replace(/['\u2018\u2019]/g, '')          // drop apostrophes rather than hyphenate
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+
+  let DATA = null;
+  function buildData() {
+    // placeholder icon descriptors -> a real bakeable icon object. Real marks
+    // arrive as { kind:'svg'|'png', src } and pass straight through.
+    const SHAPE_SVG = { circle:SVG_CIRCLE, tri:SVG_TRI, ring:SVG_RING, square:SVG_SQUARE, diamond:SVG_DIAMOND };
+    function resolveIcon(ic) {
+      if (!ic || ic.kind === 'glyph' || ic.kind === 'svg' || ic.kind === 'png') return ic;
+      if (ic.kind === 'placeholder') {
+        return SHAPE_SVG[ic.shape]
+          ? { kind:'svg', src: svgURL(SHAPE_SVG[ic.shape]) }   // one of the SVG shapes
+          : { kind:'png', src: makeTestPNG(ic.shape) };        // otherwise a generated PNG
+      }
+      return ic;
+    }
+    // authoring shape -> internal shape, EVERY section. All of them are built
+    // (and baked) up front: a section switch churns the grid over on the fast
+    // clock and swaps at the midpoint, which leaves no room for an async bake.
+    const sections = CONTENT.sections.map((sec, si) => {
+      const usedSlugs = Object.create(null);   // per section: two projects can
+                                               // share a title across sections
+      return {
+      id: sec.id, label: sec.label,
+      entries: sec.projects.map((p, i) => {
+        const seed = si * 100 + i;             // per-section placeholder variety
+        const en = { icon: resolveIcon(p.icon), hd: p.title, lines: p.details,
+                     blurb: paras(p.summary) };
+        // unique slug within the section; collisions get -2, -3, ...
+        let sl = slugify(p.title);
+        if (usedSlugs[sl]) { let n = 2; while (usedSlugs[sl + '-' + n]) n++; sl = sl + '-' + n; }
+        usedSlugs[sl] = 1;
+        en.slug = sl;
+        const wantLayout = p.layout || sec.layout || DEFAULT_LAYOUT;
+        en.images = (p.images && p.images.length) ? p.images
+                  : placeholderImages(seed, p.title, wantLayout === 'grid' ? 12 : 4);
+        // PLACEHOLDER POLICY (filler only — real content just omits the field):
+        // BUILD stands in for client work, which ships a wordmark. DESIGN and
+        // ART stand in for self-authored work, which does not — so they fall
+        // through to the hero image and the fallback is visible there.
+        en.wordmark = p.wordmark || (si === 0 ? placeholderWordmark(seed, p.title) : null);
+        // project layout > section default > global default; an entry with no
+        // imagery is 'text' regardless, since the other layouts need images
+        const want = p.layout || sec.layout || DEFAULT_LAYOUT;
+        en.layout = !en.images.length ? 'text'
+                  : (LAYOUTS.indexOf(want) >= 0 ? want : DEFAULT_LAYOUT);
+        // tapping a picture opens it full size? grids default to no.
+        en.expand = (p.expand !== undefined) ? !!p.expand : (en.layout !== 'grid');
+        return en;
+      }),
+    };});
+    // ABOUT: same shape, but a fixture and image-less (no strip -> full text).
+    // Neither fixture carries an icon — both live in the footer, not the grid.
+    const about = { hd: CONTENT.about.title, layout: 'text',
+      lines: CONTENT.about.details, blurb: paras(CONTENT.about.summary) };
+    return { sections, about };
+  }
+  // Window entries are ONE FLAT LIST across all sections, so switching an
+  // entry stays a display swap and never a rebuild:
+  //   [ ...section 0, ...section 1, ...section 2, ABOUT, FORM ]
+  // SECTION_OFFSET maps (section, project) -> flat index.
+  let LIST = null;            // flat list feeding the window build
+  let SECTION_ICONS = null;   // icon descriptors, per section (grid order)
+  let SECTION_OFFSET = null;  // flat index where each section's entries start
+  let ABOUT_INDEX = 0, FORM_INDEX = 0;
+
+  // ------------------------------------------------------------------ boot
+  // EVERYTHING below runs inside boot(), deferred until after the black shell
+  // has PAINTED (see the double-rAF at the bottom). WebGL context creation,
+  // shader compile/link, and the PNG test-icon bakes are all synchronous and,
+  // run at script eval, can hold up first paint for the whole init on mobile —
+  // which reads as the host background (grey) instead of this page's black.
+  function boot() {
+  DATA = buildData();
+  SECTION_ICONS  = DATA.sections.map(s => s.entries.map(e => e.icon));
+  SECTION_OFFSET = [];
+  LIST = [];
+  DATA.sections.forEach(sec => { SECTION_OFFSET.push(LIST.length); LIST = LIST.concat(sec.entries); });
+  ABOUT_INDEX = LIST.length;          // ABOUT sits after every section
+  FORM_INDEX  = LIST.length + 1;      // the form is appended after the build
+  LIST = LIST.concat(DATA.about);
+
+  // ------------------------------------------------------------------ webgl
+  // `gl` is a LET and doubles as the feature flag: any failure below sets it
+  // back to null and every GL-touching block is guarded by `if (gl)`. Nothing
+  // else in boot() returns early any more — the DOM site is built either way.
+  //
+  // EVERY path to the fallback WARNS. The shader is the piece; degrading to a
+  // text list is a real loss, not a neutral alternative, so it must never
+  // happen quietly. A silent downgrade is indistinguishable from a bug, and
+  // the first version of this shipped exactly that mistake.
+  //
+  // TESTING: add ?nogl to the URL to force the fallback on hardware that
+  // supports the shader perfectly well. One file with a flag, rather than a
+  // second deliberately-broken copy sitting next to the real one waiting to be
+  // opened by accident.
+  const rootEl = document.getElementById('noiselab');   // needed this early by
+                                                        // the failure path below
+  const canvas = document.getElementById('nl-gl');
+  const FORCE_NOGL = /[?&#]nogl\b/.test(location.search + location.hash);
+  let gl = null;
+  if (FORCE_NOGL) {
+    console.warn('[noiselab] ?nogl flag set — shader disabled deliberately, DOM menu in use.');
+  } else {
+    try {
+      gl = canvas.getContext('webgl2', { alpha: false, antialias: false, premultipliedAlpha: false });
+    } catch (e) {                       // some browsers THROW rather than return null
+      console.warn('[noiselab] WebGL2 context creation threw:', e);
+    }
+    if (!gl) console.warn('[noiselab] WebGL2 unavailable — falling back to the DOM menu.');
+  }
+  if (!gl) rootEl.classList.add('nogl');
+
+  // ---------------------------------------------------------------- theme
+  // GL-side theme state. DARK is the load default (the black-at-load chain
+  // stays intact); setTheme() flips these plus the CSS vars and metas.
+  let BG  = [0, 0, 0];    // clear color
+  let INK = [1, 1, 1];    // icon color (uInk)
+
+  // Paint the theme background immediately. The icon bake is async (images
+  // decode before the first frame()), so without this the canvas can show an
+  // uninitialised (grey/garbage) buffer for a beat on load. Together with the
+  // CSS canvas background, the color-scheme/theme-color metas, and the inline
+  // html background, the page is black at every stage of load.
+  if (gl) {
+    gl.clearColor(BG[0], BG[1], BG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  const VERT = `#version 300 es
+in vec2 aPos;
+uniform vec2 uTranslate;
+uniform vec2 uScale;
+out vec2 vUv;
+void main() {
+  vUv = aPos;
+  gl_Position = vec4(uTranslate + aPos * uScale, 0.0, 1.0);
+}`;
+
+  const FRAG = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uTex;
+uniform vec2  uSeed;
+uniform float uAmp;
+uniform float uFreq;
+uniform float uPhase;
+uniform vec3  uInk;   // icon color: white in dark mode, black in light mode
+
+// Ashima / Stefan Gustavson 3D simplex noise (webgl-noise, MIT)
+vec3 mod289(vec3 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+vec4 mod289(vec4 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+vec4 permute(vec4 x){ return mod289(((x*34.0)+1.0)*x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+          + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+          + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+
+void main() {
+  float nx = snoise(vec3(vUv * uFreq + uSeed, uPhase));
+  float ny = snoise(vec3(vUv * uFreq + uSeed + vec2(19.13, 7.7), uPhase + 4.2));
+  vec2 disp = vec2(nx, ny) * uAmp;
+  vec4 t = texture(uTex, vUv + disp);        // premultiplied; transparent border = no smear
+  // the bake is pure white art, so alpha IS the shape — recolor with uInk
+  // (output stays premultiplied for the ONE / ONE_MINUS_SRC_ALPHA blend)
+  fragColor = vec4(uInk * t.a, t.a);
+}`;
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+
+  // A context can exist and STILL fail to compile or link — driver bugs and
+  // blocklisted GPUs both show up here rather than at getContext. Treated the
+  // same as no context at all: drop to null and let the DOM site carry on.
+  let prog = null, loc = null, vao = null;
+  if (gl) {
+    try {
+      prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+
+      loc = {
+        aPos:      gl.getAttribLocation(prog, 'aPos'),
+        uTranslate:gl.getUniformLocation(prog, 'uTranslate'),
+        uScale:    gl.getUniformLocation(prog, 'uScale'),
+        uTex:      gl.getUniformLocation(prog, 'uTex'),
+        uSeed:     gl.getUniformLocation(prog, 'uSeed'),
+        uAmp:      gl.getUniformLocation(prog, 'uAmp'),
+        uFreq:     gl.getUniformLocation(prog, 'uFreq'),
+        uPhase:    gl.getUniformLocation(prog, 'uPhase'),
+        uInk:      gl.getUniformLocation(prog, 'uInk'),
+      };
+
+      // one unit quad, reused for every icon
+      const quad = new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]);
+      vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc.aPos);
+      gl.vertexAttribPointer(loc.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // premultiplied alpha
+    } catch (e) {
+      // NOT silent. This catch exists for driver-level failures, but it would
+      // just as happily swallow a coding mistake in the block above and make
+      // it look like a capability problem. The warning is what tells those two
+      // apart.
+      console.warn('[noiselab] shader setup failed — falling back to the DOM menu:', e);
+      gl = null;
+      rootEl.classList.add('nogl');
+    }
+  }
+
+  // ------------------------------------------------------------- bake step
+  // The crux: SVG, PNG and glyph all end up as the same kind of texture.
+  function loadImage(src) {
+    return new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = src;
+    });
+  }
+  async function bakeIcon(item) {
+    const S = BAKE_PX, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d'); x.clearRect(0, 0, S, S);
+    if (item.kind === 'glyph') {
+      // draw text directly — never rasterise <text>-in-SVG via <img>
+      x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `700 ${Math.round(S*0.44)}px ui-monospace, Menlo, Monaco, 'Segoe UI', sans-serif`;
+      x.fillText(item.char, S/2, S*0.52);
+      return c;
+    }
+    const img = await loadImage(item.src);             // svg or png file
+    const target = S * BAKE_FILL, sc = Math.min(target/img.width, target/img.height);
+    const w = img.width * sc, h = img.height * sc;
+    x.drawImage(img, (S - w)/2, (S - h)/2, w, h);       // centred, with margin to warp into
+    return c;
+  }
+
+  // ------------------------------------------------------- layout (state)
+  // Set by resize()/relayout(); read by frame() and iconAtPointer().
+  let icons = [];       // the ACTIVE section's icons (what frame() draws)
+  let allIcons = [];    // every section's icons, baked once at boot
+  let footW = 0, footH = 0;       // per-icon quad size, clip units
+  let cellPxCss = 0;              // icon cell size, CSS px (hit-test)
+  let canvasCssW = 0, canvasCssH = 0;
+  let marginPxCss = 24;           // pitch * MARGIN_RATIO — feeds --nl-m
+  let gridTopCss = 0;             // resting grid's top cell edge, canvas CSS px
+  let kbFrozen = false;           // layout freeze while a form field owns the keyboard
+  const gridEl    = document.getElementById('nl-grid');
+  const stageEl   = document.getElementById('nl-stage');
+  // rootEl is declared up at the webgl block — the GL failure path needs it
+  // before this point.
+  gridEl.style.paddingBottom = FOOTER_RESERVE + 'px';   // single source: the JS knob
+
+  // Place every icon for the CURRENT grid: square cells, uniform gaps,
+  // each row centered (so a short final row sits centered, not ragged).
+  function relayout() {
+    const N = icons.length;
+    if (!N || !canvasCssW || !canvasCssH) return;
+
+    // how many icons per row (last row may be short)
+    const rowCounts = [];
+    let rem = N;
+    for (let r = 0; r < ROWS; r++) { const n = Math.min(COLS, rem); rowCounts.push(n); rem -= n; }
+
+    // largest square pitch that fits the canvas with margin breathing room.
+    // grid extent = pitch*(COLS - g + 2m) wide, pitch*(ROWS - g + 2m) tall.
+    const g = GAP_RATIO, m = MARGIN_RATIO;
+    const pitch = Math.min(
+      canvasCssW / (COLS - g + 2 * m),
+      canvasCssH / (ROWS - g + 2 * m)
+    );
+    const cellPx = pitch * (1 - g);
+    const gapPx  = pitch * g;
+    cellPxCss = cellPx;
+    marginPxCss = pitch * m;             // ONE margin value for grid AND window
+    footW = 2 * cellPx / canvasCssW;     // CSS px -> clip-space quad size
+    footH = 2 * cellPx / canvasCssH;
+
+    // center the whole grid BLOCK (vertically + horizontally), then place
+    // every icon on a fixed column. A short final row fills the leftmost
+    // columns and leaves the rest empty at the right (grid logic, not centered).
+    const gridH = ROWS * cellPx + (ROWS - 1) * gapPx;
+    const gridW = COLS * cellPx + (COLS - 1) * gapPx;       // full-grid width (all columns)
+    const row0Cy = (canvasCssH - gridH) / 2 + cellPx / 2;
+    const col0Cx = (canvasCssW - gridW) / 2 + cellPx / 2;   // leftmost column, shared by all rows
+
+    gridTopCss = row0Cy - cellPx / 2;    // top cell edge — the window margins against THIS
+
+    let k = 0;
+    for (let r = 0; r < ROWS; r++) {
+      const n = rowCounts[r];
+      const cyPx = row0Cy + r * (cellPx + gapPx);
+      for (let cI = 0; cI < n; cI++) {
+        const ic = icons[k++];
+        const cxPx = col0Cx + cI * (cellPx + gapPx);
+        ic.pxCx = cxPx; ic.pxCy = cyPx;          // CSS px center (hit-test)
+        ic.cx = cxPx / canvasCssW * 2 - 1;       // clip center (shader)
+        ic.cy = 1 - cyPx / canvasCssH * 2;
+      }
+    }
+  }
+
+  // ------------------------------------------- keyboard / screen-reader grid
+  // The DOM twin of the icon grid. The canvas DRAWS the icons; these spans ARE
+  // the icons as far as the keyboard and a screen reader are concerned. All
+  // geometry comes from relayout()'s output — the same numbers the pointer
+  // hit-test uses — so the two paths cannot disagree about where an icon is.
+  //
+  // ROVING TABINDEX: the grid is ONE tab stop, not thirteen. Exactly one span
+  // holds tabindex 0; the arrows move it. Tab enters the grid there and the
+  // next Tab leaves for the footer, so the menu never becomes a tab trap.
+  //
+  // FOCUS IS NOT SELECTION. Arrowing moves focus only; Enter or Space commits.
+  // If focus selected, crossing the grid would churn the whole thing once per
+  // keypress and open thirteen windows on the way past.
+  const keysEl = document.getElementById('nl-keys');
+  let keyEls = [];
+  let focusIdx = 0;
+
+  // rebuild the layer for the ACTIVE section (titles and count both change)
+  function buildKeys() {
+    keysEl.textContent = '';
+    const ents = (DATA.sections[activeSection] || {}).entries || [];
+    focusIdx = 0;
+    keyEls = ents.map((en, i) => {
+      const s = document.createElement('span');
+      s.setAttribute('data-key', '');
+      s.setAttribute('role', 'option');
+      s.setAttribute('aria-selected', 'false');
+      s.setAttribute('aria-label', en.hd);   // an EMPTY span — the label is the
+                                             // whole content, so nothing draws
+      // ...unless there is no shader, in which case this layer IS the menu and
+      // the title has to be readable. Same element, same handlers, same state:
+      // only whether it draws changes.
+      if (!gl) s.textContent = en.hd;
+      s.tabIndex = i === 0 ? 0 : -1;
+      s.addEventListener('keydown', (ev) => onKeyNav(ev, i));
+      // harmless with a shader (the layer is pointer-events: none there, so it
+      // never fires); the only way to select without one
+      s.addEventListener('click', () => {
+        if (gSwapTo !== null || fixture === 'contact') return;   // same locks
+        setSelected(selected === i ? null : i);
+      });
+      keysEl.appendChild(s);
+      return s;
+    });
+    updateKeys();
+  }
+
+  // lay every span onto its icon's resting cell box. Called from resize() just
+  // after relayout(), so the targets follow the grid through every reflow,
+  // rotation, and section change without a second source of geometry.
+  function placeKeys() {
+    if (!gl) return;                 // flowed as a text list; CSS owns it
+    if (!keyEls.length || !canvasCssW) return;
+    const sRect = stageEl.getBoundingClientRect();
+    const cRect = canvas.getBoundingClientRect();
+    keysEl.style.left   = (cRect.left - sRect.left).toFixed(1) + 'px';
+    keysEl.style.top    = (cRect.top  - sRect.top ).toFixed(1) + 'px';
+    keysEl.style.width  = canvasCssW.toFixed(1) + 'px';
+    keysEl.style.height = canvasCssH.toFixed(1) + 'px';
+    const half = cellPxCss / 2;
+    for (let i = 0; i < keyEls.length && i < icons.length; i++) {
+      const s = keyEls[i], ic = icons[i];
+      s.style.left   = (ic.pxCx - half).toFixed(1) + 'px';
+      s.style.top    = (ic.pxCy - half).toFixed(1) + 'px';
+      s.style.width  = cellPxCss.toFixed(1) + 'px';
+      s.style.height = cellPxCss.toFixed(1) + 'px';
+    }
+  }
+
+  // aria-selected mirrors the FROZEN icon, so a screen reader hears the same
+  // thing the eye sees: exactly one item selected, or none while a fixture
+  // holds the window. The roving tabindex follows the selection too — tabbing
+  // back into the grid lands on whatever is currently open, not on item one.
+  function updateKeys() {
+    const sel = (fixture === null) ? selected : null;
+    if (sel !== null) focusIdx = sel;
+    for (let i = 0; i < keyEls.length; i++) {
+      keyEls[i].setAttribute('aria-selected', i === sel ? 'true' : 'false');
+      keyEls[i].tabIndex = (i === focusIdx) ? 0 : -1;
+    }
+  }
+
+  function moveFocus(i) {
+    if (i < 0 || i >= keyEls.length) return;
+    focusIdx = i;
+    for (let k = 0; k < keyEls.length; k++) keyEls[k].tabIndex = (k === i) ? 0 : -1;
+    keyEls[i].focus();
+  }
+
+  function onKeyNav(ev, i) {
+    // the grid is inert mid-swap and under the CONTACT LOCK, exactly as the
+    // pointer path is — the keyboard gets no privilege the pointer lacks, so a
+    // stray Enter can no more discard a draft than a stray tap can. Focus may
+    // still MOVE while inert; it changes nothing.
+    const inert = (gSwapTo !== null) || (fixture === 'contact');
+    let d = null;
+    switch (ev.key) {
+      // Left/Right step the list LINEARLY, so they still work at >=950px where
+      // the grid is a single row; Up/Down jump by the current column count.
+      case 'ArrowRight': d = i + 1;      break;
+      case 'ArrowLeft':  d = i - 1;      break;
+      case 'ArrowDown':  d = i + COLS;   break;
+      case 'ArrowUp':    d = i - COLS;   break;
+      case 'Home':       d = 0;          break;
+      case 'End':        d = keyEls.length - 1; break;
+      case 'Enter':
+      case ' ':
+        ev.preventDefault();
+        if (inert) return;
+        // mirrors the pointer exactly: committing the ALREADY-frozen icon is
+        // the exit, the same gesture as tapping the coherent thing
+        setSelected(selected === i ? null : i);
+        return;
+      default: return;                   // every other key belongs to the page
+    }
+    ev.preventDefault();                  // arrows would otherwise scroll
+    // CLAMPED, not wrapped. The filmstrip wraps because it is a line; this is
+    // a grid, and running off its end would land somewhere unrelated.
+    moveFocus(Math.max(0, Math.min(keyEls.length - 1, d)));
+  }
+
+  // The grid half is sized by the grid itself: the cell pitch is a FIXED
+  // constant (CELL_PX — icons never change size on rotation OR resize), the
+  // available width decides how many columns fit, and the half — and with it
+  // the seam — is exactly canvas + footer reserve. Contact takes the rest.
+  // Wide enough for every icon in one row (~950px at 15 icons) reads as a
+  // menu bar at the foot of the page.
+  function resize(force) {
+    // the on-screen keyboard collapses 100dvh — re-deriving the grid from that
+    // transient viewport makes the page thrash mid-typing. FORCE overrides it
+    // for changes that MUST re-lay-out regardless: a section commit swaps in an
+    // icon set that has never been positioned, and skipping relayout would
+    // leave every icon of the new section stacked at the origin.
+    if (kbFrozen && !force) return;
+    const nlRect = rootEl.getBoundingClientRect();
+    const availW = Math.max(80, nlRect.width);
+
+    // FIXED pitch (the taskbar rule): cell size never follows the viewport —
+    // only COLS/ROWS below respond to the available width
+    const g = GAP_RATIO, m = MARGIN_RATIO;
+    const basePitch = CELL_PX / (1 - g);
+
+    // NO SHADER: there is no canvas to size and no grid to lay out — the key
+    // layer flows itself as a wrapped list. Everything else still holds.
+    //
+    // THE SEAM FOLLOWS THE MENU, exactly as it does with a shader, where the
+    // grid half is precisely canvas + footer reserve. Sizing this half to a
+    // flat 50% instead — which is what the first version of this branch did —
+    // throws that rule away: the titles float in half a screen of nothing and
+    // the window is squeezed into the other half for no reason. The menu is
+    // made of type here rather than pixels; it gets measured the same way.
+    if (!gl) {
+      COLS = 1;                          // arrow Up/Down step one in a list
+      marginPxCss = basePitch * m;
+      rootEl.style.setProperty('--nl-m', marginPxCss.toFixed(1) + 'px');   // set
+                                         // BEFORE measuring: the list's padding
+                                         // derives from it and affects wrapping
+
+      // the wrapped list's natural height IS the measurement. +2 covers the
+      // seam's own 1px border so the last row never clips into a scrollbar.
+      const listH = Math.ceil(keysEl.scrollHeight) + 2;
+      const maxH  = nlRect.height * GRID_MAX_FRAC - FOOTER_RESERVE;   // the same
+                                         // last-resort cap the canvas obeys
+      const gh    = Math.max(24, maxH > 24 ? Math.min(listH, maxH) : listH);
+      gridEl.style.height = (gh + FOOTER_RESERVE).toFixed(1) + 'px';
+
+      // window bottom lands one margin above the seam — the fallback's
+      // equivalent of "one margin above the resting grid's top cell edge"
+      const wb = Math.min(gh + FOOTER_RESERVE + marginPxCss,
+                          nlRect.height - marginPxCss - 60);   // keep >=60px of window
+      rootEl.style.setProperty('--nl-win-bottom', Math.max(0, wb).toFixed(1) + 'px');
+      const wh = nlRect.height - marginPxCss - Math.max(0, wb);
+      rootEl.style.setProperty('--car-h', Math.max(48, wh * 0.25).toFixed(1) + 'px');
+      if (typeof updateMore === 'function') updateMore();
+      return;
+    }
+
+    const N = icons.length || 1;
+    COLS = Math.max(1, Math.min(N, Math.floor(availW / basePitch - 2 * m + g + 1e-6)));
+    ROWS = Math.ceil(N / COLS);
+
+    // the canvas hugs the grid (margins = pitch * MARGIN_RATIO inside it) and
+    // centers in the half; any sub-column leftover stays outside the canvas
+    let cw = basePitch * (COLS - g + 2 * m);
+    let ch = basePitch * (ROWS - g + 2 * m);
+
+    // cap the grid half at GRID_MAX_FRAC of the page so the contact half
+    // always keeps working room; when the cap bites, shrink uniformly
+    const maxCh = nlRect.height * GRID_MAX_FRAC - FOOTER_RESERVE;
+    if (maxCh > 0 && ch > maxCh) { cw *= maxCh / ch; ch = maxCh; }
+
+    // the SEAM follows the grid: half height = canvas + footer reserve
+    gridEl.style.height = (ch + FOOTER_RESERVE).toFixed(1) + 'px';
+
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, RENDER_SCALE_MIN), RENDER_SCALE_MAX);
+    canvas.style.width  = cw + 'px';
+    canvas.style.height = ch + 'px';
+    canvas.width  = Math.max(1, Math.round(cw * dpr));
+    canvas.height = Math.max(1, Math.round(ch * dpr));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    // the backing store was just reallocated — repaint it in the theme
+    // background NOW, not at the next frame(), so a resize can never flash
+    // an uninitialised buffer
+    gl.clearColor(BG[0], BG[1], BG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    canvasCssW = cw; canvasCssH = ch;
+    relayout();
+    placeKeys();                         // targets follow the grid, one source
+
+    // ---- window geometry: one margin, derived from the grid pitch.
+    // top / left / right = --nl-m from the screen edges; bottom lands the
+    // window --nl-m above the RESTING grid's top cell edge (which the warp
+    // never moves). Recomputed here because the pitch, the seam, and the
+    // canvas position all change on resize.
+    const nlRect2 = rootEl.getBoundingClientRect();   // re-read: grid height was just set
+    const cRect  = canvas.getBoundingClientRect();
+    const gridTopLocal = (cRect.top - nlRect2.top) + gridTopCss;   // in #noiselab space
+    let winBottom = nlRect2.height - gridTopLocal + marginPxCss;
+    winBottom = Math.min(winBottom, nlRect2.height - marginPxCss - 60);  // keep ≥60px of window
+    rootEl.style.setProperty('--nl-m', marginPxCss.toFixed(1) + 'px');
+    rootEl.style.setProperty('--nl-win-bottom', Math.max(0, winBottom).toFixed(1) + 'px');
+
+    // carousel height: ~25% of the window's actual height, floored so short
+    // screens keep a visible strip
+    const winH = nlRect2.height - marginPxCss - Math.max(0, winBottom);
+    rootEl.style.setProperty('--car-h', Math.max(48, winH * 0.25).toFixed(1) + 'px');
+
+    // the window just changed width: copy re-wraps, so whether it overflows
+    // the clamp may have flipped
+    if (typeof updateMore === 'function') updateMore();
+  }
+
+  // ----------------------------------------------------- selection + morph
+  const smooth = x => x * x * (3 - 2 * x);
+  const mixv = (a, b, e) => a + (b - a) * e;
+
+  // selection model:
+  //   selected === null -> all icons calm (breathing), contact shows the ABOUT
+  //   selected === i      -> icon i FREEZES (static); every other icon is driven
+  //                          noisy, and the contact WINDOW opens
+  // REST:   tap an icon to activate it; a tap in empty space changes nothing.
+  // ACTIVE: the grid IS the navigation —
+  //         tap a DIFFERENT icon  -> switch to it directly (no rest stop);
+  //         tap the FROZEN icon   -> exit to rest (dissolve the coherent thing);
+  //         tap a gap / margin    -> exit to rest.
+  //         (the contact half is NOT an exit — misclick protection around
+  //         the window and its controls)
+  // CONTACT LOCK: while the contact FORM is active, the grid is inert and
+  //         Escape is ignored — the × is the ONLY exit, so a stray tap can
+  //         never throw away a half-written message.
+  // Hit-testing tests each icon's RESTING cell box (pxCx/pxCy), which the warp
+  // never moves, so targets stay pinned even while the art churns.
+  // THREE state values now, composing cleanly:
+  //   activeSection  which icon set the grid holds (footer BUILD/DESIGN/ART)
+  //   selected       which project in that section is frozen, or null
+  //   fixture        'about' | 'contact' | null — a footer entry holding the
+  //                  window with NO grid icon behind it
+  // The coherence grammar is unchanged, just extended: exactly one thing is
+  // still at any moment. With a fixture open that thing is the FOOTER LABEL
+  // (ink against the grey row) and the whole grid churns — you have stepped
+  // out of the work, so nothing in the work is coherent.
+  let selected = null;
+  let fixture  = null;
+
+  function applySelection() {
+    const fx = fixture !== null;
+    for (let i = 0; i < icons.length; i++) {
+      icons[i].target      = fx ? 1 : (selected === null ? 0 : (i === selected ? 0 : 1));
+      icons[i].stillTarget = (!fx && selected !== null && i === selected) ? 1 : 0;
+    }
+  }
+
+  // where the window should be pointing, as a FLAT winEntries index (or null
+  // for rest). One function so grid selections and footer fixtures share the
+  // same open / switch / close machinery.
+  function winTarget() {
+    if (fixture === 'about')   return ABOUT_INDEX;
+    if (fixture === 'contact') return FORM_INDEX;
+    if (selected !== null)     return SECTION_OFFSET[activeSection] + selected;
+    return null;
+  }
+
+  // apply whatever state was just set: grid noise, footer marks, and the
+  // window (open from rest / switch entry / close), on the existing clocks.
+  function commit(prevTarget) {
+    applySelection();
+    updateNav();
+    updateKeys();
+    const t = winTarget();
+    if (t === null)             { contactSet(false); syncRoute(false); return; }
+    if (prevTarget === null)    { setWinContent(t); contactSet(true); }  // rest -> open
+    else if (t !== prevTarget)  { contactSwap(t); }                      // open -> open
+    syncRoute(false);
+  }
+
+  // selecting an icon drives the noise: the picked icon freezes static, every
+  // other icon activates, and the window opens. Selecting while
+  // ALREADY open is a SWITCH: the old icon melts back into the churn (slow
+  // clock) while the new one snaps still, and the window re-churns to the new
+  // entry via contactSwap. Deselecting (next = null) returns everything to rest.
+  function setSelected(next) {
+    const prev = winTarget();
+    selected = next;
+    fixture  = null;              // a grid selection always leaves a fixture
+    commit(prev);
+  }
+
+  // footer ABOUT / CONTACT: take the window with no grid icon behind them.
+  // Tapping the lit one again returns to rest, so each is its own toggle.
+  function openFixture(which) {
+    const prev = winTarget();
+    if (fixture === which) { selected = null; fixture = null; }
+    else                   { selected = null; fixture = which; }
+    commit(prev);
+  }
+
+  // ---- section switching (footer BUILD / DESIGN / ART)
+  // The grid churns OVER: every icon drives to full noise on the fast clock,
+  // the icon set is exchanged at the midpoint — noise to noise, so the cut is
+  // invisible, exactly as the window's text swap works — and the new set
+  // resolves back to calm on the slow clock. The window leaves with the old
+  // section; a switch always lands at rest.
+  let gSwapTo = null, gMix = 0;
+  function switchSection(n) {
+    if (gSwapTo !== null || !allIcons[n]) return;
+    // tapping the section you are ALREADY in is not a no-op when a fixture
+    // holds the window: it means "back to the work". Dismiss and stop —
+    // there is no icon set to churn over.
+    if (n === activeSection) {
+      if (fixture !== null) { const p0 = winTarget(); fixture = null; selected = null; commit(p0); }
+      return;
+    }
+    const prev = winTarget();
+    selected = null; fixture = null;
+    if (prev !== null) contactSet(false);        // close the window with the section
+    for (const ic of icons) { ic.target = 1; ic.stillTarget = 0; }   // everything churns out
+    gSwapTo = n;
+    updateNav();
+    updateKeys();                 // the outgoing set holds no selection either
+  }
+  function commitSection(n) {
+    activeSection = n;
+    icons = allIcons[n];
+    // the new set ARRIVES fully churned and eases back to calm
+    for (const ic of icons) { ic.mix = 1; ic.target = 0; ic.still = 0; ic.stillTarget = 0; }
+    buildKeys();                  // new titles, new count — rebuilt, then placed
+    resize(true);                 // the icon COUNT changed -> new COLS/ROWS/canvas.
+                                  // forced: this set has never been positioned
+    syncRoute(false);             // suppressed when a route drove us here
+  }
+
+  // pointer -> icon index, or null for gap / margin. Tested in CSS px against
+  // each icon's RESTING cell box (scale 1.0). Works in either layout.
+  function iconAtPointer(ev) {
+    const r = canvas.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) / r.width  * canvasCssW;
+    const my = (ev.clientY - r.top)  / r.height * canvasCssH;
+    const half = cellPxCss / 2;
+    for (let i = 0; i < icons.length; i++) {
+      if (Math.abs(mx - icons[i].pxCx) <= half && Math.abs(my - icons[i].pxCy) <= half) return i;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('pointerdown', (ev) => {
+    if (gSwapTo !== null) return;               // inert while the grid swaps over
+    if (fixture === 'contact') return;          // CONTACT LOCK: only the x exits
+    const hit = iconAtPointer(ev);
+    if (selected === null) {                    // REST (or a fixture is open):
+      if (hit !== null) setSelected(hit);       // an icon selects; empty space
+      else if (fixture !== null) setSelected(null);   // a gap dismisses a fixture
+      return;
+    }
+    if (hit === null || hit === selected) {     // ACTIVE: frozen icon or gap exits...
+      setSelected(null);
+      return;
+    }
+    setSelected(hit);                           // ...another icon switches directly
+  });
+
+  // NOTE: the contact half / window margins are deliberately NOT an exit —
+  // stray taps around the window (especially near the ← back mark) were
+  // ejecting the whole state. Exits are the ×, the frozen icon, grid gaps,
+  // and Escape.
+
+  // ------------------------------------------------------------ system theme
+  // The theme follows the DEVICE display setting (prefers-color-scheme) —
+  // initial state and live changes. One switch, four surfaces: the CSS vars
+  // (--bg/--ink drive every DOM color), the GL clear + uInk, and the
+  // html/body backgrounds (overscroll regions). The bakes are never
+  // touched — the shader recolors the same white-alpha textures.
+  function setTheme(t) {
+    const light = t === 'light';
+    rootEl.classList.toggle('light', light);
+    BG  = light ? [1, 1, 1] : [0, 0, 0];
+    INK = light ? [0, 0, 0] : [1, 1, 1];
+    document.documentElement.style.background = light ? '#fff' : '#000';
+    document.body.style.background            = light ? '#fff' : '#000';
+    // (theme-color metas are media-scoped in the head — the browser picks
+    // the matching one itself; no JS update needed)
+  }
+  const mqLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  setTheme(mqLight && mqLight.matches ? 'light' : 'dark');
+  if (mqLight && mqLight.addEventListener) mqLight.addEventListener('change',
+    (e) => setTheme(e.matches ? 'light' : 'dark'));
+
+  // ------------------------------------------------------- footer site nav
+  // Kept as spans, not anchors: no href, nothing for a webview to intercept.
+  const navEls = Array.from(document.querySelectorAll('#nl-fns [data-nav]'));
+  // the vertical copyright in the right margin — set once, never touched again
+  const copyEl = document.querySelector('#nl-copy span');
+  if (copyEl) copyEl.textContent = CONTENT.copyright || '';
+  // exactly ONE label is ink at a time — the fixture if one is open, else the
+  // active section. The footer carries the coherence when the grid cannot.
+  function updateNav() {
+    for (const el of navEls) {
+      const n = el.getAttribute('data-nav');
+      const on = fixture !== null
+        ? (fixture === n)
+        : (DATA.sections[activeSection] && DATA.sections[activeSection].id === n);
+      el.classList.toggle('on', !!on);
+      el.setAttribute('aria-current', on ? 'true' : 'false');
+    }
+  }
+  navEls.forEach(el => {
+    const n = el.getAttribute('data-nav');
+    const fn = () => {
+      if (n === 'about' || n === 'contact') { openFixture(n); return; }
+      const si = DATA.sections.findIndex(sec => sec.id === n);
+      if (si >= 0) switchSection(si);
+    };
+    el.addEventListener('click', fn);
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); }
+    });
+  });
+
+  // ------------------------------------------- window text (coherence swap)
+  // The window text is treated as one more icon. One progress value (cMix)
+  // eases on the icons' clock going up (dt/ON_TIME) and its own slower clock
+  // going down (dt/CONTACT_OFF_TIME = 2x the grid), shaped by smoothstep.
+  // While it moves, unresolved
+  // characters churn through a glyph pool at their own random thresholds
+  // (the per-icon seed analog). There is NO crossfade: each text dissolves
+  // fully into churn, a hard visibility swap happens at the midpoint, and the
+  // other text re-forms out of churn on the far side.
+  // prefers-reduced-motion collapses this to an instant swap of resolved text.
+  const aboutEl   = document.getElementById('nl-about');
+  const aboutTxt  = document.getElementById('nl-about-text');
+  const winEl     = document.getElementById('nl-window');
+  const winTxt    = document.getElementById('nl-window-text');
+
+  let cMix = 0, cTarget = 0;     // same semantics as an icon's mix/target
+  let cDirty = true;             // force one apply on load
+  let cSwapTo = null;            // pending entry for an open->open switch
+
+  function contactSet(open) { cTarget = open ? 1 : 0; cSwapTo = null; if (!open) hardResetExpand(); }
+
+  // open -> open switch: e = 0.5 is exactly "window visible, text 100%
+  // churned" (the hard-swap midpoint), so a switch dissolves DOWN to 0.5 on
+  // the FAST clock, exchanges the entry there, and resolves back to 1 — the
+  // about never appears, and switching stays snappy while exit keeps its
+  // slow decay.
+  function contactSwap(i) { cTarget = 1; cSwapTo = i; }
+
+  const mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  let reduceMotion = mqReduce ? mqReduce.matches : false;
+  if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', (e) => {
+    reduceMotion = e.matches; restoreChars(); cDirty = true;
+  });
+
+  // wrap every non-space character in a span with a random resolve threshold
+  // (the per-icon seed analog). BRs and spaces pass through untouched so line
+  // structure and word shapes survive the churn.
+  function spanify(el) {
+    const spans = [];
+    (function walk(node) {
+      for (const k of Array.from(node.childNodes)) {
+        if (k.nodeType === 3) {
+          const frag = document.createDocumentFragment();
+          for (const ch of k.textContent) {
+            if (ch === ' ' || ch === '\u00a0' || ch === '\n') { frag.appendChild(document.createTextNode(ch)); continue; }
+            const s = document.createElement('span');
+            s.textContent = ch;
+            spans.push({ el: s, ch, t: 0.05 + Math.random() * 0.9 });
+            frag.appendChild(s);
+          }
+          node.replaceChild(frag, k);
+        } else if (k.nodeType === 1 && k.tagName !== 'BR' &&
+                   k.tagName !== 'INPUT' && k.tagName !== 'TEXTAREA') {
+          walk(k);
+        }
+      }
+    })(el);
+    return spans;
+  }
+  const aboutSpans = spanify(aboutTxt);
+
+  // the close mark is a GLOBAL exit, not content: it never churns — it rides
+  // the window's visibility but stays resolved and fixed. Tap / Enter /
+  // Space exit; Escape exits from anywhere on keyboard devices
+  const closeEl = document.getElementById('nl-close');
+  closeEl.addEventListener('click', () => setSelected(null));
+  closeEl.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelected(null); }
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (xTarget === 1) { collapseExpand(); syncRoute(false); }   // pop the image first...
+    else if (fixture === 'contact') { /* contact lock: the x is the only exit */ }
+    else if (selected !== null || fixture !== null)
+      setSelected(null);                               // ...then the window
+    // (contact lock: Escape is ignored on the form — the x is the only exit)
+  });
+
+  // Build all window entries from LIST (entries + about) — each gets its
+  // TEXT div and, IF it has images, its OWN carousel strip in the #nl-car
+  // host, driven entirely by the entry's images array. An entry WITHOUT
+  // images (ABOUT; any imageless project) gets no strip — full-height text,
+  // same path as the form. Churn state is per-entry, and switching selection
+  // is a display swap, not a rebuild. Thumbs render their image as a cover
+  // background (grey base shows while loading) and are tappable (expand /
+  // jump / collapse); the expand view reads the SAME records.
+  const carHost = document.getElementById('nl-car');
+  const winEntries = LIST.map((en, i) => {
+    const d = document.createElement('div');
+    if (i !== 0) d.style.display = 'none';
+    d.innerHTML = `<span class="hd">${en.hd}</span><br><br>`
+      + `${en.lines.join('<br>')}<br><br>`
+      + `<div class="body">${paras(en.blurb).join('<br><br>')}</div>`;
+    winTxt.appendChild(d);
+    let car = null, thumbs = null;
+    if (en.images && en.images.length) {
+      car = document.createElement('div');
+      car.className = 'car';
+      if (i !== 0) car.style.display = 'none';
+      carHost.appendChild(car);
+      thumbs = en.images.map((im, k) => {
+        const ph = document.createElement('div');
+        ph.className = 'ph';
+        const tsrc = thumbURL(im);                // resized by the host when configured
+        if (en.layout === 'grid') {
+          // a grid is uniform by definition: every cell 16:9, images cropped
+          // to fill. The per-image ratio is deliberately ignored here.
+          ph.style.aspectRatio = '16 / 9';
+        } else if (im.ratio) {
+          ph.style.aspectRatio = im.ratio[0] + ' / ' + im.ratio[1];
+        } else {
+          // FALLBACK ONLY — a record with no ratio. Hold a square, measure on
+          // decode, settle once. This costs a network fetch PER IMAGE at load,
+          // for every entry, visible or not: it is why ratio should always be
+          // stored. Probing the THUMB keeps the damage to a small file rather
+          // than pulling every full-size image on the site.
+          ph.style.aspectRatio = '1 / 1';
+          const probe = new Image();
+          probe.onload = () => {
+            im.ratio = [probe.naturalWidth, probe.naturalHeight];
+            ph.style.aspectRatio = im.ratio[0] + ' / ' + im.ratio[1];
+          };
+          probe.src = tsrc;
+        }
+        ph.style.backgroundImage = 'url("' + tsrc + '")';
+        if (en.expand === false) {
+          // not a control — it opens nothing. No button role, no tab stop,
+          // no pointer: the picture is the presentation, not a door.
+          ph.classList.add('static');
+          ph.setAttribute('role', 'img');
+          ph.setAttribute('aria-label', im.alt || ('Image ' + (k + 1)));
+        } else {
+          ph.setAttribute('role', 'button');
+          ph.setAttribute('tabindex', '0');
+          ph.setAttribute('aria-label', im.alt || ('Image ' + (k + 1) + ' of ' + en.images.length));
+          ph.addEventListener('click', () => thumbTap(i, k));
+          ph.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); thumbTap(i, k); }
+          });
+        }
+        car.appendChild(ph);
+        return ph;
+      });
+    }
+    return { el: d, car, thumbs, images: en.images || null, hd: en.hd,
+             body: d.querySelector('.body'),
+             layout: en.layout || DEFAULT_LAYOUT,
+             expand: en.expand !== false,
+             wordmark: en.wordmark || null, spans: spanify(d) };
+  });
+
+  // ONE shared wordmark element whose mask swaps with the entry (the same
+  // pattern as the expanded image — only one entry is ever visible, and there
+  // is no per-entry state to preserve). Non-churn: it hard-cuts with its view.
+  // CSS decides WHETHER it shows (landscape, not expanded, not carless); this
+  // only decides WHICH mark and whether one exists at all.
+  // LAYOUT: the window wears `l-<name>`; CSS does the rest. Swapped at the
+  // churn midpoint with the entry, so the rearrangement happens inside the
+  // invisible cut — never as a visible reflow.
+  function applyLayout(en) {
+    for (const n of LAYOUTS) winEl.classList.remove('l-' + n);
+    winEl.classList.add('l-' + ((en && en.layout) || DEFAULT_LAYOUT));
+  }
+
+  // READ MORE: the caret appears only when a body actually overflows its
+  // clamp, so short copy shows no control at all. Opening swaps the caret to
+  // its mirror — tap the coherent thing to dissolve it, the same gesture as
+  // the frozen icon and the active thumb.
+  const moreEl = document.getElementById('nl-more');
+  const CARET_DOWN = '\u2304', CARET_UP = '\u2303';
+
+  function setMore(on) {
+    winEl.classList.toggle('more', on);
+    moreEl.textContent = on ? CARET_UP : CARET_DOWN;
+    moreEl.setAttribute('aria-expanded', on ? 'true' : 'false');
+    moreEl.setAttribute('aria-label', on ? 'Show less' : 'Read more');
+  }
+  // measure the ACTIVE entry: is there more copy than the clamp shows?
+  // Re-run on entry switch and on resize — a width change re-wraps the text
+  // and can flip the answer either way. (The measure cap means this now
+  // stops flipping once the window passes 66ch — the column stops widening,
+  // so the wrap stops changing.)
+  function updateMore() {
+    const en = winEntries[winActive];
+    if (!en || en.layout !== 'grid' || !en.body) { moreEl.classList.remove('on'); return; }
+    if (winEl.classList.contains('more')) { moreEl.classList.add('on'); return; }
+    moreEl.classList.toggle('on', en.body.scrollHeight > en.body.clientHeight + 1);
+  }
+  moreEl.addEventListener('click', () => { setMore(!winEl.classList.contains('more')); updateMore(); });
+  moreEl.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault(); setMore(!winEl.classList.contains('more')); updateMore();
+    }
+  });
+
+  const markEl = document.getElementById('nl-mark');
+  // The slot holds a WORDMARK if one exists, otherwise the project's FIRST
+  // image as a hero, otherwise nothing. Both are sized through the host
+  // transform at what they can actually draw — a mark never exceeds 320 CSS
+  // px, a hero never exceeds 720.
+  function applyMark(en) {
+    const wm   = en && en.wordmark;
+    const hero = (!wm && en && en.images && en.images.length) ? en.images[0] : null;
+    markEl.classList.toggle('hero', !!hero);
+    if (wm) {
+      const url = 'url("' + sized(wm.src, MARK_W) + '")';
+      markEl.style.webkitMaskImage = url;
+      markEl.style.maskImage       = url;
+      markEl.style.backgroundImage = '';
+    } else if (hero) {
+      markEl.style.webkitMaskImage = '';
+      markEl.style.maskImage       = '';
+      markEl.style.backgroundImage = 'url("' + sized(hero.src, HERO_W) + '")';
+    } else {
+      markEl.style.webkitMaskImage = '';
+      markEl.style.maskImage       = '';
+      markEl.style.backgroundImage = '';
+    }
+    const src = wm || hero;
+    markEl.style.visibility = src ? '' : 'hidden';
+    markEl.setAttribute('aria-label', src ? (src.alt || '') : '');
+  }
+
+  let winActive = 0;
+  function setWinContent(i) {
+    if (i === winActive || !winEntries[i]) return;
+    hardResetExpand();                          // switching icons drops any expansion
+    const prev = winEntries[winActive], next = winEntries[i];
+    prev.el.style.display = 'none';
+    if (prev.car) prev.car.style.display = 'none';
+    next.el.style.display = '';
+    if (next.car) { next.car.style.display = ''; carHost.style.display = ''; }
+    else carHost.style.display = 'none';        // no strip -> full-height text
+    applyLayout(next);                          // l-<name> restructures the window
+    applyMark(next);                            // wordmark hard-cuts with the entry
+    setMore(false);                             // every entry opens clamped
+    winTxt.scrollTop = 0;                       // each entry opens at its top
+    winActive = i;
+    updateMore();                               // does THIS body overflow?
+    // a deep link asked for an image on an entry that was not on screen yet —
+    // it is now
+    if (pendingExpand !== null) {
+      const k = pendingExpand; pendingExpand = null;
+      if (next.images && next.images.length && next.expand !== false) {
+        expandTo(Math.min(k, next.images.length - 1));
+      }
+    }
+  }
+  applyLayout(winEntries[0]);                   // entry 0 is built visible; seed
+  applyMark(winEntries[0]);                     // its layout class and wordmark
+  setMore(false); updateMore();
+
+  // ---------------------------------------------- expanded image (per entry)
+  // The carousel is a miniature of the site: tap a thumb -> its image takes
+  // over the text region (text churns out on the fast clock, hard cut to the
+  // image at the midpoint — images are non-churn material, like the ×). The
+  // strip stays and becomes the filmstrip. Grammar:
+  //   swipe on the image        -> prev / next (wraps)
+  //   caption                   -> STATIC: shown iff the image has content
+  //   tap the ACTIVE thumb / <- -> collapse (back to the project overview)
+  //   tap another thumb         -> jump
+  //   Escape                    -> pops one level (image, then window)
+  // Everything this view shows comes from the entry's image RECORD:
+  // src, alt, caption — the same record the thumb was built from.
+  const expHd    = document.getElementById('nl-exp-hd');
+  const expStage = document.getElementById('nl-exp-stage');
+  const expImg   = document.getElementById('nl-exp-img');
+  const expCap   = document.getElementById('nl-exp-cap');
+  let xMix = 0, xTarget = 0, xDirty = true;
+  let expIdx = 0;
+
+  function setExpandIndex(k) {
+    const en = winEntries[winActive], im = en.images[k];
+    expIdx = k;
+    expImg.src = im.src;
+    expImg.alt = im.alt || '';
+    expCap.textContent = im.caption || '';
+    // STATIC caption: visible iff this image has content — no interaction
+    expCap.style.visibility = im.caption ? 'visible' : 'hidden';
+    en.thumbs.forEach((t, j) => t.classList.toggle('on', j === k));
+    en.thumbs[k].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // SIBLING move, not a deeper one: replaces the entry rather than adding
+    // to it, so ten swipes never bury the way out ten presses deep
+    if (xTarget === 1) syncRoute(true);
+  }
+  function expandTo(k) {
+    expHd.textContent = winEntries[winActive].hd;
+    setExpandIndex(k);
+    winEntries[winActive].car.classList.add('expanded');
+    setMore(false);            // opening an image leaves the text view, so the
+                               // read-more state goes with it (and its rule
+                               // stops competing with the filmstrip)
+    xTarget = 1;
+    syncRoute(false);          // going DEEPER: pushes, so back closes the image
+  }
+  function collapseExpand() {
+    const en = winEntries[winActive];
+    if (en.car) en.car.classList.remove('expanded');
+    en.thumbs && en.thumbs.forEach(t => t.classList.remove('on'));
+    xTarget = 0;
+  }
+  function hardResetExpand() {                  // instant — used when content changes
+    collapseExpand();
+    xMix = 0;
+    winEl.classList.remove('x');
+    xDirty = true;
+  }
+  function thumbTap(i, k) {
+    if (i !== winActive) return;                // strip is only visible for the active entry
+    if (winEntries[i].expand === false) return; // this entry's images don't open
+    if (xTarget === 1) {
+      if (k === expIdx) { collapseExpand(); syncRoute(false); }   // tap the coherent thing -> dissolve
+      else setExpandIndex(k);                   // jump (hard cut)
+    } else expandTo(k);
+  }
+  function applyExpand(xe, moving) {
+    const on = xe >= 0.5;                       // midpoint hard cut, both directions
+    winEl.classList.toggle('x', on);            // display swap: text view <-> expand view
+    if (reduceMotion || on) return;
+    churn(winEntries[winActive].spans, Math.max(0, 1 - xe * 2), moving);
+  }
+
+  // swipe / tap on the expanded stage
+  const backEl = document.getElementById('nl-back');
+  backEl.addEventListener('click', () => { collapseExpand(); syncRoute(false); });
+  backEl.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); collapseExpand(); syncRoute(false); }
+  });
+  let swX = 0, swY = 0;
+  expStage.addEventListener('pointerdown', (ev) => { swX = ev.clientX; swY = ev.clientY; });
+  expStage.addEventListener('pointerup', (ev) => {
+    const dx = ev.clientX - swX, dy = ev.clientY - swY;
+    const en = winEntries[winActive];
+    if (!en.thumbs) return;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+      const n = en.thumbs.length;
+      setExpandIndex((expIdx + (dx < 0 ? 1 : -1) + n) % n);   // swipe advances (wraps)
+    }
+    // no tap action on the stage — the caption is static
+  });
+
+  // ---- CONTACT FORM: the last entry in the flat list, hand-built OUTSIDE the
+  // data contract (it holds real inputs, not content). Reached from the footer,
+  // not the grid. The header, labels, and
+  // SEND churn like all other text; the fields themselves are real inputs
+  // (spanify skips INPUT/TEXTAREA) and simply appear with the window. SEND
+  // composes a mailto — no backend; swap for a form endpoint (Formspree /
+  // Netlify native) at deploy.
+  {
+    const d = document.createElement('div');
+    d.className = 'form-entry';
+    d.style.display = 'none';
+    d.innerHTML =
+      `<span class="hd">CONTACT</span><br><br>` +
+      `<label>NAME<input id="nl-f-name" type="text" autocomplete="name"></label>` +
+      `<label>EMAIL<input id="nl-f-email" type="email" autocomplete="email"></label>` +
+      `<label>MESSAGE<textarea id="nl-f-msg" rows="3"></textarea></label>` +
+      `<span class="send" role="button" tabindex="0">SEND</span>`;
+    winTxt.appendChild(d);
+    winEntries.push({ el: d, car: null, hd: 'CONTACT', layout: 'form', body: null, spans: spanify(d) });
+
+    const gv = id => (document.getElementById(id).value || '').trim();
+    const go = () => {
+      const n = gv('nl-f-name'), em = gv('nl-f-email'), ms = gv('nl-f-msg');
+      const su = encodeURIComponent('Portfolio contact' + (n ? ' — ' + n : ''));
+      const bo = encodeURIComponent(ms + ((n || em) ? '\n\n' + [n, em].filter(Boolean).join('\n') : ''));
+      window.location.href = 'mailto:' + CONTENT.contact.email + '?subject=' + su + '&body=' + bo;
+    };
+    const send = d.querySelector('.send');
+    send.addEventListener('click', go);
+    send.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); }
+    });
+  }
+
+  /* ==================================================================== ROUTING
+     The site had state but no ADDRESS: you could not send anyone to a project,
+     and on mobile the back gesture left the site instead of closing what was
+     open. Both are the same missing piece.
+
+       #                            rest
+       #build                       a section
+       #build/vessel-series         a project
+       #build/vessel-series/2       an expanded image (1-based, as written)
+       #about   #contact            the fixtures
+
+     THE RULE: the URL MIRRORS state, it is never a second way of setting it.
+     applyRoute() drives the SAME setSelected / commit / commitSection /
+     expandTo the pointer and keyboard drive, so every transition still churns
+     exactly as it always did and there is one code path per state change, not
+     two. `routing` suppresses the write-back while a route is being applied,
+     and `lastHash` recognises our own writes coming back as hashchange.
+
+     PUSH vs REPLACE — back pops a LEVEL, not a sibling. Opening a project or
+     an image pushes; swiping between images inside the expanded view replaces.
+     Otherwise a ten-image swipe would bury the exit ten presses deep.
+
+     ACCEPTED: back closes the contact form and loses a draft. The contact lock
+     was built against STRAY taps; back is deliberate, and a hash change cannot
+     be blocked. Normal web behaviour, but it does mean the lock is no longer
+     absolute.
+
+     ACCEPTED: applying a route switches sections with a HARD CUT rather than
+     the churn-over. History navigation can land on a project inside the new
+     section, and the churn commits at a transition midpoint one frame later —
+     the project would have nothing to select into. Footer taps still churn.
+
+     WRITING THE URL IS OPTIONAL. In a sandboxed or cross-origin iframe —
+     an artifact preview, a CMS preview pane, anyone embedding the piece —
+     history.replaceState throws and a hash write may be blocked outright.
+     syncRoute() runs from inside commit(), so an unguarded throw there would
+     take SELECTION down with it: the whole site broken by a feature that is
+     only ever a convenience. So the URL is written only when the page
+     actually owns it, and every write is wrapped regardless. Reading an
+     incoming hash stays enabled everywhere, since reading cannot fail. */
+  let routing = false;
+  let lastHash = null;
+  let pendingExpand = null;      // image to open once its entry is actually live
+
+  // do we own the address bar? framed => no. Probed, not assumed: the throw
+  // only shows up on the first real write, which is too late to find out.
+  let ROUTING_OK = true;
+  try { if (window.top !== window.self) ROUTING_OK = false; }
+  catch (e) { ROUTING_OK = false; }                  // cross-origin parent
+  if (ROUTING_OK) {
+    try { history.replaceState(null, '', location.hash || location.pathname); }
+    catch (e) { ROUTING_OK = false; }                // sandboxed / opaque origin
+  }
+
+  function parseHash() {
+    const raw = (location.hash || '').replace(/^#\/?/, '');
+    if (!raw) return null;
+    return raw.split('/').filter(Boolean).map(s => {
+      try { return decodeURIComponent(s); } catch (e) { return s; }
+    });
+  }
+
+  // current state -> the hash that describes it
+  function routeString() {
+    if (fixture) return fixture;
+    const sec = DATA.sections[activeSection];
+    if (!sec) return '';
+    if (selected === null) return sec.id;
+    const en = sec.entries[selected];
+    if (!en) return sec.id;
+    let s = sec.id + '/' + en.slug;
+    if (xTarget === 1) s += '/' + (expIdx + 1);
+    return s;
+  }
+
+  function writeHash(h, replace) {
+    if (!ROUTING_OK) return;                   // not our URL to write
+    const full = h ? '#' + h : '#';
+    if (location.hash === full) { lastHash = full; return; }
+    lastHash = full;
+    try {
+      if (replace) history.replaceState(null, '', full);
+      else location.hash = h;                  // creates the history entry
+    } catch (e) {
+      // a sandbox that permits the probe but blocks the write. Give up on the
+      // URL for the rest of the session rather than throwing once per tap.
+      ROUTING_OK = false;
+      console.warn('[noiselab] URL updates blocked by the embedding context; routing disabled.');
+    }
+  }
+
+  function updateDocTitle() {
+    const base = CONTENT.siteTitle || 'Portfolio';
+    let t = base;
+    if (fixture === 'about')        t = 'About \u2014 ' + base;
+    else if (fixture === 'contact') t = 'Contact \u2014 ' + base;
+    else {
+      const sec = DATA.sections[activeSection];
+      const en  = (sec && selected !== null) ? sec.entries[selected] : null;
+      if (en)       t = en.hd + ' \u2014 ' + base;
+      else if (sec) t = sec.label + ' \u2014 ' + base;
+    }
+    document.title = t;
+  }
+
+  function syncRoute(replace) {
+    if (routing) return;                       // we are BEING driven by the URL
+    writeHash(routeString(), replace);
+    updateDocTitle();
+  }
+
+  // hash -> state. `initial` marks the first application at load, where an
+  // absent hash means "leave the default alone" rather than "go to rest".
+  function applyRoute(parts, initial) {
+    routing = true;
+    try {
+      if (!parts || !parts.length) {           // bare '#' or empty
+        if (!initial && (selected !== null || fixture !== null)) {
+          const p = winTarget(); selected = null; fixture = null; commit(p);
+        }
+        return;
+      }
+      const head = String(parts[0]).toLowerCase();
+
+      if (head === 'about' || head === 'contact') {
+        if (fixture !== head) {
+          const p = winTarget(); selected = null; fixture = head; commit(p);
+        }
+        return;
+      }
+
+      const si = DATA.sections.findIndex(s => s.id === head);
+      if (si < 0) return;                      // unknown section: leave state alone
+      const sec = DATA.sections[si];
+
+      const slug = parts[1] ? String(parts[1]).toLowerCase() : null;
+      // an unknown slug resolves to the SECTION, not to an error — a link to a
+      // renamed or deleted project still lands somewhere sensible
+      const idx = slug ? sec.entries.findIndex(e => e.slug === slug) : -1;
+
+      if (si !== activeSection) commitSection(si);   // hard cut; see note above
+
+      const want = idx >= 0 ? idx : null;
+      if (selected !== want || fixture !== null) {
+        const p = winTarget(); selected = want; fixture = null; commit(p);
+      }
+
+      // ---- image level
+      const flat = want !== null ? SECTION_OFFSET[si] + want : -1;
+      const en   = flat >= 0 ? winEntries[flat] : null;
+      const imgs = en && en.images;
+      if (en && imgs && imgs.length && en.expand !== false && parts[2] !== undefined) {
+        const n = parseInt(parts[2], 10);
+        const k = Math.min(Math.max(isFinite(n) ? n : 1, 1), imgs.length) - 1;
+        // the entry may not be on screen yet: an open->open switch swaps the
+        // window at the churn MIDPOINT, a frame or more from now. Queue it and
+        // let setWinContent fire it on arrival.
+        if (winActive === flat) { if (xTarget === 1) setExpandIndex(k); else expandTo(k); }
+        else pendingExpand = k;
+      } else if (xTarget === 1) {
+        collapseExpand();
+      }
+    } finally {
+      routing = false;
+      updateDocTitle();
+    }
+  }
+
+  window.addEventListener('hashchange', () => {
+    if (location.hash === lastHash) return;    // our own write coming back
+    lastHash = location.hash;
+    applyRoute(parseHash(), false);
+  });
+
+  // single-width ASCII pool only — CJK/block glyphs are double-width in some
+  // monospace stacks and make the line lengths jitter
+  const POOL = '#%*+=-:;/\\|<>~^';
+  function churn(spans, res, moving) {   // res: 0..1 resolvedness for this element
+    for (const s of spans) {
+      if (res >= s.t) { if (s.el.textContent !== s.ch) s.el.textContent = s.ch; }
+      else if (moving) { s.el.textContent = POOL[(Math.random() * POOL.length) | 0]; }
+    }
+  }
+  function restoreChars() {
+    for (const s of aboutSpans) s.el.textContent = s.ch;
+    for (const en of winEntries) for (const s of en.spans) s.el.textContent = s.ch;
+  }
+
+  function applyContact(e, moving) {
+    // NO crossfade. Both texts live at full opacity; a hard visibility swap
+    // happens at the midpoint. Each side dissolves FULLY to churn before the
+    // cut and materialises FROM full churn after it, so the swap is
+    // noise-to-noise and the cut itself is invisible — coherence dissolves,
+    // then re-forms as the other content.
+    const aboutOn = e < 0.5;
+    aboutEl.style.visibility = aboutOn ? 'visible' : 'hidden';
+    winEl.style.visibility   = aboutOn ? 'hidden'  : 'visible';
+
+    if (reduceMotion) { restoreChars(); return; }   // instant swap, resolved text
+
+    churn(aboutSpans, Math.max(0, 1 - e * 2), moving);  // fully churned by e = 0.5
+    churn(winEntries[winActive].spans, Math.max(0, e * 2 - 1), moving);  // resolves from churn after e = 0.5
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+
+    // THE DRAWING is the only part of this loop that needs a shader. The
+    // clocks below it — section swap, window churn, image expand — are DOM
+    // effects and must keep running without one, or the fallback site would
+    // have no transitions at all.
+    if (gl) {
+    gl.clearColor(BG[0], BG[1], BG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(prog);
+    gl.bindVertexArray(vao);
+    gl.uniform1i(loc.uTex, 0);
+    gl.uniform3f(loc.uInk, INK[0], INK[1], INK[2]);   // same ink for every icon
+
+    for (const ic of icons) {
+      // each icon eases its OWN mix toward its OWN target (same on/off feel)
+      if (ic.mix < ic.target) ic.mix = Math.min(ic.target, ic.mix + dt / ON_TIME);
+      else if (ic.mix > ic.target) ic.mix = Math.max(ic.target, ic.mix - dt / OFF_TIME);
+      const e = smooth(ic.mix);
+
+      // stillness eases on the SAME asymmetric clock (snap frozen, ease back
+      // to breathing). s = 1 kills displacement AND stops the phase clock, so
+      // the selected icon is genuinely static — not breathing at amp 0.
+      if (ic.still < ic.stillTarget)      ic.still = Math.min(ic.stillTarget, ic.still + dt / ON_TIME);
+      else if (ic.still > ic.stillTarget) ic.still = Math.max(ic.stillTarget, ic.still - dt / OFF_TIME);
+      const s = smooth(ic.still);
+
+      const amp  = mixv(AMP_OFF,  AMP_ON,  e) * (1 - s);
+      const freq = mixv(FREQ_OFF, FREQ_ON, e);
+      const spd  = mixv(SPEED_OFF, SPEED_ON, e) * (1 - s);
+      ic.phase += spd * dt;             // own clock: calm keeps breathing while others churn
+
+      const iconScale = mixv(SCALE_OFF, SCALE_ON, e);
+      const qw = footW * iconScale, qh = footH * iconScale;
+
+      gl.uniform1f(loc.uAmp, amp);
+      gl.uniform1f(loc.uFreq, freq);
+      gl.uniform1f(loc.uPhase, ic.phase);
+      gl.uniform2f(loc.uScale, qw, qh);
+      gl.uniform2f(loc.uTranslate, ic.cx - qw * 0.5, ic.cy - qh * 0.5);
+      gl.uniform2f(loc.uSeed, ic.sx, ic.sy);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, ic.tex);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    }   // end if (gl) — drawing only
+
+    // SECTION SWAP: runs on the fast clock alongside the icons' own churn-out,
+    // so they arrive together. At the top the icon set is exchanged — noise to
+    // noise, the same invisible cut the window text uses — and the new set
+    // eases back down to calm.
+    if (gSwapTo !== null) {
+      gMix += dt / ON_TIME;
+      if (gMix >= 1) { commitSection(gSwapTo); gSwapTo = null; gMix = 0; }
+    }
+
+    // contact progress rides the same loop; DOM writes only while moving
+    // (or once after load). A pending swap descends FIRST (fast clock) to the
+    // churn midpoint, exchanges the entry, then the normal rise resumes.
+    let cMoving = false;
+    if (cSwapTo !== null) {
+      cMix = Math.max(0.5, cMix - dt / ON_TIME); cMoving = true;
+      if (cMix <= 0.5) { setWinContent(cSwapTo); cSwapTo = null; }
+    }
+    else if (cMix < cTarget) { cMix = Math.min(cTarget, cMix + dt / ON_TIME);  cMoving = true; }
+    else if (cMix > cTarget) { cMix = Math.max(cTarget, cMix - dt / CONTACT_OFF_TIME); cMoving = true; }
+    if (cMoving || cDirty) { applyContact(smooth(cMix), cMoving); cDirty = false; }
+
+    // expanded-image progress: fast clock BOTH ways (expand and collapse are
+    // in-window moves, not exits)
+    let xMoving = false;
+    if (xMix < xTarget)      { xMix = Math.min(xTarget, xMix + dt / ON_TIME); xMoving = true; }
+    else if (xMix > xTarget) { xMix = Math.max(xTarget, xMix - dt / ON_TIME); xMoving = true; }
+    if (xMoving || xDirty) { applyExpand(smooth(xMix), xMoving); xDirty = false; }
+
+    requestAnimationFrame(frame);
+  }
+
+  // --------------------------------------------------------------- run it
+  (async function () {
+    // EVERY section bakes up front (33 icons here, vs 15 before): the churn
+    // swap exchanges textures at the transition midpoint and cannot wait on an
+    // async bake. Still one deferred burst behind the double-rAF, so first
+    // paint is unaffected.
+    const flatIcons = SECTION_ICONS.reduce((a, b) => a.concat(b), []);
+
+    // An icon is GEOMETRY plus ANIMATION STATE; the texture is one field of
+    // it. Everything downstream — resize, relayout, placeKeys, the hit test,
+    // COLS/ROWS — reads only the other fields, so without a shader the icons
+    // still exist, they simply have nothing to draw. That is what keeps the
+    // rest of boot() identical in both modes rather than forked.
+    const iconState = (tex) => ({
+      tex,
+      sx: Math.random() * 127,
+      sy: Math.random() * 127,
+      mix: 0, target: 0,              // per-icon morph state
+      still: 0, stillTarget: 0,       // 1 = frozen (the selected icon)
+      phase: Math.random() * 100,     // desync the resting breathing
+      cx: 0, cy: 0, pxCx: 0, pxCy: 0,
+    });
+
+    let made = null;
+    if (gl) {
+      try {
+        const canvases = await Promise.all(flatIcons.map(bakeIcon));
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        made = canvases.map((cv) => {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          return iconState(tex);
+        });
+      } catch (e) {
+        // a bake or upload failed after everything else succeeded — the last
+        // place this can go wrong, and it degrades like all the others
+        console.warn('[noiselab] icon bake/upload failed — falling back to the DOM menu:', e);
+        gl = null;
+        rootEl.classList.add('nogl');
+        made = null;
+      }
+    }
+    if (!made) made = flatIcons.map(() => iconState(null));
+
+    // deal the flat bake back out into one array per section
+    let cut = 0;
+    allIcons = SECTION_ICONS.map(list => made.slice(cut, cut += list.length));
+    icons = allIcons[activeSection];
+
+    buildKeys();                      // the DOM twin of the starting icon set
+    resize();
+    updateNav();                      // light the starting section
+
+    // INCOMING DEEP LINK, applied once everything it might target exists.
+    // A bare load writes NOTHING: appearing to navigate on arrival, and
+    // pushing '#build' into a clean address bar, is noise. The first real
+    // interaction starts the history trail.
+    lastHash = location.hash;
+    if (location.hash) applyRoute(parseHash(), true);
+    else updateDocTitle();
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
+    // keyboard freeze bookends: layout holds while typing; on blur, undo any
+    // keyboard pan iOS applied to the (non-scrolling) page and re-derive
+    document.addEventListener('focusin', (ev) => {
+      if (ev.target && ev.target.matches && ev.target.matches('input, textarea')) kbFrozen = true;
+    });
+    document.addEventListener('focusout', () => {
+      if (!kbFrozen) return;
+      setTimeout(() => {                       // defer one tick: a field->field
+        const ae = document.activeElement;     // hop is NOT a keyboard dismissal
+        if (ae && ae.matches && ae.matches('input, textarea')) return;
+        kbFrozen = false;
+        window.scrollTo(0, 0);
+        resize();
+      }, 0);
+    });
+    requestAnimationFrame(frame);
+  })();
+  } // end boot()
+
+  // Two rAFs guarantee at least one presented (black) frame before boot's
+  // synchronous work blocks the main thread.
+  requestAnimationFrame(() => requestAnimationFrame(boot));
+})();
+</script>
+</body>
+</html>
