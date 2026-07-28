@@ -1091,87 +1091,15 @@
      sit apart from the lists entirely.
      ======================================================================= */
   /* CONTENT:START */
-  const CONTENT = {
-    // shown in the browser tab and in the history menu; each open project
-    // prepends its own title to this. Also the seed for the share/search
-    // metadata when that lands.
-    siteTitle: 'Robert Maciel',
+  /* EMPTY BY DESIGN. build.js writes the CONTENT object here at deploy,
+     assembled from content/*.json (the CMS is the source of truth).
 
-    about: {
-      title:   'ABOUT',
-      details: ['Technical designer', 'New York, NY', 'Since 2016'],
-      summary: 'Objects, environments, and the systems that fabricate them — practice grounded in social ritual.',
-      // no `images` — ABOUT shows text only. No `icon` either: ABOUT lives in
-      // the footer, not the grid.
-    },
+     CONSEQUENCE: opening THIS file directly no longer previews the site —
+     there is no CONTENT to build from, so boot() throws. Preview the deploy
+     preview URL instead, or run `node build.js` and open dist/index.html.
+     That is the one thing the CMS cost, and it is recorded in CLAUDE.md.
 
-    contact: {
-      email: 'hello@studio.xyz',                  // where SEND delivers (placeholder — set the real address)
-    },
-
-    // the vertical line standing in the right margin. Keep it SHORT: it runs
-    // the height of the content half, and a long one will reach the top edge
-    // on a short landscape phone.
-    copyright: '© 2026 ROBERT MACIEL',
-
-    sections: [
-      { id:'build',  label:'BUILD',  projects: [
-        // --- worked example (the first entry shows every field spelled out) ---
-        {
-          title:   'VESSEL SERIES',
-          details: ['Slipcast porcelain', 'Edition of 12', '2025'],
-          summary: 'Repeatable cast forms built around pouring, serving, and the table as commons.',
-          icon:    { kind:'placeholder', shape:'circle' },
-          // wordmark: { src:'vessel-wordmark.svg', alt:'Vessel Series' },
-          // images and wordmark omitted -> placeholders are filled in
-          // automatically, so the layout can be judged before real art exists
-        },
-        { title:'CANTILEVER LAMP', details:['Machined aluminum','Prototype','2025'],          summary:'A counterweighted task lamp balancing reach against footprint on a single pivot.',                icon:{ kind:'placeholder', shape:'blob'    } },
-        { title:'FIGURE-8 CHAIR',  details:['AlSi10Mg, SLM','One-off','2026'],                summary:'Hollow printed tube frame resolving two loops through a single waist junction.',                  icon:{ kind:'glyph', char:'\u03A9'         } },
-        { title:'PICNIC BASKET',   details:['Porcelain + PLA','MFA thesis','2016'],           summary:'Shared-experience objects pairing printed lattice with slipcast interiors for open-air meals.',    icon:{ kind:'placeholder', shape:'tri'     } },
-        { title:'ROOM #___',       details:['Risograph zine','Issue 01: Studio','2026'],      summary:'A publication on creative space as a site for connection, one room per issue.',                    icon:{ kind:'placeholder', shape:'squares' } },
-        { title:'RETAIL PROPS',    details:['PETG, H2D fleet','400 units','2026'],            summary:'Production-tracked print rollout of display props scheduled by completed pieces per week.',        icon:{ kind:'glyph', char:'\u6C38'         } },
-        { title:'DINNERWARE',      details:['Stoneware','Seeking chef partner','Ongoing'],    summary:'Course-mapped plates and drinkware developed against a working menu, not a catalog.',              icon:{ kind:'placeholder', shape:'ring'    } },
-        { title:'INK FIELDS',      details:['Ink on paper','Series of 30','2025'],            summary:'Dense line drawings testing how far repetition can go before it reads as tone.',                  icon:{ kind:'placeholder', shape:'dots'    } },
-        { title:'FLATLAY TOOL',    details:['Rhino / Python','Internal tooling','2025'],      summary:'Sheet-good part detection, BOM generation, and nested layouts driven by layer syntax.',           icon:{ kind:'glyph', char:'\u2318'         } },
-        { title:'NOISE GRID',      details:['WebGL2 / GLSL','This site','2026'],              summary:'A menu where selection is coherence: the chosen icon holds still, the rest churn.',               icon:{ kind:'placeholder', shape:'square'  } },
-        { title:'EXHIBITION',      details:['Vacant RV center','6 artists','2026'],           summary:'Group show upstate on family, community, and connectedness in a leftover commercial shell.',       icon:{ kind:'placeholder', shape:'rings'   } },
-        { title:'MOLD STUDIO',     details:['Plaster + silicone','Home studio','Ongoing'],    summary:'FDM masters finished to casting grade without hand sanding, then run in plaster.',                 icon:{ kind:'glyph', char:'\u042F'         } },
-        { title:'GLYPH STUDY',     details:['Type specimens','Print + screen','2025'],        summary:'Single characters treated as objects: baked, warped, and read at grid scale.',                    icon:{ kind:'placeholder', shape:'diamond' } },
-      ] },
-
-      { id:'design', label:'DESIGN', projects: [
-      { title:'WAYFINDING SYSTEM', details:['Signage program','Institutional','2025'],     summary:'A room-numbering and directional scheme legible at walking speed from either end.',        icon:{ kind:'placeholder', shape:'square'  } },
-      { title:'IDENTITY: FIELD',   details:['Visual identity','Small press','2026'],         summary:'Marks and a type program for a publisher printing short runs on found stock.',             icon:{ kind:'glyph', char:'\u25A3'        } },
-      { title:'TERMINAL UI',       details:['Design system','Internal tool','2025'],         summary:'Monospace interface language for shop software read under bad light, fast.',              icon:{ kind:'placeholder', shape:'bars'    } },
-      { title:'FORM STUDY',        details:['Parametric','Rhino + Grasshopper','2024'],      summary:'Definition-driven shell variants evaluated against draft angle and mold split.',           icon:{ kind:'glyph', char:'\u0394'        } },
-      { title:'PACKAGING SPEC',    details:['Structural','Direct-to-consumer','2026'],       summary:'Single-material carton opening flat, protecting glaze edges, folding without tape.',       icon:{ kind:'placeholder', shape:'ring'    } },
-      { title:'GRID PRIMER',       details:['Editorial','Teaching material','2025'],         summary:'A short course on measure, leading, and column logic taught through misuse.',              icon:{ kind:'glyph', char:'\u25D0'        } },
-      { title:'KIOSK FLOW',        details:['Service design','Retail pilot','2026'],         summary:'Order path rebuilt around what people already do while waiting in line.',                  icon:{ kind:'placeholder', shape:'diamond' } },
-      { title:'SPEC SHEETS',       details:['Documentation','Shop standard','Ongoing'],      summary:'One-page part drawings a fabricator can work from without a phone call.',                  icon:{ kind:'glyph', char:'\u039E'        } },
-      { title:'COLOR OPS',         details:['Process tooling','Studio','2025'],              summary:'Glaze and pigment records kept as data so a batch can be repeated years later.',           icon:{ kind:'placeholder', shape:'squares' } },
-      { title:'TYPE HARNESS',      details:['Variable type','Experiment','2026'],            summary:'A test rig driving weight and width axes against real text, not specimens.',               icon:{ kind:'glyph', char:'\u2295'        } },
-      { title:'SEATING PROGRAM',   details:['Furniture','Contract','2024'],                  summary:'Stacking chair family sized to three table heights and one truck pallet.',                 icon:{ kind:'placeholder', shape:'circle'  } },
-      ] },
-
-      { id:'art',    label:'ART',    projects: [
-      { title:'DEGRADE',         details:['Digital painting','Series of 40','2026'],         summary:[
-          'Source images pushed through noise until the subject survives only as structure.',
-          'The series began as a test: how far can a familiar image be degraded before it stops being that image? Each piece runs the same source through increasing displacement, and the answer turned out to be much further than expected — recognition survives long after detail does not.',
-          'Working at forty pieces forced a discipline that a handful never would. The middle of the series is where it gets interesting: coherent enough to read, damaged enough to doubt.',
-          'Printed at scale the noise reads as tooth rather than error, which was not planned and is now the point.',
-        ], icon:{ kind:'glyph', char:'\u2726'        }, layout:'grid', expand:true },
-      { title:'PLATE STUDIES',   details:['Drypoint','Edition varies','2025'],               summary:'Burr held until it collapses, printing the same plate as it wears away.',                  icon:{ kind:'placeholder', shape:'blob'    }, layout:'grid' },
-      { title:'NIGHT SHIFT',     details:['35mm','Ongoing','Since 2019'],                    summary:'Industrial interiors photographed between shifts, lit only by what stayed on.',            icon:{ kind:'glyph', char:'\u221E'        } },
-      { title:'FIELD RECORDINGS',details:['Cyanotype','Site series','2024'],                 summary:'Paper exposed on location, developed in whatever water the site provided.',                icon:{ kind:'placeholder', shape:'dots'    }, layout:'grid' },
-      { title:'SUBTRACT',        details:['Graphite','Large format','2025'],                 summary:'Full-sheet grounds worked back with erasers until the drawing is what remains.',           icon:{ kind:'glyph', char:'\u2248'        } },
-      { title:'STATIC GARDEN',   details:['Installation','Two rooms','2026'],                summary:'Cast forms arranged so the second room repeats the first, slightly wrong.',               icon:{ kind:'placeholder', shape:'rings'   } },
-      { title:'TRANSFER',        details:['Monotype','Series of 18','2024'],                 summary:'One-pull prints pulled twice, keeping the ghost instead of the first impression.',         icon:{ kind:'glyph', char:'\u03A8'        }, layout:'grid' },
-      { title:'LONG EXPOSURE',   details:['Photography','Print series','2025'],              summary:'Hour-long frames of rooms in use, holding only what never moved.',                        icon:{ kind:'placeholder', shape:'tri'     } },
-      { title:'HANDS',           details:['Oil on panel','Ongoing','Since 2023'],            summary:'Small panels of working hands, painted from life at the bench.',                          icon:{ kind:'glyph', char:'\u2756'        } },
-      ] },
-    ],
-  };
+     Do not hand-edit between the markers: the next build overwrites it. */
   /* CONTENT:END */
 
   /* ------------------------------------------------- host image transform
