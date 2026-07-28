@@ -79,43 +79,27 @@ No DNS changes. Live site and email untouched throughout.
 
 ## PHASE 3 — Claude tooling
 
-Two doors into the same repo. Both push to the same place; nothing needs to
-know which one you used.
+- [x] Connect GitHub to your Claude account (done — the
+      `claude.ai/connect/github/callback` redirect *is* the confirmation)
+- [ ] Go to **claude.ai/code**, confirm `rmaciel-work` appears
+- [ ] Run one small task end to end: task -> sandbox -> pull request ->
+      Netlify preview URL -> merge
 
-**On the MacBook — for structural work**
+Works the same from the browser and the Claude iOS app; sessions persist and
+can be monitored from the phone. One door, both devices.
 
-- [ ] Install Claude Code (terminal, or the Code tab in the Claude desktop app
-      if you'd rather not use a terminal)
-- [ ] Point it at the local clone of the repo
-- [ ] Confirm it picks up `CLAUDE.md` automatically
-- [ ] Habit to build: **start every session by pulling.** "Pull the latest
-      before we start" as the first message. Forgetting is the one thing that
-      actually bites — Git will refuse the push rather than lose work, but
-      you'll have worked on stale code.
+**Not needed:** the GitHub Actions route (`@claude` in issue comments). That
+requires a workflow file and a separate API key with separate billing. The
+account connection above supersedes it.
 
-**On the phone — for small fixes**
+**Optional, later:** Claude Code locally on the MacBook, for long sessions.
 
-- [ ] Install the Claude GitHub app on the repo
-      (`https://github.com/apps/claude`), or run `/install-github-app` from
-      Claude Code, which walks through it
-- [ ] Turn on **branch protection for `main`** so `@claude` opens a pull
-      request instead of committing straight to live
-- [ ] Test the loop: open an issue describing a small change → tag `@claude` →
-      it opens a PR → Netlify builds a preview URL → review on your phone →
-      merge
+**Optional:** branch protection on `main`. Claude Code on the web opens pull
+requests anyway, so this is a safety net rather than a requirement.
 
-**Rough division of labour**
-
-| Where | Route | Good for |
-|---|---|---|
-| MacBook session | Claude Code | New layouts, refactors, anything crossing systems |
-| Phone | `@claude` on an issue | Tweaks, "this is 2px off", copy changes |
-| Any browser | Claude Code on the web | Same as the laptop, without installing |
-| Anywhere | The Claude Project | Deciding *what* to do, before any of the above |
-
-Known gap: the routes share the **code and `CLAUDE.md`, not conversation
-memory**. Decisions that matter get written into `CLAUDE.md` or the commit
-message, or they don't survive.
+Known gap: routes share the **code and `CLAUDE.md`, not conversation memory**.
+Decisions that matter get written into `CLAUDE.md` or the commit message, or
+they don't survive.
 
 ---
 
