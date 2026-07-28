@@ -40,6 +40,7 @@ const SRC_HTML = path.join(ROOT, 'index.html');
 const CONTENT_DIR = path.join(ROOT, 'content');
 const PROJECTS_DIR = path.join(CONTENT_DIR, 'projects');
 const IMAGES_DIR = path.join(ROOT, 'images');
+const ADMIN_DIR = path.join(ROOT, 'admin');
 const DIST     = path.join(ROOT, 'dist');
 
 const START = '/* CONTENT:START */';
@@ -467,10 +468,24 @@ function main() {
   let copied = 0;
   if (fs.existsSync(IMAGES_DIR)) copied = copyDir(IMAGES_DIR, path.join(DIST, 'images'));
 
+  /* THE CMS ITSELF SHIPS TOO. Decap is served from /admin, and the publish
+     directory is dist — so without this copy the editor is simply not on the
+     deployed site and there is no way in to change anything.
+     Unlike images/, a missing admin/ is a FAILURE and not a skip: it is
+     checked-in source, not uploaded content, so its absence means the
+     repository is wrong rather than merely empty. Publishing a site whose
+     editor silently vanished is the exact class of quiet half-build this
+     script exists to prevent. */
+  if (!fs.existsSync(ADMIN_DIR)) {
+    fail('admin/: not found at the repository root. Decap CMS is served from /admin and would be missing from the deployed site.');
+  }
+  const adminFiles = copyDir(ADMIN_DIR, path.join(DIST, 'admin'));
+
   const count = content.sections.reduce((n, s) => n + s.projects.length, 0);
   console.log(
     `built dist/index.html — ${count} project${count === 1 ? '' : 's'} across ` +
-    `${content.sections.length} sections, ${copied} image file${copied === 1 ? '' : 's'} copied`
+    `${content.sections.length} sections, ${copied} image file${copied === 1 ? '' : 's'} copied, ` +
+    `${adminFiles} admin file${adminFiles === 1 ? '' : 's'} copied`
   );
 }
 
