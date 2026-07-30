@@ -1,10 +1,21 @@
 # SVG Noise Lab — Master Plan
 
-One list. Code debt and the domain/email migration interleaved in the order
-they actually need doing. Current build: **v80**.
+Code debt and the domain/email migration interleaved in the order they
+actually need doing. Current build: **v80**.
+
+> **Where work happens now.** Phases 1–3 are finished: the repository, the
+> Netlify build, the CMS, and the Claude Code loop all exist and work. The
+> current job is populating real work and fixing user-facing problems as they
+> surface — open-ended, no checklist.
+>
+> Everything that must be true **before the domain moves** has been pulled
+> out into **`PUNCH-LIST.md`**, which is the gate. The launch phases below are
+> kept for their reasoning; the punch list is what to actually work from, so
+> nothing is tracked in two places.
 
 Companion files: `CLAUDE.md` (context for Claude Code and `@claude`),
-`STRESS-TESTS.md` (the test list, run at Phase 4).
+`README.md` (plain-language operating instructions), `PUNCH-LIST.md` (the
+pre-launch gate), `STRESS-TESTS.md` (the test list, run at Phase 4).
 
 ---
 
@@ -48,41 +59,41 @@ Do before anything else. No risk, ~20 minutes, removes the worst case.
 
 ---
 
-## PHASE 1 — Repository
+## PHASE 1 — Repository ✅ DONE
 
 Everything else hangs off this. Deploying from a repo rather than dragging a
 file in is what makes iterative updates possible at all.
 
-- [ ] GitHub account if you don't have one; create a repo (private is fine —
+- [x] GitHub account if you don't have one; create a repo (private is fine —
       Netlify can still deploy from it)
-- [ ] Rename the build to **`index.html`** — static hosts look for that name.
+- [x] Rename the build to **`index.html`** — static hosts look for that name.
       Version numbers in the filename were a workaround for passing files
       through chat; Git handles history now.
-- [ ] Add the four companion docs to the repo root:
+- [x] Add the four companion docs to the repo root:
       `CLAUDE.md`, `PLAN.md` (this file), `STRESS-TESTS.md`, and the
       system handoff
-- [ ] Commit and push
+- [x] Commit and push
 
 ---
 
-## PHASE 2 — Deploy from the repo
+## PHASE 2 — Deploy from the repo ✅ DONE
 
 No DNS changes. Live site and email untouched throughout.
 
-- [ ] Free Netlify account → **Add new site → Import from Git** → pick the repo
-- [ ] No build command; publish directory is the repo root
-- [ ] Confirm the `*.netlify.app` URL loads and the shader runs
-- [ ] Confirm **deploy previews** are on (usually the default) — this is what
+- [x] Free Netlify account → **Add new site → Import from Git** → pick the repo
+- [x] ~~No build command; publish directory is the repo root~~ — superseded by the CMS: `netlify.toml` now sets `node build.js` and `dist`
+- [x] Confirm the `*.netlify.app` URL loads and the shader runs
+- [x] Confirm **deploy previews** are on (usually the default) — this is what
       gives every pull request its own preview URL
 
 ---
 
-## PHASE 3 — Claude tooling
+## PHASE 3 — Claude tooling ✅ DONE
 
 - [x] Connect GitHub to your Claude account (done — the
       `claude.ai/connect/github/callback` redirect *is* the confirmation)
-- [ ] Go to **claude.ai/code**, confirm `rmaciel-work` appears
-- [ ] Run one small task end to end: task -> sandbox -> pull request ->
+- [x] Go to **claude.ai/code**, confirm `rmaciel-work` appears
+- [x] Run one small task end to end: task -> sandbox -> pull request ->
       Netlify preview URL -> merge
 
 Works the same from the browser and the Claude iOS app; sessions persist and
@@ -118,6 +129,8 @@ Half the closed debt is only verifiable here. See `STRESS-TESTS.md`.
 
 ## PHASE 5 — Debt that needs a real host
 
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
+
 - [ ] **Share + search metadata** — description, Open Graph tags, favicon,
       `<h1>`, real `<title>`. Currently a link preview is a blank rectangle.
 - [ ] **404 page** — `404.html`, or the host serves its own, which won't be
@@ -131,6 +144,8 @@ Half the closed debt is only verifiable here. See `STRESS-TESTS.md`.
 
 ## PHASE 6 — Remaining code debt
 
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
+
 Host-independent; can run in parallel with Phase 3.
 
 - [ ] **Throttle `resize()`** — currently reallocates the GPU backing store
@@ -139,6 +154,8 @@ Host-independent; can run in parallel with Phase 3.
 ---
 
 ## PHASE 7 — Real content
+
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
 
 The site should not go live on your domain showing placeholders.
 
@@ -156,6 +173,8 @@ The site should not go live on your domain showing placeholders.
 
 ## PHASE 8 — Cutover
 
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
+
 Five minutes of actual work. Everything above should be finished first.
 
 - [ ] In Netlify: add the custom domain, open **Check DNS configuration**,
@@ -172,6 +191,8 @@ Five minutes of actual work. Everything above should be finished first.
 
 ## PHASE 9 — Verify before celebrating
 
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
+
 All four must pass.
 
 - [ ] Site loads on apex **and** www
@@ -182,6 +203,8 @@ All four must pass.
 ---
 
 ## PHASE 10 — Cleanup
+
+> Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
 
 Wait about a week after Phase 9.
 
@@ -197,8 +220,9 @@ Not now; revisit if the conditions appear.
 
 - [ ] **Lazy section build** — only if the project list grows substantially.
       Currently ~4,700 DOM nodes and 33 icon bakes at boot.
-- [ ] **Decap / Keystatic CMS** — the data contract is already CMS-shaped, so
-      adding one is additive, not a rewrite
+- [x] **Decap CMS** — done. `admin/config.yml` + `build.js`; editorial
+      workflow on, so a save opens a pull request. The data contract was
+      already CMS-shaped, so it was additive exactly as predicted.
 - [ ] **`<noscript>` block** — with JS off the page is blank. Six lines with
       your name and email would mean it's never truly empty.
 - [ ] **Move domain registration off Squarespace** — a transfer, not a
