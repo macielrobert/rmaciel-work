@@ -211,13 +211,16 @@ understanding why it exists will reintroduce a solved bug.
 
 Live build: **v80** (to become `index.html`).
 
-Two companion documents in this repo:
+Companion documents in this repo:
 
 - `PLAN.md` — the single master to-do, code debt and the domain/DNS migration
   interleaved in execution order. **Includes four standing rules about not
   breaking his email — read them before touching anything DNS-related.**
 - `STRESS-TESTS.md` — the test list, including which tests are impossible in a
   sandboxed preview and need a real URL.
+- `README.md` — plain-language operating instructions for Robert: what the four
+  parts do, how to publish a change, how to read a failed build. Written for
+  the owner, not for a programmer. Keep it jargon-free if you touch it.
 
 Everything in `CONTENT` is still placeholder.
 
