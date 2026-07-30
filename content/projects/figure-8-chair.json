@@ -1,0 +1,17 @@
+{
+  "title": "FIGURE-8 CHAIR",
+  "slug": "figure-8-chair",
+  "section": "build",
+  "order": 10,
+  "draft": false,
+  "details": [
+    "AlSi10Mg, SLM",
+    "One-off",
+    "2026"
+  ],
+  "summary": "Hollow printed tube frame resolving two loops through a single waist junction.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "Ω"
+}

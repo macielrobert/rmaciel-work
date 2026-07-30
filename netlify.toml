@@ -1,0 +1,20 @@
+# Netlify build configuration.
+#
+# WHY THIS FILE EXISTS RATHER THAN THE SETTINGS PANEL:
+#   The build command and publish directory are now facts about the repository,
+#   not preferences about the host. index.html no longer stands alone — its
+#   CONTENT block is empty and build.js fills it — so publishing the repo root
+#   would serve a site with no content in it. Keeping that here means the repo
+#   carries its own build instructions and a fresh Netlify site cannot be
+#   wired up wrong.
+#
+# NOTE: settings entered in the Netlify UI are OVERRIDDEN by this file. If a
+# build ever seems to ignore the panel, this is why.
+#
+# There is no install step and no package.json — build.js runs on Node
+# built-ins only, so Netlify's default Node is sufficient and nothing here
+# needs to track a dependency.
+
+[build]
+  command = "node build.js"
+  publish = "dist"

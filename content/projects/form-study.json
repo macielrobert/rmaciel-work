@@ -1,0 +1,17 @@
+{
+  "title": "FORM STUDY",
+  "slug": "form-study",
+  "section": "design",
+  "order": 20,
+  "draft": false,
+  "details": [
+    "Parametric",
+    "Rhino + Grasshopper",
+    "2024"
+  ],
+  "summary": "Definition-driven shell variants evaluated against draft angle and mold split.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "Δ"
+}

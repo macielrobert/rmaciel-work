@@ -1,0 +1,4 @@
+# Build output. build.js rewrites dist/ from scratch on every run, so a
+# committed copy would only ever be a stale duplicate of the real site.
+# Netlify builds it during deploy; nothing needs it in the repository.
+dist/
