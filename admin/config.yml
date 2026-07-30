@@ -18,6 +18,13 @@ backend:
   name: github
   repo: macielrobert/rmaciel-work   # verify — owner/repo exactly
   branch: main
+  # REQUIRED BECAUSE THIS REPOSITORY IS PRIVATE.
+  # Decap asks GitHub for the "public_repo" permission unless told otherwise.
+  # Against a private repo GitHub answers the list-the-files call with a 404,
+  # so login SUCCEEDS and every collection then renders EMPTY — no error
+  # message, just no entries. That is the symptom this line fixes.
+  # Remove it only if the repository is ever made public.
+  auth_scope: repo
 
 # Uploads land here and are committed to the repo like any other file.
 media_folder: "images"
