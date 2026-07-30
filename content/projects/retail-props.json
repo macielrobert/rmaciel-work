@@ -1,0 +1,17 @@
+{
+  "title": "RETAIL PROPS",
+  "slug": "retail-props",
+  "section": "build",
+  "order": 20,
+  "draft": false,
+  "details": [
+    "PETG, H2D fleet",
+    "400 units",
+    "2026"
+  ],
+  "summary": "Production-tracked print rollout of display props scheduled by completed pieces per week.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "永"
+}

@@ -1,0 +1,17 @@
+{
+  "title": "MOLD STUDIO",
+  "slug": "mold-studio",
+  "section": "build",
+  "order": 40,
+  "draft": false,
+  "details": [
+    "Plaster + silicone",
+    "Home studio",
+    "Ongoing"
+  ],
+  "summary": "FDM masters finished to casting grade without hand sanding, then run in plaster.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "Я"
+}

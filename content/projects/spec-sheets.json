@@ -1,0 +1,17 @@
+{
+  "title": "SPEC SHEETS",
+  "slug": "spec-sheets",
+  "section": "design",
+  "order": 40,
+  "draft": false,
+  "details": [
+    "Documentation",
+    "Shop standard",
+    "Ongoing"
+  ],
+  "summary": "One-page part drawings a fabricator can work from without a phone call.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "Ξ"
+}

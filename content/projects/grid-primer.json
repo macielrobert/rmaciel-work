@@ -1,0 +1,17 @@
+{
+  "title": "GRID PRIMER",
+  "slug": "grid-primer",
+  "section": "design",
+  "order": 30,
+  "draft": false,
+  "details": [
+    "Editorial",
+    "Teaching material",
+    "2025"
+  ],
+  "summary": "A short course on measure, leading, and column logic taught through misuse.",
+  "layout": "standard",
+  "expand": true,
+  "icon_type": "glyph",
+  "icon_glyph": "◐"
+}
