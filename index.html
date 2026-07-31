@@ -862,6 +862,37 @@
   // runs at 2x the icon OFF_TIME. Opening still shares ON_TIME.
   const CONTACT_OFF_TIME = OFF_TIME * 2;   // 1.60s
 
+  // GRID REORGANISATION (see NOTES-GRID-MOTION.md). A section switch displaces
+  // every icon while it is churned, so the grid ARRIVES SOMEWHERE rather than
+  // exchanging contents inside a fixed lattice. Position rides the same
+  // asymmetric clock as the churn: out on ON_TIME, back on OFF_TIME.
+  //
+  // Amplitude is in CELL WIDTHS, not pixels. That is what makes a resize
+  // mid-flight harmless — the offset rescales with the cell instead of being
+  // a stale pixel count (hazard 2 in the note).
+  //
+  // THE CEILING ON MOVE_AMP IS DERIVED, NOT TASTE. The canvas hugs the grid
+  // with exactly ONE margin outside it, and that margin is MARGIN_RATIO of a
+  // pitch while a cell is (1 - GAP_RATIO) of a pitch. So the headroom before an
+  // icon runs off the canvas edge is:
+  //
+  //     MARGIN_RATIO / (1 - GAP_RATIO)  =  0.20 / 0.80  =  0.25 cells
+  //
+  // in EVERY direction and at EVERY size — when the GRID_MAX_FRAC cap shrinks
+  // the canvas it scales pitch, cell and margin together, so the ratio is
+  // invariant. That is the second reason amplitude is in cell widths rather
+  // than pixels: the limit travels with it.
+  //
+  // Measured: at 0.55 the icons clipped hard against the canvas edge at the
+  // peak of the churn. 0.22 sits just inside the headroom. Going meaningfully
+  // further needs either a per-icon clamp or a canvas with room to breathe —
+  // a real input to the arrangement design, recorded in NOTES-GRID-MOTION.md.
+  //
+  // Motion changes WHERE, never HOW BIG — the taskbar rule is untouched.
+  const MOVE_AMP     = 0.22;    // peak displacement, in cell widths (max 0.25)
+  const MOVE_STAGGER = 0.22;    // seconds — total spread of the RETURN only
+  const MOVE_JITTER  = 0.9;     // radians of scatter off the radial direction
+
   // the one effect, parameterised. off = breathe, on = degrade.
   // amp is in UV units (fraction of an icon). these are the knobs to taste.
   const AMP_OFF  = 0.018, AMP_ON  = 0.38;   // displacement magnitude
@@ -1563,7 +1594,7 @@ void main() {
       // harmless with a shader (the layer is pointer-events: none there, so it
       // never fires); the only way to select without one
       s.addEventListener('click', () => {
-        if (gSwapTo !== null || fixture === 'contact') return;   // same locks
+        if (gridInert() || fixture === 'contact') return;        // same locks
         setSelected(selected === i ? null : i);
       });
       keysEl.appendChild(s);
@@ -1615,11 +1646,12 @@ void main() {
   }
 
   function onKeyNav(ev, i) {
-    // the grid is inert mid-swap and under the CONTACT LOCK, exactly as the
-    // pointer path is — the keyboard gets no privilege the pointer lacks, so a
-    // stray Enter can no more discard a draft than a stray tap can. Focus may
-    // still MOVE while inert; it changes nothing.
-    const inert = (gSwapTo !== null) || (fixture === 'contact');
+    // the grid is inert while it REARRANGES and under the CONTACT LOCK,
+    // exactly as the pointer path is — the keyboard gets no privilege the
+    // pointer lacks, so a stray Enter can no more discard a draft, or commit
+    // an icon that is still travelling, than a stray tap can. Focus may still
+    // MOVE while inert; it changes nothing.
+    const inert = gridInert() || (fixture === 'contact');
     let d = null;
     switch (ev.key) {
       // Left/Right step the list LINEARLY, so they still work at >=950px where
@@ -1850,6 +1882,68 @@ void main() {
   // resolves back to calm on the slow clock. The window leaves with the old
   // section; a switch always lands at rest.
   let gSwapTo = null, gMix = 0;
+
+  // ---- grid reorganisation (position). See NOTES-GRID-MOTION.md.
+  // moveActive is true from the moment a switch is armed until the LAST icon
+  // has settled — which is a much longer window than gSwapTo, and that gap is
+  // the whole point (see gridInert below).
+  let moveActive = false;
+
+  // Zero the displacement on EVERY set, not just the active one. An icon set
+  // that was switched away from mid-flight keeps whatever move value it had;
+  // if the next thing to happen is a path that does not re-arm it, it would
+  // draw permanently off its cell. Clearing all sets makes that unreachable.
+  function cancelGridMotion() {
+    for (const set of allIcons) for (const ic of set) { ic.move = 0; ic.moveTarget = 0; ic.moveDelay = 0; }
+    moveActive = false;
+  }
+
+  // Arm the displacement for the CURRENT set. Outgoing: drive to full
+  // displacement on the fast clock, arriving exactly as the icon set is
+  // exchanged. Incoming: the new set ARRIVES displaced and converges on the
+  // slow clock, mirroring how mix already arrives at 1 and eases to 0.
+  //
+  // STAGGER IS ON THE RETURN ONLY. The way out is ON_TIME (0.12s) and has no
+  // room to spread; the way back is OFF_TIME (0.80s) and does. So the set
+  // leaves together and settles raggedly, which is the same asymmetry the
+  // rest of the file already commits to.
+  //
+  // WHAT THE ARRANGEMENT IS is NOT designed here. Radial-with-jitter is a
+  // placeholder chosen so the mechanism is legible while being watched — the
+  // set opens apart and converges, rather than jittering in place. Step 4 in
+  // the note is the actual design problem and is deliberately still open.
+  function armGridMotion(incoming) {
+    // NO SHADER: no icon is drawn at all — #nl-keys IS the menu — so there is
+    // nothing to move. REDUCED MOTION: collapse to the instant swap, exactly
+    // as the text churn already does. Both ZERO the offsets rather than
+    // merely returning, so a set left displaced can never stay that way.
+    if (!gl || reduceMotion) { cancelGridMotion(); return; }
+    moveActive = true;
+    for (const ic of icons) {
+      const a = Math.atan2(ic.pxCy - canvasCssH * 0.5, ic.pxCx - canvasCssW * 0.5)
+              + (Math.random() - 0.5) * MOVE_JITTER;
+      ic.mvx = Math.cos(a); ic.mvy = Math.sin(a);
+      if (incoming) { ic.move = 1; ic.moveTarget = 0; ic.moveDelay = Math.random() * MOVE_STAGGER; }
+      else          { ic.moveTarget = 1; ic.moveDelay = 0; }
+    }
+  }
+
+  // THE GRID IS INERT WHILE IT IS MOVING — not merely while the icon set is
+  // being exchanged. gSwapTo covers only the 0.12s churn-out; the icons keep
+  // travelling through the 0.80s re-form after it, while the hit test and
+  // #nl-keys still read relayout()'s RESTING boxes. A tap in that window would
+  // land on the project that will END UP there, not the one under the finger.
+  //
+  // This is the deliberate answer to hazard 1 in the note. The alternative —
+  // a hit target that chases the drawn position — makes the pointer path and
+  // the DOM twin disagree about where an icon is, which is the one thing the
+  // twin exists to prevent. Locking is honest and nothing can disagree.
+  //
+  // The FOOTER is not covered by this: switchSection keeps its own gSwapTo
+  // guard, so a second section tap during the re-form still lands. Only the
+  // icons — the things actually moving — stop accepting input.
+  function gridInert() { return gSwapTo !== null || moveActive; }
+
   function switchSection(n) {
     if (gSwapTo !== null || !allIcons[n]) return;
     // tapping the section you are ALREADY in is not a no-op when a fixture
@@ -1863,6 +1957,7 @@ void main() {
     selected = null; fixture = null;
     if (prev !== null) contactSet(false);        // close the window with the section
     for (const ic of icons) { ic.target = 1; ic.stillTarget = 0; }   // everything churns out
+    armGridMotion(false);         // ...and travels while it does
     gSwapTo = n;
     updateNav();
     updateKeys();                 // the outgoing set holds no selection either
@@ -1875,6 +1970,9 @@ void main() {
     buildKeys();                  // new titles, new count — rebuilt, then placed
     resize(true);                 // the icon COUNT changed -> new COLS/ROWS/canvas.
                                   // forced: this set has never been positioned
+    armGridMotion(true);          // AFTER resize: the direction is radial from
+                                  // the grid centre, so it needs the new set's
+                                  // resting positions to exist first
     syncRoute(false);             // suppressed when a route drove us here
   }
 
@@ -1892,7 +1990,7 @@ void main() {
   }
 
   canvas.addEventListener('pointerdown', (ev) => {
-    if (gSwapTo !== null) return;               // inert while the grid swaps over
+    if (gridInert()) return;                    // inert while the grid rearranges
     if (fixture === 'contact') return;          // CONTACT LOCK: only the x exits
     const hit = iconAtPointer(ev);
     if (selected === null) {                    // REST (or a fixture is open):
@@ -1996,6 +2094,10 @@ void main() {
   let reduceMotion = mqReduce ? mqReduce.matches : false;
   if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', (e) => {
     reduceMotion = e.matches; restoreChars(); cDirty = true;
+    // the preference can flip DURING a rearrangement. Snap the icons home
+    // rather than letting them finish, and lift the input lock with them —
+    // otherwise the grid stays inert waiting on an ease that no longer runs.
+    if (reduceMotion) cancelGridMotion();
   });
 
   // wrap every non-space character in a span with a random resolve threshold
@@ -2577,6 +2679,30 @@ void main() {
       const spd  = mixv(SPEED_OFF, SPEED_ON, e) * (1 - s);
       ic.phase += spd * dt;             // own clock: calm keeps breathing while others churn
 
+      // POSITION eases on the SAME asymmetric clock as mix and still, with one
+      // addition: a per-icon delay, which is the entirety of "stagger" here.
+      if (ic.moveDelay > 0) ic.moveDelay = Math.max(0, ic.moveDelay - dt);
+      else if (ic.move < ic.moveTarget) ic.move = Math.min(ic.moveTarget, ic.move + dt / ON_TIME);
+      else if (ic.move > ic.moveTarget) ic.move = Math.max(ic.moveTarget, ic.move - dt / OFF_TIME);
+
+      // ...and is applied as an OFFSET from the resting cell, never written
+      // back into cx/cy. Rest stays the single source of geometry, so a
+      // relayout() mid-flight (a phone rotation is the real case) moves the
+      // rest UNDER the animation instead of fighting it — the icon keeps
+      // converging, on the new grid. Amplitude is in cell widths, so it
+      // rescales with the cell rather than going stale.
+      //
+      // Skipped entirely at rest, which is the overwhelmingly common case —
+      // and that guard is load-bearing, not an optimisation: before the first
+      // resize() canvasCssW is 0, and 0 * 0 / 0 is NaN, which as a uniform
+      // silently draws nothing at all.
+      let ox = 0, oy = 0;
+      if (ic.move > 0 && canvasCssW && canvasCssH) {
+        const mv = smooth(ic.move) * MOVE_AMP * cellPxCss;
+        ox =  mv * ic.mvx * 2 / canvasCssW;
+        oy = -mv * ic.mvy * 2 / canvasCssH;    // clip space y points the other way
+      }
+
       const iconScale = mixv(SCALE_OFF, SCALE_ON, e);
       const qw = footW * iconScale, qh = footH * iconScale;
 
@@ -2584,11 +2710,22 @@ void main() {
       gl.uniform1f(loc.uFreq, freq);
       gl.uniform1f(loc.uPhase, ic.phase);
       gl.uniform2f(loc.uScale, qw, qh);
-      gl.uniform2f(loc.uTranslate, ic.cx - qw * 0.5, ic.cy - qh * 0.5);
+      gl.uniform2f(loc.uTranslate, ic.cx + ox - qw * 0.5, ic.cy + oy - qh * 0.5);
       gl.uniform2f(loc.uSeed, ic.sx, ic.sy);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, ic.tex);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    // The input lock lifts when the LAST icon has settled — not when the
+    // texture swap happened. Between those two moments the icons are still
+    // travelling, and that is precisely the window a tap must not be read in.
+    if (moveActive) {
+      let settled = true;
+      for (const ic of icons) {
+        if (ic.move !== 0 || ic.moveTarget !== 0 || ic.moveDelay > 0) { settled = false; break; }
+      }
+      if (settled) moveActive = false;
     }
     }   // end if (gl) — drawing only
 
@@ -2644,6 +2781,13 @@ void main() {
       still: 0, stillTarget: 0,       // 1 = frozen (the selected icon)
       phase: Math.random() * 100,     // desync the resting breathing
       cx: 0, cy: 0, pxCx: 0, pxCy: 0,
+      // reorganisation state, on the same target/current/clock pattern as mix
+      // and still. move is 1 at full displacement; mvx/mvy are its direction;
+      // moveDelay is this icon's share of the stagger. These are an OFFSET
+      // applied at draw time — they never write into cx/cy or pxCx/pxCy, so
+      // relayout() stays the single source of where an icon IS.
+      move: 0, moveTarget: 0, moveDelay: 0,
+      mvx: 0, mvy: 0,
     });
 
     let made = null;
