@@ -701,6 +701,31 @@
                                                   that the commas used to give */
   }
   #nl-fns [data-nav]:focus { color: var(--ink); }
+
+  /* --------------------------------------------------- the field's one control
+     Hidden by default and shown only where the mode can actually be had: a
+     real pointer, a wide screen, and (via .can-field, set in JS) a shader and
+     no reduced-motion preference. CSS handles what CSS knows; JS handles the
+     rest. It never churns — it is a control, and controls stay resolved. */
+  #nl-field { display: none; color: inherit; pointer-events: auto; cursor: pointer; padding: 6px 8px; }
+  @media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+    #noiselab.can-field #nl-field { display: inline; }
+  }
+  #nl-field:focus { color: var(--ink); }
+  @media (hover: hover) { #nl-field:hover { color: var(--ink); } }
+  /* in the field the section links are gone — they are not what this mode is
+     for — and the one control left is the way out, lit so it can be found */
+  #noiselab.field #nl-fns [data-nav] { display: none; }
+  #noiselab.field #nl-field { color: var(--ink); }
+  /* the window half has nothing in it here, and must not take pointer events
+     from a field that now covers the screen */
+  #noiselab.field #nl-content { visibility: hidden; }
+  /* the seam's travel, in both directions. Added around the move only — left
+     on permanently it would animate every ordinary window resize. */
+  #noiselab.field-tx #nl-grid { transition: height 900ms cubic-bezier(0.4, 0, 0.2, 1); }
+  @media (prefers-reduced-motion: reduce) {
+    #noiselab.field-tx #nl-grid { transition: none; }
+  }
   @media (hover: hover) { #nl-fns [data-nav]:hover { color: var(--ink); } }
   /* the active section reads as the coherent one — ink against the grey row.
      (applied by JS once section switching is wired) */
@@ -769,7 +794,7 @@
   <!-- primary navigation. BUILD / DESIGN / ART switch the grid's icon set;
        CONTACT / ABOUT open the window without a grid selection. Behaviour is
        NOT wired yet — see the stub handlers in the script. -->
-  <div id="nl-fns"><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span></div>
+  <div id="nl-fns"><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -913,6 +938,23 @@
   // One flag switches off the displacement AND the lock, because the lock
   // only ever arms from armGridMotion(). Turn it on when step 4 exists.
   const GRID_MOTION = /[?&#]motion\b/.test(location.search + location.hash);
+
+  // ------------------------------------------------------------- the field
+  // The desktop-only interaction that is NOT a container for portfolio
+  // content. See NOTES-ICON-FIELD.md. The seam rises off the top, the icons
+  // follow it up and multiply into a field of churning shapes that are no
+  // longer links, and a click resolves one into a geometric form.
+  //
+  // PROPORTIONS ARE HELD, COUNT IS DERIVED — the taskbar rule, unchanged.
+  // Same fixed pitch as the menu; COLS *and* ROWS both come from the viewport
+  // rather than from the icon count. That inversion is the whole layout
+  // difference: the menu asks "how do N icons fit?", the field asks "how many
+  // cells fit on this screen?" (~300 on a 14in laptop, ~840 at 2560 wide).
+  const FIELD_RISE   = 900;     // ms for the seam to travel off the top
+  const FIELD_MIN_W  = 900;     // px — below this the field is not offered
+  const FIELD_SWAP   = 0.14;    // seconds — icons are fully churned by here,
+                                // so the cell set is exchanged noise-to-noise,
+                                // the same invisible cut used everywhere else
 
   // the one effect, parameterised. off = breathe, on = degrade.
   // amp is in UV units (fraction of an icon). these are the knobs to taste.
@@ -1505,6 +1547,44 @@ void main() {
       x.fillText(item.char, S/2, S*0.52);
       return c;
     }
+    // GEOMETRIC FORMS for the field, drawn straight to canvas for the same
+    // reason glyphs are: nothing is rasterised through <img>, and alpha is
+    // the shape — white on transparent, recoloured by uInk like every other
+    // texture. PLACEHOLDER ART, meant to be replaced by real drawings.
+    if (item.kind === 'shape') {
+      const d = S * BAKE_FILL, o = (S - d) / 2, r = d / 2, cx = S / 2, cy = S / 2;
+      x.fillStyle = '#fff'; x.strokeStyle = '#fff';
+      x.lineWidth = Math.max(2, d * 0.11); x.lineJoin = 'miter';
+      const poly = (n, rot) => {
+        x.beginPath();
+        for (let i = 0; i < n; i++) {
+          const a = rot + i * 2 * Math.PI / n;
+          x[i ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a));
+        }
+        x.closePath();
+      };
+      switch (item.form) {
+        case 'disc':     x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); break;
+        case 'ring':     x.beginPath(); x.arc(cx, cy, r - x.lineWidth / 2, 0, 7); x.stroke(); break;
+        case 'square':   x.fillRect(o, o, d, d); break;
+        case 'frame':    x.strokeRect(o + x.lineWidth / 2, o + x.lineWidth / 2, d - x.lineWidth, d - x.lineWidth); break;
+        case 'triangle': poly(3, -Math.PI / 2); x.fill(); break;
+        case 'hexagon':  poly(6, -Math.PI / 2); x.fill(); break;
+        case 'hexframe': poly(6, -Math.PI / 2); x.stroke(); break;
+        case 'diamond':  poly(4, -Math.PI / 2); x.fill(); break;
+        case 'cross':    x.fillRect(cx - d * 0.16, o, d * 0.32, d);
+                         x.fillRect(o, cy - d * 0.16, d, d * 0.32); break;
+        case 'chevron':  x.beginPath(); x.moveTo(o, cy + r * 0.55);
+                         x.lineTo(cx, cy - r * 0.55); x.lineTo(o + d, cy + r * 0.55);
+                         x.stroke(); break;
+        case 'half':     x.beginPath(); x.arc(cx, cy, r, Math.PI, 0); x.fill(); break;
+        case 'quarter':  x.beginPath(); x.moveTo(o, o + d); x.arc(o, o + d, d, -Math.PI / 2, 0); x.fill(); break;
+        case 'bars':     for (let i = 0; i < 3; i++) x.fillRect(o, o + i * d / 2.5, d, d * 0.18); break;
+        default:         x.fillRect(o, o, d, d);
+      }
+      return c;
+    }
+
     const img = await loadImage(item.src);             // svg or png file
     const target = S * BAKE_FILL, sc = Math.min(target/img.width, target/img.height);
     const w = img.width * sc, h = img.height * sc;
@@ -1712,6 +1792,18 @@ void main() {
     // icon set that has never been positioned, and skipping relayout would
     // leave every icon of the new section stacked at the origin.
     if (kbFrozen && !force) return;
+
+    // THE FIELD SIZES ITSELF FROM THE SCREEN, not from the icon count, so it
+    // takes the whole of resize() rather than a branch inside it. Leaving the
+    // field if the window drops below the minimum keeps the mode honest: it
+    // is offered only where it works, so it should not survive there either.
+    if (field) {
+      if (rootEl.getBoundingClientRect().width < FIELD_MIN_W) { exitField(); return; }
+      buildFieldPreservingResolved();
+      fieldResize(false);        // follow the window, do not animate after it
+      return;
+    }
+
     const nlRect = rootEl.getBoundingClientRect();
     const availW = Math.max(80, nlRect.width);
 
@@ -1967,7 +2059,222 @@ void main() {
   // icons — the things actually moving — stop accepting input.
   function gridInert() { return gSwapTo !== null || moveActive; }
 
+  // ============================================================== the field
+  // A MODE, not a state of the menu. While it is up there is no menu, no
+  // seam, no selection and no window — which is why two CLAUDE.md rules stop
+  // applying here (documented in NOTES-ICON-FIELD.md): "the seam follows the
+  // menu" has no seam to follow, and "exactly one thing is coherent" inverts,
+  // because the field ACCUMULATES coherence as you resolve shape after shape.
+  // That inversion is the point of the piece, not a violation of the grammar.
+  //
+  // The taskbar rule is NOT suspended: cells are the same fixed 50px as menu
+  // icons and only the count changes.
+  let field = false;            // is the field up?
+  let fieldCells = [];          // its cells — built once, on first entry
+  let shapeTex = [];            // baked geometric forms, the resolve targets
+  let fieldSwap = null;         // pending entry, seconds remaining
+  let savedIcons = null;        // the menu set to come back to
+
+  const fieldBtn = document.getElementById('nl-field');
+
+  // The field is offered only where it can actually be had: a real pointer, a
+  // wide screen, a shader, and no stated preference against motion. A
+  // reduced-motion version of a motion piece is worse than its absence, so it
+  // is withheld rather than degraded — the button simply is not there.
+  function fieldAvailable() {
+    return !!gl && !reduceMotion && shapeTex.length > 0 &&
+           rootEl.getBoundingClientRect().width >= FIELD_MIN_W;
+  }
+  function updateFieldBtn() {
+    rootEl.classList.toggle('can-field', fieldAvailable() || field);
+    if (!fieldBtn) return;
+    fieldBtn.setAttribute('aria-label', field ? 'Leave the field' : 'Enter the field');
+    fieldBtn.setAttribute('aria-pressed', field ? 'true' : 'false');
+  }
+
+  // COLS and ROWS both from the viewport at the menu's fixed pitch — Robert's
+  // rule, and the exact formula resize() already uses for COLS, applied to the
+  // other axis as well. Returns the cell counts and the canvas that holds them.
+  function fieldMetrics() {
+    const r = rootEl.getBoundingClientRect();
+    const g = GAP_RATIO, m = MARGIN_RATIO, pitch = CELL_PX / (1 - g);
+    const n = (px) => Math.max(1, Math.floor(px / pitch - 2 * m + g + 1e-6));
+    // ROWS COME OFF THE HEIGHT MINUS THE FOOTER RESERVE, not the raw viewport.
+    // The footer strip is not available real estate — the canvas is anchored
+    // above it, so deriving rows from the full height overfills by about half
+    // a row and the top one gets clipped off the screen.
+    const cols = n(r.width), rows = n(r.height - FOOTER_RESERVE);
+    return { cols, rows, pitch,
+             cw: pitch * (cols - g + 2 * m),
+             ch: pitch * (rows - g + 2 * m),
+             vh: r.height };
+  }
+
+  // Build (or rebuild) the cell set for the current viewport. Each cell is
+  // DERIVED FROM an icon — it churns that icon's texture, unrecognisably —
+  // and carries a different geometric form as what it resolves INTO. That is
+  // the description exactly: shapes that no longer represent what they came
+  // from.
+  let fieldCols = 0, fieldRows = 0;
+  function buildField() {
+    const met = fieldMetrics(), N = met.cols * met.rows;
+    const src = allIcons.reduce((a, b) => a.concat(b), []);
+    fieldCols = met.cols; fieldRows = met.rows;
+    fieldCells = [];
+    for (let i = 0; i < N; i++) {
+      const from = src[i % src.length];
+      fieldCells.push({
+        tex: from ? from.tex : null,
+        shapeTex: shapeTex[i % shapeTex.length],
+        sx: Math.random() * 127, sy: Math.random() * 127,
+        mix: 1, target: 1,              // arrives churning and STAYS churning
+        still: 0, stillTarget: 0,       // until a click resolves it
+        phase: Math.random() * 100,
+        cx: 0, cy: 0, pxCx: 0, pxCy: 0,
+        move: 0, moveTarget: 0, moveDelay: 0, mvx: 0, mvy: 0,
+        resolved: false,
+      });
+    }
+    return met;
+  }
+
+  // A resize changes how many cells fit, so the set is rebuilt — but what the
+  // visitor already resolved is theirs and must not be wiped by dragging the
+  // window. Resolved state is carried across BY GRID POSITION; cells that fall
+  // outside the new bounds are lost, which is the honest limit of the mapping.
+  function buildFieldPreservingResolved() {
+    const old = fieldCells, oc = fieldCols;
+    const keep = [];
+    for (let i = 0; i < old.length; i++) {
+      if (old[i].resolved) keep.push([i % oc, Math.floor(i / oc), old[i].shapeTex]);
+    }
+    buildField();
+    for (const [c, r, tex] of keep) {
+      if (c >= fieldCols || r >= fieldRows) continue;
+      const ic = fieldCells[r * fieldCols + c];
+      ic.resolved = true; ic.tex = tex; ic.shapeTex = tex;
+      ic.mix = 0; ic.target = 0; ic.still = 1; ic.stillTarget = 1;
+    }
+    icons = fieldCells;
+  }
+
+  // Lay the cells out. Deliberately NOT relayout(): that one centres a short
+  // final row and derives ROWS from the icon count. Here the grid is full by
+  // construction and both counts come from the screen.
+  function fieldRelayout() {
+    if (!field || !fieldCells.length || !canvasCssW || !canvasCssH) return;
+    const met = fieldMetrics();
+    const cellPx = met.pitch * (1 - GAP_RATIO), gapPx = met.pitch * GAP_RATIO;
+    cellPxCss = cellPx;
+    footW = 2 * cellPx / canvasCssW;
+    footH = 2 * cellPx / canvasCssH;
+    const gridW = met.cols * cellPx + (met.cols - 1) * gapPx;
+    const gridH = met.rows * cellPx + (met.rows - 1) * gapPx;
+    const x0 = (canvasCssW - gridW) / 2 + cellPx / 2;
+    const y0 = (canvasCssH - gridH) / 2 + cellPx / 2;
+    for (let r = 0, k = 0; r < met.rows; r++) {
+      for (let c = 0; c < met.cols && k < fieldCells.length; c++, k++) {
+        const ic = fieldCells[k];
+        const px = x0 + c * (cellPx + gapPx), py = y0 + r * (cellPx + gapPx);
+        ic.pxCx = px; ic.pxCy = py;
+        ic.cx = px / canvasCssW * 2 - 1;
+        ic.cy = 1 - py / canvasCssH * 2;
+      }
+    }
+  }
+
+  // Size the canvas to the FIELD rather than to the icon count, and raise the
+  // seam. The canvas is set to its full size in one step while everything is
+  // noise; the half then grows underneath it on a CSS transition, so the field
+  // is REVEALED from the bottom up as the line travels off the top. Nothing
+  // reallocates the backing store per frame.
+  // `animate` is passed only when the seam is actually travelling. A window
+  // resize while the field is already up must NOT animate: the height would
+  // chase the drag by 900ms behind the pointer, which reads as broken.
+  function fieldResize(animate) {
+    const met = fieldMetrics();
+    if (animate) fieldTransition();
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, RENDER_SCALE_MIN), RENDER_SCALE_MAX);
+    canvas.style.width  = met.cw + 'px';
+    canvas.style.height = met.ch + 'px';
+    canvas.width  = Math.max(1, Math.round(met.cw * dpr));
+    canvas.height = Math.max(1, Math.round(met.ch * dpr));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(BG[0], BG[1], BG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    canvasCssW = met.cw; canvasCssH = met.ch;
+    marginPxCss = met.pitch * MARGIN_RATIO;
+    rootEl.style.setProperty('--nl-m', marginPxCss.toFixed(1) + 'px');
+    gridEl.style.height = met.vh + 'px';       // the seam, off the top
+    fieldRelayout();
+  }
+
+  // The CSS height transition is added only around the move, in BOTH
+  // directions, and taken off afterwards. Leaving it on permanently would
+  // animate every window resize, which would make an ordinary rotation feel
+  // broken.
+  let fieldTxTimer = 0;
+  function fieldTransition() {
+    rootEl.classList.add('field-tx');
+    clearTimeout(fieldTxTimer);
+    fieldTxTimer = setTimeout(() => rootEl.classList.remove('field-tx'), FIELD_RISE + 120);
+  }
+
+  function enterField() {
+    if (field || fieldSwap !== null || !fieldAvailable()) return;
+    if (gSwapTo !== null) return;                 // not mid-section-swap
+    if (selected !== null || fixture !== null) return;   // INACTIVE STATE only:
+                                  // every menu option visible, window empty
+    savedIcons = icons;
+    for (const ic of icons) { ic.target = 1; ic.stillTarget = 0; }   // churn out
+    fieldSwap = FIELD_SWAP;       // ...and exchange the set at the midpoint
+    field = true;
+    rootEl.classList.add('field');
+    // NOT fieldTransition() here. The seam does not move until fieldResize()
+    // sets its height at the swap, and on a slow first frame that can be a
+    // long way after this point — arming the transition window now would let
+    // it expire before the height ever changed, and the seam would jump.
+    // It is armed where the height actually moves.
+    // THE MENU STANDS DOWN. #nl-keys is the real menu for a keyboard and a
+    // screen reader; the cells are not links, so the layer is emptied rather
+    // than left announcing thirteen projects that are no longer there. The
+    // button below stays focusable and becomes the way out.
+    keysEl.textContent = ''; keyEls = [];
+    updateFieldBtn();
+    if (fieldBtn) fieldBtn.focus();
+  }
+
+  function exitField() {
+    if (!field) return;
+    field = false; fieldSwap = null;
+    rootEl.classList.remove('field');
+    fieldTransition();
+    icons = savedIcons || allIcons[activeSection];
+    for (const ic of icons) { ic.mix = 1; ic.target = 0; ic.still = 0; ic.stillTarget = 0; }
+    buildKeys();                  // the menu comes back
+    resize(true);                 // forced: the canvas must re-derive from the
+                                  // icon count, not from the field
+    updateFieldBtn();
+    if (fieldBtn) fieldBtn.focus();
+  }
+
+  function toggleField() { field ? exitField() : enterField(); }
+
+  // A click RESOLVES a cell: its texture becomes the geometric form while it
+  // is still full noise — the same invisible exchange the section swap and
+  // the window text both use — and then it settles out of the churn and
+  // freezes. Already-resolved cells are left alone; the field only fills in.
+  function resolveCell(i) {
+    const ic = fieldCells[i];
+    if (!ic || ic.resolved) return;
+    ic.resolved = true;
+    ic.tex = ic.shapeTex;
+    ic.target = 0;                // out of the churn
+    ic.stillTarget = 1;           // and static, like a selected icon
+  }
+
   function switchSection(n) {
+    if (field) return;            // there is no section nav in the field
     if (gSwapTo !== null || !allIcons[n]) return;
     // tapping the section you are ALREADY in is not a no-op when a fixture
     // holds the window: it means "back to the work". Dismiss and stop —
@@ -2013,6 +2320,15 @@ void main() {
   }
 
   canvas.addEventListener('pointerdown', (ev) => {
+    // IN THE FIELD a click is not navigation — there is nothing to navigate
+    // to. It resolves the cell under the pointer and nothing else. The hit
+    // test is the same one the menu uses, against the same resting cell boxes.
+    if (field) {
+      if (fieldSwap !== null) return;           // still churning over
+      const c = iconAtPointer(ev);
+      if (c !== null) resolveCell(c);
+      return;
+    }
     if (gridInert()) return;                    // inert while the grid rearranges
     if (fixture === 'contact') return;          // CONTACT LOCK: only the x exits
     const hit = iconAtPointer(ev);
@@ -2084,6 +2400,15 @@ void main() {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); }
     });
   });
+
+  // the field's control: same click + Enter/Space contract as every other
+  // footer item, so the keyboard path is not a second-class one
+  if (fieldBtn) {
+    fieldBtn.addEventListener('click', toggleField);
+    fieldBtn.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleField(); }
+    });
+  }
 
   // ------------------------------------------- window text (coherence swap)
   // The window text is treated as one more icon. One progress value (cMix)
@@ -2160,6 +2485,7 @@ void main() {
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
+    if (field) { exitField(); return; }                 // the field is its own level
     if (xTarget === 1) { collapseExpand(); syncRoute(false); }   // pop the image first...
     else if (fixture === 'contact') { /* contact lock: the x is the only exit */ }
     else if (selected !== null || fixture !== null)
@@ -2761,6 +3087,20 @@ void main() {
       if (gMix >= 1) { commitSection(gSwapTo); gSwapTo = null; gMix = 0; }
     }
 
+    // FIELD ENTRY: the menu icons are churned out on the same fast clock, and
+    // the cell set is exchanged at the top of it — noise to noise, so the cut
+    // is invisible and the count can change from 14 to ~300 across it without
+    // anything being seen to appear.
+    if (fieldSwap !== null) {
+      fieldSwap -= dt;
+      if (fieldSwap <= 0) {
+        fieldSwap = null;
+        buildField();
+        icons = fieldCells;
+        fieldResize(true);        // the seam travels from here
+      }
+    }
+
     // contact progress rides the same loop; DOM writes only while moving
     // (or once after load). A pending swap descends FIRST (fast clock) to the
     // churn midpoint, exchanges the entry, then the normal rise resumes.
@@ -2813,13 +3153,20 @@ void main() {
       mvx: 0, mvy: 0,
     });
 
+    // the field's resolve targets. Placeholder geometry for now — real
+    // drawings drop in here by replacing this list with {kind:'shape'} items
+    // or ordinary {src} ones; nothing downstream cares which.
+    const FIELD_FORMS = ['disc','ring','square','frame','triangle','hexagon',
+                         'hexframe','diamond','cross','chevron','half','quarter','bars']
+                        .map(form => ({ kind: 'shape', form }));
+
     let made = null;
     if (gl) {
       try {
         const canvases = await Promise.all(flatIcons.map(bakeIcon));
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-        made = canvases.map((cv) => {
+        const upload = (cv) => {
           const tex = gl.createTexture();
           gl.bindTexture(gl.TEXTURE_2D, tex);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
@@ -2827,8 +3174,12 @@ void main() {
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          return iconState(tex);
-        });
+          return tex;
+        };
+        made = canvases.map((cv) => iconState(upload(cv)));
+        // the field's forms ride the same bake and upload path as the icons —
+        // one texture pipeline, not two. Cheap: they are drawn, not fetched.
+        shapeTex = (await Promise.all(FIELD_FORMS.map(bakeIcon))).map(upload);
       } catch (e) {
         // a bake or upload failed after everything else succeeded — the last
         // place this can go wrong, and it degrades like all the others
@@ -2848,6 +3199,7 @@ void main() {
     buildKeys();                      // the DOM twin of the starting icon set
     resize();
     updateNav();                      // light the starting section
+    updateFieldBtn();                 // offer the field only where it works
 
     // INCOMING DEEP LINK, applied once everything it might target exists.
     // A bare load writes NOTHING: appearing to navigate on arrival, and

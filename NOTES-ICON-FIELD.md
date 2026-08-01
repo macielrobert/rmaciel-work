@@ -1,6 +1,6 @@
 # Design note — the icon field (desktop-only interaction)
 
-**Status:** specified, not started. No code written.
+**Status:** built and working, first pass. Placeholder art.
 **Name is provisional.** "The field" is a placeholder until Robert names it.
 
 Lives on `grid-motion` for now because it shares one structural piece with that
@@ -175,3 +175,51 @@ Append to this. Newest at the bottom.
 - **Specified.** Proportions and the row-count rule fixed by Robert. The
   consequences table above was computed from the real constants, not
   estimated. Everything under *Open questions* is still open. No code written.
+
+- **Built, first pass.** The whole described interaction runs: the button
+  churns the menu out, the seam travels up and off the top on a 900ms CSS
+  transition, the cell set is exchanged at the churn midpoint (noise to noise,
+  so 14 icons becoming 286 cells is never seen to happen), and a click
+  resolves a cell into a geometric form. Escape or the button exits and the
+  menu comes back.
+
+  **Defaults taken rather than asked**, all easy to change:
+
+  - **Placeholder art** — 13 forms drawn in code (disc, ring, square, frame,
+    triangle, hexagon, hexframe, diamond, cross, chevron, half, quarter,
+    bars), through the same bake and upload path as the icons. Real drawings
+    drop in by replacing `FIELD_FORMS`; nothing downstream cares which.
+  - **The control** is a small diamond at the right end of the footer strip.
+    In the field the section links hide and it becomes the way out.
+  - **Entry is restricted to the inactive state** — nothing selected, no
+    fixture open, no section swap in flight — which is what was described.
+
+  **Two bugs found by driving it in a browser, not by reading it:**
+
+  1. **Rows were derived from the raw viewport height**, but the canvas is
+     anchored above the footer reserve. The field overfilled by about half a
+     row and the top row clipped off the screen. Rows now come off
+     `height - FOOTER_RESERVE`, which is the honest reading of "available
+     screen real estate".
+  2. **The seam's transition window was armed at the click**, but the height
+     does not move until the cell set is exchanged one churn later. On a slow
+     first frame the window expired before the height ever changed and the
+     seam jumped instead of travelling. It is now armed where the height
+     actually moves, and deliberately NOT armed when a window resize changes
+     it — otherwise the seam chases a drag 900ms behind the pointer.
+
+  **Verified in a browser:** the seam reaches full height and returns; the
+  canvas grows and fits inside the stage without clipping; `#nl-keys` empties
+  on entry and is rebuilt on exit; the section links hide and come back; the
+  menu still selects normally after a round trip; clicks resolve cells; no
+  console errors on any path. All five gates hold — the button appears on a
+  wide desktop with a pointer and is absent on a narrow window, without WebGL,
+  under `prefers-reduced-motion`, and on a touch device.
+
+  At 1400x900 the field is **22 x 13 = 286 cells**, matching the predicted
+  arithmetic.
+
+  **Still open:** everything under *Open questions* except the trigger and the
+  exit. Resolved cells cannot currently be un-resolved and there is no
+  completed state. Performance is unmeasured — see the draw-call section; that
+  still needs real hardware.
