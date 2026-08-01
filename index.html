@@ -2125,6 +2125,7 @@ void main() {
       const from = src[i % src.length];
       fieldCells.push({
         tex: from ? from.tex : null,
+        baseTex: from ? from.tex : null,   // what it churns as, to return to
         shapeTex: shapeTex[i % shapeTex.length],
         sx: Math.random() * 127, sy: Math.random() * 127,
         mix: 1, target: 1,              // arrives churning and STAYS churning
@@ -2132,7 +2133,7 @@ void main() {
         phase: Math.random() * 100,
         cx: 0, cy: 0, pxCx: 0, pxCy: 0,
         move: 0, moveTarget: 0, moveDelay: 0, mvx: 0, mvy: 0,
-        resolved: false,
+        resolved: false, unswap: false,
       });
     }
     return met;
@@ -2152,7 +2153,7 @@ void main() {
     for (const [c, r, tex] of keep) {
       if (c >= fieldCols || r >= fieldRows) continue;
       const ic = fieldCells[r * fieldCols + c];
-      ic.resolved = true; ic.tex = tex; ic.shapeTex = tex;
+      ic.resolved = true; ic.tex = tex; ic.shapeTex = tex; ic.unswap = false;
       ic.mix = 0; ic.target = 0; ic.still = 1; ic.stillTarget = 1;
     }
     icons = fieldCells;
@@ -2263,10 +2264,23 @@ void main() {
   // A click RESOLVES a cell: its texture becomes the geometric form while it
   // is still full noise — the same invisible exchange the section swap and
   // the window text both use — and then it settles out of the churn and
-  // freezes. Already-resolved cells are left alone; the field only fills in.
+  // freezes.
+  //
+  // Clicking a RESOLVED cell puts it back. The texture cannot be swapped at
+  // the moment of the click here, the way it can on the way in: the cell is
+  // resolved, so the exchange would be plainly visible. It goes back into the
+  // churn FIRST and swaps at full noise, which is why baseTex is kept and why
+  // this needs the pending flag rather than being one assignment.
   function resolveCell(i) {
     const ic = fieldCells[i];
-    if (!ic || ic.resolved) return;
+    if (!ic) return;
+    if (ic.resolved) {
+      ic.resolved = false;
+      ic.target = 1;              // back into the churn...
+      ic.stillTarget = 0;
+      ic.unswap = true;           // ...and swap the texture once it hides it
+      return;
+    }
     ic.resolved = true;
     ic.tex = ic.shapeTex;
     ic.target = 0;                // out of the churn
@@ -3085,6 +3099,16 @@ void main() {
     if (gSwapTo !== null) {
       gMix += dt / ON_TIME;
       if (gMix >= 1) { commitSection(gSwapTo); gSwapTo = null; gMix = 0; }
+    }
+
+    // A cell on its way back into the churn swaps its texture the moment the
+    // noise is dense enough to hide the change — the same midpoint cut used
+    // everywhere else, just measured on the cell's own mix rather than on a
+    // shared clock.
+    if (field) {
+      for (const ic of fieldCells) {
+        if (ic.unswap && ic.mix >= 0.9) { ic.tex = ic.baseTex; ic.unswap = false; }
+      }
     }
 
     // FIELD ENTRY: the menu icons are churned out on the same fast clock, and
