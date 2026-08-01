@@ -893,6 +893,27 @@
   const MOVE_STAGGER = 0.22;    // seconds — total spread of the RETURN only
   const MOVE_JITTER  = 0.9;     // radians of scatter off the radial direction
 
+  // OFF BY DEFAULT — add ?motion to the URL to enable it, the same testing
+  // idiom as ?nogl. The mechanism is finished and the hazards are handled,
+  // but the ARRANGEMENT is not designed: every icon currently returns to the
+  // cell it left, so this is motion, not reorganisation.
+  //
+  // Judged in the preview and it made the site worse, which is the correct
+  // outcome for a placeholder rather than a surprise. Two reasons, and the
+  // first is the one that was actually felt:
+  //
+  //   1. Motion forces the input lock, and the lock is the real cost — the
+  //      grid stops accepting taps for ~0.92s after a section switch instead
+  //      of 0.12s. Paying that for a transition that gains nothing is a
+  //      straight regression.
+  //   2. Wiggling outward and returning home is not a weak version of a
+  //      rearrangement, it is a DIFFERENT motion. Icons arriving at different
+  //      cells is the thing; no amount of tuning this gets there.
+  //
+  // One flag switches off the displacement AND the lock, because the lock
+  // only ever arms from armGridMotion(). Turn it on when step 4 exists.
+  const GRID_MOTION = /[?&#]motion\b/.test(location.search + location.hash);
+
   // the one effect, parameterised. off = breathe, on = degrade.
   // amp is in UV units (fraction of an icon). these are the knobs to taste.
   const AMP_OFF  = 0.018, AMP_ON  = 0.38;   // displacement magnitude
@@ -1913,11 +1934,13 @@ void main() {
   // set opens apart and converges, rather than jittering in place. Step 4 in
   // the note is the actual design problem and is deliberately still open.
   function armGridMotion(incoming) {
-    // NO SHADER: no icon is drawn at all — #nl-keys IS the menu — so there is
-    // nothing to move. REDUCED MOTION: collapse to the instant swap, exactly
-    // as the text churn already does. Both ZERO the offsets rather than
-    // merely returning, so a set left displaced can never stay that way.
-    if (!gl || reduceMotion) { cancelGridMotion(); return; }
+    // OFF BY DEFAULT (see GRID_MOTION). NO SHADER: no icon is drawn at all —
+    // #nl-keys IS the menu — so there is nothing to move. REDUCED MOTION:
+    // collapse to the instant swap, exactly as the text churn already does.
+    // All three ZERO the offsets rather than merely returning, so a set left
+    // displaced can never stay that way — and because moveActive is only ever
+    // armed below, none of them can leave the grid inert either.
+    if (!GRID_MOTION || !gl || reduceMotion) { cancelGridMotion(); return; }
     moveActive = true;
     for (const ic of icons) {
       const a = Math.atan2(ic.pxCy - canvasCssH * 0.5, ic.pxCx - canvasCssW * 0.5)

@@ -1,7 +1,9 @@
 # Design note — animated grid reorganization
 
-**Branch:** `grid-motion` · **Status:** mechanism built (steps 1–3). The
-arrangement itself (step 4) is still undesigned.
+**Branch:** `grid-motion` · **Status:** mechanism built (steps 1–3) and
+**switched OFF by default** — add `?motion` to enable. The arrangement itself
+(step 4) is still undesigned, and until it exists the motion makes the site
+worse. See the last status-log entry.
 
 A long-running change worked on intermittently, in parallel with launch. This
 file is the memory: read it first, update it last. Nothing about it survives in
@@ -328,3 +330,38 @@ Append to this. Newest at the bottom.
   **Still a placeholder, and the honest limit of this session:** every icon
   returns to the cell it left. This is motion, not yet reorganisation. Step 4
   is untouched on purpose.
+
+- **Judged in the preview and switched OFF by default.** Robert's read: it
+  feels clunkier than what was there before. Correct, and worth recording in
+  full because it is a finding about the *design*, not a tuning failure.
+
+  **The lock is the cost, and the lock is unavoidable.** Motion forces input
+  to be refused until the icons settle — measured at roughly 1300ms after a
+  section switch with `?motion`, against ~400ms without it (probe granularity
+  and the window's own open animation are inside both figures; the ratio is
+  the signal). Paying more than 3x the dead time on the primary navigation
+  gesture, for a transition that communicates nothing new, is a straight
+  regression. Any future arrangement pays this same toll, so **step 4 has to
+  be worth roughly a second of inert grid** — that is now the bar, and it is a
+  higher one than "does the motion look nice".
+
+  **A placeholder that returns home is not a preview of a rearrangement.**
+  Wiggling outward and coming back is a different motion from icons arriving
+  at different cells. Tuning amplitude, stagger or easing cannot close that
+  gap, which is why the answer was to switch it off rather than soften it.
+
+  **Correction to the measurement in the previous entry.** The "405 → 592 →
+  406" figure compared a peak measured in one section against a resting extent
+  measured in another — different icon count, different canvas width — so most
+  of that spread was the section change, not displacement. Comparing within a
+  single section: peak 585×66 with `?motion` against 550×50 without, both
+  settling to ~533×37. Displacement therefore contributes ~36×16 backing px
+  across the whole set, about **11 CSS px of travel per icon**. Real, but
+  jitter — which is exactly what was seen. The earlier entry overstated it.
+
+  One flag, `GRID_MOTION`, gates the whole thing, and it gates the lock too
+  because `moveActive` only ever arms inside `armGridMotion()`. Verified: with
+  the flag absent the grid takes input on the old timing and the offsets are
+  zero; with it present the motion and every hazard behaviour still work as
+  built. Nothing was reverted — the mechanism and all five hazard resolutions
+  are intact and tested, waiting on an arrangement worth showing.
