@@ -956,6 +956,31 @@
                                 // so the cell set is exchanged noise-to-noise,
                                 // the same invisible cut used everywhere else
 
+  // THE EXERCISE. Without a limit the field has no stakes: ~300 cells, free
+  // clicks, and you simply resolve all of them. The budget is what makes it
+  // an exercise rather than a toy — and it does not break the site's central
+  // rule, it GENERALISES it. The portfolio says exactly ONE thing is coherent
+  // at a time; the field says exactly twelve. Same grammar, different number.
+  //
+  // The consequence is the good part: the field is larger than the window of
+  // attention you are allowed, so it forgets behind you as you move across
+  // it, and searching it becomes a real activity.
+  const FIELD_BUDGET = 12;      // cells that may be coherent at once
+
+  // THE NEEDLE. One cell churns slightly calmer than the rest — lower
+  // amplitude, slower evolution. It is findable BY LOOKING, which is the
+  // whole point: the site's thesis is that noise resolves into form under
+  // attention, so its one interactive piece should reward attention rather
+  // than exhaustive clicking. Resolve it and it is exempt from the budget
+  // and never dissolves — the single permanent mark on a surface that
+  // forgets everything else.
+  //
+  // Both knobs are deliberately subtle. Raise them if it proves too hard to
+  // spot; the failure mode to avoid is a cell that announces itself.
+  const FIELD_CALM_AMP = 0.30;  // fraction of churn amplitude removed
+  const FIELD_CALM_SPD = 0.50;  // fraction of churn speed removed
+  const FIELD_REVEAL   = 2.6;   // seconds the whole field stays resolved
+
   // the one effect, parameterised. off = breathe, on = degrade.
   // amp is in UV units (fraction of an icon). these are the knobs to taste.
   const AMP_OFF  = 0.018, AMP_ON  = 0.38;   // displacement magnitude
@@ -1580,6 +1605,10 @@ void main() {
         case 'half':     x.beginPath(); x.arc(cx, cy, r, Math.PI, 0); x.fill(); break;
         case 'quarter':  x.beginPath(); x.moveTo(o, o + d); x.arc(o, o + d, d, -Math.PI / 2, 0); x.fill(); break;
         case 'bars':     for (let i = 0; i < 3; i++) x.fillRect(o, o + i * d / 2.5, d, d * 0.18); break;
+        // reserved for the needle — compound, so it is unmistakable among the
+        // simple forms at the moment the whole field resolves
+        case 'target':   x.beginPath(); x.arc(cx, cy, r - x.lineWidth / 2, 0, 7); x.stroke();
+                         x.beginPath(); x.arc(cx, cy, r * 0.34, 0, 7); x.fill(); break;
         default:         x.fillRect(o, o, d, d);
       }
       return c;
@@ -2116,17 +2145,28 @@ void main() {
   // the description exactly: shapes that no longer represent what they came
   // from.
   let fieldCols = 0, fieldRows = 0;
-  function buildField() {
+  let fieldOrder = [];          // resolved cells, oldest first — the budget queue
+  let fieldNeedle = -1;         // the calm cell
+  let fieldFound = false;
+  let fieldRevealT = 0;         // seconds left of the whole-field reveal
+
+  function buildField(keepNeedleAt) {
     const met = fieldMetrics(), N = met.cols * met.rows;
     const src = allIcons.reduce((a, b) => a.concat(b), []);
     fieldCols = met.cols; fieldRows = met.rows;
+    fieldOrder = [];
     fieldCells = [];
     for (let i = 0; i < N; i++) {
       const from = src[i % src.length];
       fieldCells.push({
         tex: from ? from.tex : null,
         baseTex: from ? from.tex : null,   // what it churns as, to return to
-        shapeTex: shapeTex[i % shapeTex.length],
+        // RANDOM, not `i % forms`. Modulo assignment tiles: at the reveal the
+        // whole field came out as regular diagonal stripes, which reads as
+        // wallpaper and throws away the one moment the array is legible.
+        // Scattered, each cell looks like it had its own answer.
+        // The LAST form is held back for the needle — see below.
+        shapeTex: shapeTex[Math.floor(Math.random() * Math.max(1, shapeTex.length - 1))],
         sx: Math.random() * 127, sy: Math.random() * 127,
         mix: 1, target: 1,              // arrives churning and STAYS churning
         still: 0, stillTarget: 0,       // until a click resolves it
@@ -2134,7 +2174,25 @@ void main() {
         cx: 0, cy: 0, pxCx: 0, pxCy: 0,
         move: 0, moveTarget: 0, moveDelay: 0, mvx: 0, mvy: 0,
         resolved: false, unswap: false,
+        calm: 0,                // 1 on the needle — churns quieter than the rest
+        permanent: false,       // exempt from the budget once found
+        temp: false,            // resolved only for the reveal
       });
+    }
+    // Place the needle. On a resize the caller passes the old grid position so
+    // a window drag cannot move what someone is hunting for — only a genuinely
+    // new field re-rolls it.
+    fieldNeedle = -1;
+    if (keepNeedleAt && keepNeedleAt.c < fieldCols && keepNeedleAt.r < fieldRows) {
+      fieldNeedle = keepNeedleAt.r * fieldCols + keepNeedleAt.c;
+    } else if (N > 0) {
+      fieldNeedle = Math.floor(Math.random() * N);
+    }
+    if (fieldNeedle >= 0) {
+      fieldCells[fieldNeedle].calm = 1;
+      // and it resolves into the one form nothing else in the field carries,
+      // so at the reveal the cell you found is visibly singular
+      if (shapeTex.length > 1) fieldCells[fieldNeedle].shapeTex = shapeTex[shapeTex.length - 1];
     }
     return met;
   }
@@ -2144,17 +2202,26 @@ void main() {
   // window. Resolved state is carried across BY GRID POSITION; cells that fall
   // outside the new bounds are lost, which is the honest limit of the mapping.
   function buildFieldPreservingResolved() {
-    const old = fieldCells, oc = fieldCols;
+    const old = fieldCells, oc = fieldCols, wasFound = fieldFound;
     const keep = [];
     for (let i = 0; i < old.length; i++) {
-      if (old[i].resolved) keep.push([i % oc, Math.floor(i / oc), old[i].shapeTex]);
+      if (old[i].resolved && !old[i].temp) {
+        keep.push([i % oc, Math.floor(i / oc), old[i].shapeTex, old[i].permanent]);
+      }
     }
-    buildField();
-    for (const [c, r, tex] of keep) {
+    // the needle keeps its grid position across a resize — a window drag must
+    // not relocate the thing being hunted for, nor hand out a second chance
+    const nAt = fieldNeedle >= 0 && oc > 0
+      ? { c: fieldNeedle % oc, r: Math.floor(fieldNeedle / oc) } : null;
+    buildField(nAt);
+    fieldFound = wasFound;
+    fieldRevealT = 0;
+    for (const [c, r, tex, perm] of keep) {
       if (c >= fieldCols || r >= fieldRows) continue;
-      const ic = fieldCells[r * fieldCols + c];
-      ic.resolved = true; ic.tex = tex; ic.shapeTex = tex; ic.unswap = false;
-      ic.mix = 0; ic.target = 0; ic.still = 1; ic.stillTarget = 1;
+      const k = r * fieldCols + c, ic = fieldCells[k];
+      ic.tex = tex; ic.shapeTex = tex; ic.unswap = false; ic.permanent = perm;
+      ic.resolved = true; ic.mix = 0; ic.target = 0; ic.still = 1; ic.stillTarget = 1;
+      if (!perm) fieldOrder.push(k);
     }
     icons = fieldCells;
   }
@@ -2271,20 +2338,63 @@ void main() {
   // resolved, so the exchange would be plainly visible. It goes back into the
   // churn FIRST and swaps at full noise, which is why baseTex is kept and why
   // this needs the pending flag rather than being one assignment.
-  function resolveCell(i) {
-    const ic = fieldCells[i];
-    if (!ic) return;
-    if (ic.resolved) {
-      ic.resolved = false;
-      ic.target = 1;              // back into the churn...
-      ic.stillTarget = 0;
-      ic.unswap = true;           // ...and swap the texture once it hides it
-      return;
-    }
+  function coalesce(ic) {         // out of the churn, into its shape
     ic.resolved = true;
     ic.tex = ic.shapeTex;
-    ic.target = 0;                // out of the churn
-    ic.stillTarget = 1;           // and static, like a selected icon
+    ic.unswap = false;
+    ic.target = 0;
+    ic.stillTarget = 1;           // static, exactly like a selected icon
+  }
+  function dissolve(ic) {         // back into the churn
+    ic.resolved = false; ic.temp = false;
+    ic.target = 1;
+    ic.stillTarget = 0;
+    ic.unswap = true;             // texture swaps once the noise hides it
+  }
+
+  // FINDING THE NEEDLE resolves the ENTIRE field at once — for a few seconds
+  // the whole array is legible, which is the only time it ever is — and then
+  // everything dissolves back except the cell that was found.
+  function startReveal() {
+    fieldRevealT = FIELD_REVEAL;
+    for (const c of fieldCells) {
+      if (c.resolved) continue;
+      c.temp = true;              // resolved only for this moment
+      coalesce(c);
+    }
+  }
+
+  function resolveCell(i) {
+    const ic = fieldCells[i];
+    if (!ic || fieldRevealT > 0) return;   // inert while the field is revealed
+    if (ic.permanent) return;              // the found cell is not takeable back
+
+    if (i === fieldNeedle && !fieldFound) {
+      fieldFound = true;
+      ic.permanent = true;
+      const at = fieldOrder.indexOf(i);
+      if (at >= 0) fieldOrder.splice(at, 1);   // it no longer costs budget
+      coalesce(ic);
+      startReveal();
+      return;
+    }
+
+    if (ic.resolved) {                     // clicking a resolved cell puts it back
+      dissolve(ic);
+      const at = fieldOrder.indexOf(i);
+      if (at >= 0) fieldOrder.splice(at, 1);
+      return;
+    }
+
+    coalesce(ic);
+    fieldOrder.push(i);
+    // THE BUDGET. Past the limit the OLDEST coherent cell dissolves — the
+    // field forgets behind you, which is what makes it bigger than the
+    // attention you are allowed to spend on it.
+    while (fieldOrder.length > FIELD_BUDGET) {
+      const j = fieldOrder.shift();
+      if (fieldCells[j] && !fieldCells[j].permanent) dissolve(fieldCells[j]);
+    }
   }
 
   function switchSection(n) {
@@ -3037,9 +3147,14 @@ void main() {
       else if (ic.still > ic.stillTarget) ic.still = Math.max(ic.stillTarget, ic.still - dt / OFF_TIME);
       const s = smooth(ic.still);
 
-      const amp  = mixv(AMP_OFF,  AMP_ON,  e) * (1 - s);
+      // `calm` is the needle, and 0 on every menu icon — a cell that churns
+      // quieter and slower than its neighbours without ever holding still.
+      // It has to be findable by looking and invisible to a glance, which is
+      // why it scales the existing churn rather than adding a tell of its own.
+      const cq = ic.calm || 0;
+      const amp  = mixv(AMP_OFF,  AMP_ON,  e) * (1 - s) * (1 - cq * FIELD_CALM_AMP);
       const freq = mixv(FREQ_OFF, FREQ_ON, e);
-      const spd  = mixv(SPEED_OFF, SPEED_ON, e) * (1 - s);
+      const spd  = mixv(SPEED_OFF, SPEED_ON, e) * (1 - s) * (1 - cq * FIELD_CALM_SPD);
       ic.phase += spd * dt;             // own clock: calm keeps breathing while others churn
 
       // POSITION eases on the SAME asymmetric clock as mix and still, with one
@@ -3109,6 +3224,16 @@ void main() {
       for (const ic of fieldCells) {
         if (ic.unswap && ic.mix >= 0.9) { ic.tex = ic.baseTex; ic.unswap = false; }
       }
+      // the reveal ends by returning EVERYTHING to the churn except the found
+      // cell — a clean field again, holding one permanent mark
+      if (fieldRevealT > 0) {
+        fieldRevealT -= dt;
+        if (fieldRevealT <= 0) {
+          fieldRevealT = 0;
+          for (const ic of fieldCells) if (!ic.permanent && ic.resolved) dissolve(ic);
+          fieldOrder = [];
+        }
+      }
     }
 
     // FIELD ENTRY: the menu icons are churned out on the same fast clock, and
@@ -3119,7 +3244,8 @@ void main() {
       fieldSwap -= dt;
       if (fieldSwap <= 0) {
         fieldSwap = null;
-        buildField();
+        fieldFound = false; fieldRevealT = 0;   // a fresh entry, a new needle
+        buildField(null);
         icons = fieldCells;
         fieldResize(true);        // the seam travels from here
       }
@@ -3181,7 +3307,8 @@ void main() {
     // drawings drop in here by replacing this list with {kind:'shape'} items
     // or ordinary {src} ones; nothing downstream cares which.
     const FIELD_FORMS = ['disc','ring','square','frame','triangle','hexagon',
-                         'hexframe','diamond','cross','chevron','half','quarter','bars']
+                         'hexframe','diamond','cross','chevron','half','quarter','bars',
+                         'target']   // LAST = the needle's own form, held back
                         .map(form => ({ kind: 'shape', form }));
 
     let made = null;
