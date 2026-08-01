@@ -1,6 +1,6 @@
 # Design note — the icon field (desktop-only interaction)
 
-**Status:** built and working, first pass. Placeholder art.
+**Status:** built and working, with a goal. Placeholder art.
 **Name is provisional.** "The field" is a placeholder until Robert names it.
 
 Lives on `grid-motion` for now because it shares one structural piece with that
@@ -109,8 +109,10 @@ measure first, on hardware.
 3. **The shapes.** A set of geometric SVGs, repeated across the field — how
    many distinct forms, and how they are assigned to cells. Alpha is the
    shape, same as every other icon: transparent source with real counterforms.
-4. **Whether resolved shapes can un-resolve**, and whether the field has a
-   completed state.
+4. ~~**Whether resolved shapes can un-resolve**, and whether the field has a
+   completed state.~~ **Answered — see the status log.** Yes to both: a click
+   puts a cell back, a budget evicts the oldest, and finding the needle
+   resolves the whole field for a few seconds.
 5. **The desktop gate.** Cleanest available signal is WebGL present +
    `(hover: hover)` + a minimum width. `(hover: hover)` already has precedent
    in the stylesheet.
@@ -223,3 +225,55 @@ Append to this. Newest at the bottom.
   exit. Resolved cells cannot currently be un-resolved and there is no
   completed state. Performance is unmeasured — see the draw-call section; that
   still needs real hardware.
+
+- **Resolved into an exercise.** Robert's read of the first pass: it feels like
+  the start of a puzzle or a needle-in-a-haystack search, but with no goal. He
+  asked for it to become a UX exercise and skipped the direction question, so
+  the call was made and is recorded here.
+
+  **The diagnosis:** the field was already a search — every cell looks
+  identical until clicked, so clicking is sampling hidden information. What it
+  lacked was not a theme but a **constraint**. With ~300 cells and free clicks
+  there is nothing at stake; you resolve all of them and stop.
+
+  **The budget.** Only twelve cells may be coherent at once; resolve a
+  thirteenth and the oldest dissolves back into the churn. This does not break
+  the site's central rule, it *generalises* it — the portfolio says exactly one
+  thing is coherent at a time, the field says exactly twelve, same grammar with
+  a different number. The consequence is the point: the field is larger than
+  the attention it allows, so it forgets behind you and searching it becomes a
+  real activity rather than a completionist sweep.
+
+  **The needle, found by looking.** One cell churns quieter and slower than its
+  neighbours — `calm` scales the existing amplitude and speed rather than
+  adding a tell of its own, so it is perceptible to attention and invisible to
+  a glance. That is the site's whole thesis (noise resolves into form under
+  attention) turned into an interaction. Resolve it and it is exempt from the
+  budget and never dissolves: one permanent mark on a surface that forgets
+  everything else.
+
+  **The payoff.** Finding it resolves the ENTIRE field at once. For a few
+  seconds the whole array is legible — the only time it ever is — and then
+  everything dissolves back except the cell that was found.
+
+  **A real flaw the reveal exposed immediately.** Shapes were assigned by
+  `i % forms`, which tiles: the first reveal came out as regular diagonal
+  stripes and read as wallpaper, throwing away the one moment the field is
+  worth looking at. Assignment is now random, and the needle carries a
+  compound form (`target`) held back from the pool so the cell you found is
+  visibly singular among the simple ones. This is the kind of thing that only
+  shows up by running it.
+
+  **Verified in a browser:** twenty clicks leave exactly twelve shapes on
+  screen, the eight oldest having dissolved; clicking a resolved cell returns
+  it, swapping its texture under the noise so the change is never seen;
+  clicking every cell reaches the needle and resolves all 286 at once, then
+  settles back. No console errors.
+
+  **Tuning knobs, all in the config block:** `FIELD_BUDGET` (12),
+  `FIELD_CALM_AMP` / `FIELD_CALM_SPD` (how much quieter the needle is — the
+  failure mode to avoid is a cell that announces itself), `FIELD_REVEAL` (2.6s).
+
+  **Still open:** the keyboard cannot resolve cells — the field is
+  pointer-only, with the exit reachable. Whether that is acceptable or the
+  cells need to be focusable is the remaining accessibility question.
