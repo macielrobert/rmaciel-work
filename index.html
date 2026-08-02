@@ -41,23 +41,46 @@
        was the last element still growing with the viewport. It stops too
        now, and the extra room becomes space rather than longer lines.
 
-       In a monospace face `ch` IS the character advance, so 66ch is EXACTLY
-       66 characters — not an estimate. It resolves against the window's 11px
-       text, so a later type-size change widens the column on its own and the
-       character COUNT holds. And because it CAPS rather than switches, no
-       breakpoint is needed: a phone in portrait only reaches 48ch and never
-       feels it. 66 is the middle of the comfortable 45-75 range. */
-    --measure: 66ch;
+       WAS 66ch, AND `ch` NO LONGER MEANS WHAT IT MEANT. In a monospace face
+       `ch` IS the character advance, so 66ch was EXACTLY 66 characters. In a
+       proportional face `ch` is only the width of the digit zero, which is
+       one of the WIDER glyphs — keeping 66ch here would have held roughly 80
+       characters per line and quietly pushed the measure past the comfortable
+       range while still reading as "66" in the source. Worse than wrong: wrong
+       and self-documenting as right.
+
+       So the unit changes with the typeface. Average Latin lowercase runs
+       ~0.5em per character, so 66 characters is ~33em. This is an ESTIMATE
+       where the old value was a guarantee — that is the real cost of leaving
+       monospace, and it is worth saying plainly rather than pretending the
+       number is still exact.
+
+       `em` keeps the one property that mattered: it resolves against the
+       window's 11px text, so a later type-size change widens the column on its
+       own and the character count holds. Still a CAP, not a breakpoint — a
+       phone in portrait never reaches it. 66 characters is the middle of the
+       comfortable 45-75 range.
+
+       TUNE THIS against the real face once it is in: set copy at this width,
+       count the characters on a full line, and adjust if it lands outside
+       55-70. */
+    --measure: 33em;
     /* THE SAME IDEA, DIFFERENT JOB. --measure is a fact about READING: a line
        of prose stops being comfortable past ~75 characters. A form is not
        prose — its fields are targets to hit, not lines to follow — so the
        reading measure only makes them needlessly small. The form gets its own,
        wider cap.
-       Still a CAP, still in ch, still absolute: the taskbar rule holds, only
-       the number changes. 96ch lands at roughly the left half of a laptop
-       window and stops there, so a 27" monitor gains space around the form
-       rather than a wider one. */
-    --measure-form: 96ch;
+       Still a CAP, still absolute: the taskbar rule holds, only the number
+       changes. It lands at roughly the left half of a laptop window and stops
+       there, so a 27" monitor gains space around the form rather than a wider
+       one.
+
+       WAS 96ch. Converted with the same reasoning as --measure above, but on
+       a different basis: this value was never a character count, so what is
+       preserved is its RATIO to the reading measure — it was 1.45x, and 33em
+       x 1.45 is 48em. A form that stops being comfortably wider than the prose
+       column has lost the only thing this variable exists to say. */
+    --measure-form: 48em;
     width: 100vw;
     height: 100vh;
     height: 100dvh;                           /* mobile address-bar aware */
