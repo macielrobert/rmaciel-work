@@ -10,6 +10,51 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <title>SVG Noise Lab — v80</title>
 <style>
+  /* =======================================================================
+     TYPEFACE — PP Neue Montreal, three static cuts, served as files.
+
+     NOT INLINED AS BASE64, and that is a deliberate reversal of the
+     one-request rule everywhere else in this project. Three cuts are ~90 KB;
+     base64 inflates a binary by about a third, so inlining would have put
+     ~120 KB inside the HTML document itself — and the document must arrive
+     in full before anything paints. This site is built the other way round:
+     a black shell paints immediately and boot() runs after. Inlining the
+     typeface would have undone the one behaviour the whole boot sequence
+     exists to protect.
+
+     As separate files with font-display: swap they load in parallel, off the
+     critical path, and cache independently across visits. The cost is three
+     extra requests. That was raised and accepted rather than assumed.
+
+     NOT A VARIABLE FONT. These files carry no fvar/gvar/STAT table — they are
+     five separate static instances, of which three ship. So weight and slant
+     come from the FILES, and font-variation-settings has nothing to act on.
+     Asking for a weight these files do not contain gets a synthesised one:
+     a smeared fake-bold, not the real cut. Only 400 and 700 exist here.
+
+     WHY THESE THREE. Book is the body. Bold and Italic exist for the text
+     formatting work. BoldItalic (+31 KB) is omitted until something actually
+     needs bold and italic at once — until then a browser synthesises it, and
+     the combination may never appear. Light (+29 KB) is omitted because
+     nothing calls for it yet. Both are in the repository history and in
+     NOTES-CUSTOM-FONT.md if that changes.
+     ======================================================================= */
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Book.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic; font-display: swap;
+  }
+
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
   /* WebKit inflates text on rotation to landscape unless told not to —
      this pins every size to its authored px value in both orientations */
@@ -86,7 +131,7 @@
     height: 100dvh;                           /* mobile address-bar aware */
     background: var(--bg);
     color: var(--ink);
-    font-family: monospace;
+    font-family: 'PP Neue Montreal', system-ui, -apple-system, 'Segoe UI', sans-serif;
     display: flex;
     /* Orientation is now FIXED: contact top, menu bottom, all screens.
        (Was menu-top on desktop; the contact brief pins the top half.) */

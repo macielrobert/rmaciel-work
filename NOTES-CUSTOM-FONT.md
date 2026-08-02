@@ -1,18 +1,25 @@
 # Design note — custom typeface
 
-**Branch:** `custom-font` · **Status:** measure converted; waiting on the font file
+**Branch:** `custom-font` · **Status:** implemented, needs looking at on a
+real preview
 
-**Do not merge before the font file lands.** The measure change on this branch
-is correct *for a proportional face* and wrong for the monospace stack that is
-live today. Merged early, it makes the current site's text column too narrow.
-The two changes ship together or not at all.
+PP Neue Montreal, three static cuts, served as files from `/fonts/`.
 
 ---
 
 ## The decision
 
-Move off `font-family: monospace` to a chosen proportional typeface, inlined
-so the site stays one file and one request.
+Move off `font-family: monospace` to PP Neue Montreal, **served as files
+rather than inlined as base64.**
+
+That reverses the one-request rule deliberately. Three cuts are ~90 KB, and
+base64 inflates a binary by about a third, so inlining would have put ~120 KB
+inside the HTML document — which must arrive in full before anything paints.
+This site is built the other way round: a black shell paints immediately and
+`boot()` runs after. Inlining would have undone the one behaviour the boot
+sequence exists to protect. Three extra requests, loaded in parallel, off the
+critical path, cached across visits, is the better trade. Raised and accepted
+rather than assumed.
 
 Accepted consequence, stated once so nobody rediscovers it as a bug: **the
 reading measure stops being exact.** In monospace, `66ch` was literally 66
@@ -22,83 +29,84 @@ of the typeface, and it was paid knowingly.
 
 ---
 
-## What is needed from the font
+## What the files actually are
 
-- **WOFF2.** Roughly 30% smaller than WOFF and half the size of a raw TTF/OTF,
-  and universally supported by anything that can run WebGL2. No second format
-  is worth carrying as a fallback.
-- **One weight, regular.** The site declares no `font-weight` or `font-style`
-  anywhere — every piece of text is one weight today. A second file is only
-  needed if the markdown-formatting work lands and wants real bold or italic.
-- **A static instance, not a variable font,** unless the variable file happens
-  to be smaller. A variable font carries every weight on an axis; the site
-  uses one.
+Read out of the file headers, not from the filenames:
 
-If only OTF/TTF exists, it converts to WOFF2 — but conversion is a decision
-about licensing as much as format. See below.
+| File | Size | Glyphs |
+|---|---|---|
+| PPNeueMontreal-Book.woff2 | 29.0 KB | 613 |
+| PPNeueMontreal-Bold.woff2 | 30.4 KB | 613 |
+| PPNeueMontreal-Italic.woff2 | 29.3 KB | 613 |
+| *BoldItalic — not shipped* | 31.5 KB | 613 |
+| *Light — not shipped* | 29.1 KB | 613 |
 
----
+**These are NOT variable fonts.** No `fvar`, no `gvar`, no `STAT` in any of
+the five — they are static instances. PP Neue Montreal does ship a variable
+version; this is not it. Consequences:
 
-## Licensing — check this before anything is committed
+- `font-variation-settings` has nothing to act on. Width and slant axes do
+  not exist here.
+- Only the weights present in the files are real: **400 and 700**. Asking for
+  300 or 500 gets a synthesised weight, which is a smeared fake, not a cut.
+- Adding a weight later means adding a file, not changing a number.
 
-Inlining a font as base64 puts the **complete font file in the page source, in
-plain text, for anyone to copy.** No obfuscation, no referrer check, nothing.
-
-Many commercial and desktop licences forbid exactly this, and many webfont
-licences are separate from desktop licences and are metered by pageviews.
-A typeface that is legitimately owned for print or for a design application is
-often *not* licensed for web embedding.
-
-**Confirm the licence permits web embedding before the file goes into the
-repository.** Open-licence families (SIL OFL and similar) are unrestricted here
-and are the safe default if the preferred face turns out not to be usable.
+613 glyphs is a full Latin set, already close to minimal. Subsetting further
+would save little and risks dropping something the copy uses, so it was not
+done.
 
 ---
 
-## Size — the real tradeoff
+## Coverage gap — `▌` is not in this typeface
 
-The site is ~37 KB gzipped today, one request. Base64 inflates a binary by
-about a third before compression, and font data is already compressed so gzip
-recovers little of it.
+Checked against the real `cmap` tables. Two characters currently in use are
+absent from all five files:
 
-A Latin subset of a typical text face runs 15-30 KB as WOFF2, so expect the
-page to land somewhere around **double its current weight**. That is the
-honest cost. It buys the typeface, and the site is still small — but it is
-not free and should not be presented as free.
+- **`▌` (U+258C)** — used as the artist-list marker in the Light Work copy.
+  It will render from the fallback stack, in a different face, at a different
+  weight. Visible, and visibly wrong.
+- **`✦` (U+2726)** — the Light Work glyph icon. **Not affected**: `bakeIcon`
+  draws glyph icons to canvas in its own hard-coded monospace stack,
+  independent of the page font. Unchanged behaviour, and due to be replaced by
+  an uploaded logomark anyway.
 
-**Subset carefully.** The copy already uses characters an aggressive Latin
-subset would drop: `©` in the copyright, `—` in the prose, `|` and `▌` in the
-Light Work credits. A subset that loses a glyph fails silently — the browser
-substitutes from the fallback stack and one character renders in a different
-face. Keep Latin plus punctuation plus the symbols actually in use, and keep a
-real fallback stack behind the custom family for anything missed.
+`▌` needs a decision: keep it and accept a fallback glyph, or swap it for
+something the typeface has.
 
 ---
 
-## Work remaining
+## Licensing
 
-- [ ] Confirm the licence permits web embedding
-- [ ] Obtain WOFF2, subset to Latin + punctuation + symbols in use
-- [ ] Inline as a base64 `@font-face` `src: url(data:font/woff2;base64,…)`
-- [ ] Set `font-family` to the new family with a fallback stack behind it
-- [ ] **Tune `--measure`.** Set real copy at that width, count the characters
-      on a full line, adjust until it lands in 55-70. The 33em on this branch
-      is a starting point, not a finished value.
-- [ ] Re-check `--measure-form` holds its ~1.45x relationship to the measure
-- [ ] Check the vertical copyright still fits the right margin strip —
-      `line-height: 1` is load-bearing there and a new face changes the metrics
-- [ ] Check the footer labels still fit on a narrow phone
-- [ ] Confirm the no-WebGL fallback still measures its wrapped title list
-      correctly, since the seam follows the menu
+Confirmed permitted for web embedding. Serving as files rather than inlining
+also keeps this an ordinary webfont deployment rather than pasting the whole
+binary into the page source.
 
 ---
 
-## Not affected
+## Done
 
-**Glyph icons.** `bakeIcon` draws them to canvas in an explicit hard-coded
-monospace stack, independent of the page font, so nothing here changes them.
-They are placeholders due to be replaced by uploaded logomarks regardless, at
-which point that code path stops being used for real content.
+- [x] Licence confirmed
+- [x] Three cuts into `fonts/`, `@font-face` with `font-display: swap`
+- [x] `font-family` set with a system fallback stack behind it
+- [x] `build.js` copies `fonts/` to `dist/fonts/`, and FAILS if it is missing
+- [x] `--measure` 66ch → 33em, `--measure-form` 96ch → 48em
+
+## Still to check — needs eyes on a preview, cannot be verified from the build
+
+- [ ] **Tune `--measure`.** 33em is arithmetic, not observation. Set real copy
+      at that width, count characters on a full line, adjust if outside 55-70.
+- [ ] **The vertical copyright.** `line-height: 1` is load-bearing there — in
+      vertical text the line box becomes the WIDTH. A proportional face has
+      different metrics and may overhang or under-fill the margin strip.
+- [ ] **Footer labels on a narrow phone.** BUILD / DESIGN / ART / CONTACT /
+      ABOUT were laid out in monospace. Proportional letterforms change their
+      combined width, and the footer is primary navigation.
+- [ ] **The no-WebGL fallback.** The seam follows the menu by measuring a
+      wrapped title list; that measurement now happens in a different face.
+      Test with `?nogl`.
+- [ ] **`▌` in the Light Work copy** — decide keep or replace.
+- [ ] Letter-spacing. Values were tuned against monospace and may want
+      revisiting; not changed here, since that is design judgement.
 
 ---
 
@@ -108,5 +116,10 @@ Append. Newest at the bottom.
 
 - **Set up.** `--measure` 66ch → 33em and `--measure-form` 96ch → 48em, with
   the reasoning written into the CSS comments where the old exactness claim
-  was. No font added yet; the branch is deliberately not mergeable until one
-  is.
+  was. No font added yet.
+- **Typeface in.** Five WOFF2 files supplied; inspected and found to be static
+  instances, not variable as expected. Three shipped (Book / Bold / Italic),
+  BoldItalic and Light held back. Served from `/fonts/` with `font-display:
+  swap`; `build.js` copies the directory and fails if it is absent. `▌` found
+  absent from the typeface and left for a decision. Nothing here has been seen
+  rendered — the checks above need a preview.
