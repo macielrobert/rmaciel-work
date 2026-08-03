@@ -98,7 +98,9 @@ fragile against updates:
 
 - It is a React component living against Decap's internal API — the single
   most upgrade-sensitive thing that could be added here.
-- The CMS currently loads from unpkg as `^3.0.0`, so it updates itself.
+- The CMS loads from unpkg. It is now pinned to an exact version, which
+  removes the surprise but not the coupling: every deliberate upgrade would
+  become a re-test of a bespoke editor.
 - It could not have been tested from the build sandbox, which has no network.
   Shipping an unverified editor into the only interface for changing the site
   risks losing the ability to edit at all.
@@ -169,11 +171,10 @@ carry no markup.
       `heading-three` are from knowledge, not verified against Decap's source.
       If they are wrong the buttons simply will not show; typing `## ` still
       works, and the fix is a name change.
-- [ ] **PIN THE CMS VERSION.** `admin/index.html` loads `decap-cms@^3.0.0` —
-      any 3.x, whichever is newest that day. Read the real version from
-      `https://unpkg.com/decap-cms@^3.0.0/package.json` and pin it. Not done
-      here because the sandbox has no network and a guessed version number
-      would take the whole CMS down.
+- [x] **CMS version pinned** to `3.15.1`, read off unpkg. Was `^3.0.0`, which
+      served whatever the newest 3.x was on any given day. **Confirm `/admin`
+      still loads on the preview** — a wrong version number is only visible by
+      opening the page.
 - [ ] Formatted text still churns correctly. `spanify()` walks into child
       elements, so it should — but a size span changes the line box mid-
       animation and that has not been seen.
@@ -192,4 +193,8 @@ carry no markup.
   — the only toolbar entry whose preview matches the site's behaviour. A
   custom editor widget was considered for the remaining three controls and
   rejected on upgrade fragility; those are documented in on-screen help
-  instead. The CMS version range was flagged for pinning.
+  instead.
+- **CMS pinned to 3.15.1.** No longer a `^3.0.0` range, so the editor cannot
+  change under the site between one visit and the next. This page is the only
+  way content gets edited; a CMS that updates itself is one that can stop
+  working with nothing in the repository to explain it.
