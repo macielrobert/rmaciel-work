@@ -161,16 +161,16 @@ carry no markup.
 
 ## Still to check — needs a preview
 
-- [ ] **Does Decap's rich-text editor preserve the bracket tags?** It
-      round-trips markdown through a parser, and unknown inline syntax *should*
-      survive as plain text — but that is an expectation, not a verified fact.
-      Type `[small]test[/small]` in the editor, save, and confirm the JSON on
-      the branch still reads `[small]test[/small]` and has not been escaped or
-      mangled. **This is the one thing most likely to be wrong.**
-- [ ] **Do the heading buttons appear?** The button names `heading-two` and
-      `heading-three` are from knowledge, not verified against Decap's source.
-      If they are wrong the buttons simply will not show; typing `## ` still
-      works, and the fix is a name change.
+- [x] **Bracket tags through the editor — IT WAS WRONG, and is now handled.**
+      Decap escapes `[` on save: `[small]ARTISTS[/small]` came back as
+      `\[small]ARTISTS\[/small]`. The conversion still matched but the stray
+      backslashes survived it and would have shipped as visible `\` on the
+      page. `build.js` now strips that escaping before converting; verified
+      against the real stored content, not a constructed example.
+      `++underline++` came back untouched in the same save, so this is specific
+      to brackets rather than to unknown syntax generally.
+- [x] **Heading buttons appear.** `heading-two` and `heading-three` are the
+      correct names.
 - [x] **CMS version pinned** to `3.15.1`, read off unpkg. Was `^3.0.0`, which
       served whatever the newest 3.x was on any given day. **Confirm `/admin`
       still loads on the preview** — a wrong version number is only visible by
@@ -194,6 +194,9 @@ carry no markup.
   custom editor widget was considered for the remaining three controls and
   rejected on upgrade fragility; those are documented in on-screen help
   instead.
+- **First real round-trip through the editor.** Decap escapes square brackets
+  on save; the converter now strips that. Underline and the heading button both
+  survived untouched. This was the flagged risk and it was real.
 - **CMS pinned to 3.15.1.** No longer a `^3.0.0` range, so the editor cannot
   change under the site between one visit and the next. This page is the only
   way content gets edited; a CMS that updates itself is one that can stop

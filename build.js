@@ -232,8 +232,26 @@ function escapeHtml(s) {
    markdown widget's toolbar is restricted in admin/config.yml to exactly the
    buttons supported here, so no button can produce syntax this does not
    understand. Adding one means adding both, together. */
+/* DECAP ESCAPES SQUARE BRACKETS. VERIFIED, NOT ASSUMED.
+
+   The editor's markdown serialiser treats `[` as the start of link syntax, so
+   saving `[small]ARTISTS[/small]` stores `\[small]ARTISTS\[/small]`. The
+   conversion below still matched, but the stray backslashes survived it and
+   would have shipped as visible `\` characters on the page.
+
+   `++underline++` came back untouched in the same save, so this is specific to
+   brackets rather than to unknown syntax in general.
+
+   Stripped rather than honoured: the author never types `\[` — the editor
+   adds it — so treating it as a deliberate escape would break the tag the
+   author meant. The cost is that a literal `[small]` cannot be written in
+   copy, which is a sentence nobody is going to want. */
+function unescapeBrackets(s) {
+  return s.replace(/\\([\[\]])/g, '$1');
+}
+
 function inlineFormat(s) {
-  return s
+  return unescapeBrackets(s)
     // bracket tags first: their contents may themselves contain bold/italic
     .replace(/\[light\]([\s\S]+?)\[\/light\]/g, '<span class="w-l">$1</span>')
     .replace(/\[small\]([\s\S]+?)\[\/small\]/g, '<span class="t-s">$1</span>')
