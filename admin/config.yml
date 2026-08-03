@@ -97,11 +97,32 @@ collections:
 
       - name: summary
         label: Description
-        widget: text
+        widget: markdown
         required: false
+        # THE TOOLBAR IS RESTRICTED ON PURPOSE.
+        # Every button here has a matching rule in build.js. Decap's default
+        # toolbar also offers lists, quotes, links, images and code — buttons
+        # that would write syntax the build does not understand, so it would
+        # ship to the page as literal - and > characters. A button that
+        # produces broken output is worse than a missing button.
+        #
+        # HEADINGS ARE HERE FOR THE SIZE CONTROL. They are the only toolbar
+        # button whose on-screen preview MATCHES what the site does: press it,
+        # the editor shows bigger text, the page shows bigger text. Every
+        # heading level maps to the SAME large step in build.js, so it holds
+        # whichever heading buttons Decap actually renders.
+        # Adding a button means adding it in BOTH places, together.
+        buttons: [bold, italic, heading-two, heading-three]
+        editor_components: []
+        minimal: true
         hint: >
-          Blank line between paragraphs. In the grid layout a long body is
-          clamped and opened by the caret; elsewhere it runs on.
+          FORMATTING — buttons above: bold, italic, and heading (= large text,
+          for a section label like ORGANIZERS).
+          TYPED, for the rest: ++underline++ · [light]lighter[/light] ·
+          [small]smaller[/small]. Every [name] needs its closing [/name] —
+          the build stops and names the file if one is missing.
+          LAYOUT: blank line = new paragraph. A single line break is kept, so
+          a list of names typed one per line stays one per line.
 
       - name: layout
         label: Layout
@@ -195,8 +216,18 @@ collections:
             label: Detail lines
             widget: list
             field: { name: line, label: Line, widget: string }
-          - { name: summary, label: Description,  widget: text,
-              hint: "Blank line between paragraphs." }
+          - name: summary
+            label: Description
+            widget: markdown
+            # see the note on the project Description field
+            buttons: [bold, italic, heading-two, heading-three]
+            editor_components: []
+            minimal: true
+            hint: >
+              FORMATTING — buttons above: bold, italic, heading (= large text).
+              TYPED: ++underline++ · [light]lighter[/light] ·
+              [small]smaller[/small]. Every [name] needs its closing [/name].
+              LAYOUT: blank line = new paragraph; a single line break is kept.
 
       - name: contact
         label: CONTACT

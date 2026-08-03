@@ -35,10 +35,19 @@
      WHY THESE THREE. Book is the body. Bold and Italic exist for the text
      formatting work. BoldItalic (+31 KB) is omitted until something actually
      needs bold and italic at once — until then a browser synthesises it, and
-     the combination may never appear. Light (+29 KB) is omitted because
-     nothing calls for it yet. Both are in the repository history and in
-     NOTES-CUSTOM-FONT.md if that changes.
+     the combination may never appear. Light shipped once the text-formatting
+     work gave it something to do — before that it was 29 KB of nothing.
+     BoldItalic remains in the repository history if that changes too.
+
+     THREE REAL WEIGHTS: 300, 400, 700. Nothing between them exists. Asking
+     for 500 gets a synthesised weight — the browser smearing the 400 — which
+     is why the size and weight controls offer named steps and not a number.
      ======================================================================= */
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Light.woff2') format('woff2');
+    font-weight: 300; font-style: normal; font-display: swap;
+  }
   @font-face {
     font-family: 'PP Neue Montreal';
     src: url('/fonts/PPNeueMontreal-Book.woff2') format('woff2');
@@ -509,6 +518,41 @@
      mark. */
   #nl-window.l-grid .body      { max-height: var(--body-clamp, 84px); overflow: hidden; }
   #nl-window.l-grid.more .body { max-height: none; overflow: visible; }
+
+  /* =======================================================================
+     TEXT FORMATTING — the marks build.js emits from the CMS copy.
+
+     These are the ONLY elements that appear inside body copy. build.js
+     escapes the author's text first and then emits this fixed set, so the
+     CMS cannot introduce any other tag: what is styled here is the whole
+     vocabulary, not a starting point.
+
+     WHY NAMED STEPS AND NOT NUMBERS. Three weights exist as files — 300,
+     400, 700 — and nothing between them. A free numeric control would let
+     the author pick 500 and get a synthesised smear that looks like a bad
+     render rather than a choice. Same for size: free values fight the 33em
+     reading measure and overflow the column. Both are therefore closed sets.
+
+     em, NOT px, on the sizes: they resolve against the 11px body text, so a
+     later type-size change carries them along instead of stranding them.
+
+     THESE STILL CHURN. spanify() walks into child elements, so characters
+     inside a <strong> or a size span resolve out of noise like any other
+     text. Formatting does not opt copy out of the transition. */
+  #nl-window-text strong, #nl-about-text strong { font-weight: 700; }
+  #nl-window-text em,     #nl-about-text em     { font-style: italic; }
+  #nl-window-text u,      #nl-about-text u {
+    text-decoration: underline;
+    /* the default underline sits on the baseline and cuts descenders; at
+       11px that reads as a strikethrough on g, p and y */
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+  /* weight: light. Bold is <strong>; there is no third weight class. */
+  #nl-window-text .w-l, #nl-about-text .w-l { font-weight: 300; }
+  /* size: small and large. Normal needs no class — it is the absence of one. */
+  #nl-window-text .t-s, #nl-about-text .t-s { font-size: 0.85em; }
+  #nl-window-text .t-l, #nl-about-text .t-l { font-size: 1.27em; }
   #nl-window.l-grid.more #nl-main        { flex: 1 1 auto; min-height: 0; }
   #nl-window.l-grid.more #nl-window-text { height: 100%; overflow-y: auto; }
   #nl-window.l-grid.more #nl-car         { display: none; }   /* copy covers the grid */

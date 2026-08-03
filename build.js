@@ -208,14 +208,128 @@ function needList(obj, key, label) {
   return v;
 }
 
-/* PARAGRAPHS. The CMS collects one text area with "blank line between
-   paragraphs" in the hint. buildData() accepts a string OR a list of strings
-   and normalises with paras(). Splitting here means the authoring convention
-   is honoured in one place rather than depending on downstream behaviour. */
+/* ------------------------------------------------------- text formatting */
+
+/* ESCAPE FIRST, ALWAYS.
+   The site inserts body copy with innerHTML, so any `<` an author types would
+   otherwise be live markup. Escaping here and emitting a FIXED set of tags
+   afterwards means the vocabulary below is the complete list of what can ever
+   reach the page — not the list of what is expected to. */
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* THE FORMATTING VOCABULARY.
+
+   Bold and italic are markdown, because the CMS gives them TOOLBAR BUTTONS
+   and the editor writes that syntax itself — nothing to memorise.
+
+   Underline, weight and size are bracket tags, because markdown has no
+   syntax for any of them. They share one shape so there is one rule to
+   remember rather than three: [name]...[/name].
+
+   Deliberately absent: headings, lists, quotes, links, images, code. The
+   markdown widget's toolbar is restricted in admin/config.yml to exactly the
+   buttons supported here, so no button can produce syntax this does not
+   understand. Adding one means adding both, together. */
+/* DECAP ESCAPES SQUARE BRACKETS. VERIFIED, NOT ASSUMED.
+
+   The editor's markdown serialiser treats `[` as the start of link syntax, so
+   saving `[small]ARTISTS[/small]` stores `\[small]ARTISTS\[/small]`. The
+   conversion below still matched, but the stray backslashes survived it and
+   would have shipped as visible `\` characters on the page.
+
+   `++underline++` came back untouched in the same save, so this is specific to
+   brackets rather than to unknown syntax in general.
+
+   Stripped rather than honoured: the author never types `\[` — the editor
+   adds it — so treating it as a deliberate escape would break the tag the
+   author meant. The cost is that a literal `[small]` cannot be written in
+   copy, which is a sentence nobody is going to want. */
+function unescapeBrackets(s) {
+  return s.replace(/\\([\[\]])/g, '$1');
+}
+
+function inlineFormat(s) {
+  return unescapeBrackets(s)
+    // bracket tags first: their contents may themselves contain bold/italic
+    .replace(/\[light\]([\s\S]+?)\[\/light\]/g, '<span class="w-l">$1</span>')
+    .replace(/\[small\]([\s\S]+?)\[\/small\]/g, '<span class="t-s">$1</span>')
+    .replace(/\[large\]([\s\S]+?)\[\/large\]/g, '<span class="t-l">$1</span>')
+    .replace(/\+\+(?=\S)([\s\S]+?)(?<=\S)\+\+/g, '<u>$1</u>')
+    // ** before *, __ before _ — otherwise the single-character rule eats the
+    // first half of a double marker and the result is mismatched tags
+    .replace(/\*\*(?=\S)([\s\S]+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(?=\S)([\s\S]+?)(?<=\S)__/g, '<strong>$1</strong>')
+    .replace(/\*(?=\S)([^*]+?)(?<=\S)\*/g, '<em>$1</em>')
+    // `_` only when it stands alone as a word boundary, so snake_case and
+    // file_names in the copy are left alone
+    .replace(/(^|[\s(])_(?=\S)([^_]+?)(?<=\S)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
+}
+
+/* PARAGRAPHS. The CMS collects one field with "blank line between paragraphs"
+   in the hint. buildData() accepts a string OR a list of strings and
+   normalises with paras(). Splitting here means the authoring convention is
+   honoured in one place rather than depending on downstream behaviour.
+
+   SINGLE LINE BREAKS ARE KEPT. They used to be collapsed into spaces, which
+   silently destroyed any copy laid out as lines rather than prose — a credit
+   list typed one name per line came out as one running sentence, with nothing
+   to indicate the author's line breaks had been thrown away. A blank line
+   still starts a new paragraph; a single newline is now a hard break, which is
+   what typing one plainly means. */
+/* PLAIN TEXT — for the fields that are NOT body copy.
+   Share descriptions and the site description end up in a link preview and a
+   search result, where a `<strong>` is not bold text, it is the characters
+   `<strong>`. These fields collapse to one line and carry no markup at all,
+   which is also why they do not get escaped: nothing here reaches innerHTML. */
+function plainText(text, label) {
+  if (text === undefined || text === null || !String(text).trim()) return null;
+  const flat = String(text).replace(/\r\n/g, '\n').replace(/\s*\n\s*/g, ' ').trim();
+  if (!flat) fail(`${label}: field is present but contains no text`);
+  return flat;
+}
+
+/* HEADING LINES -> THE LARGE STEP.
+
+   This exists so the size control can be a BUTTON rather than something the
+   author has to remember. Markdown headings are the only formatting Decap's
+   toolbar offers whose on-screen preview MATCHES what the site does: press
+   the heading button, the editor shows bigger text, the page shows bigger
+   text. Mapping some unrelated button — code, or blockquote — would have put
+   a control in the toolbar that previews as one thing and ships as another,
+   which is a trap rather than a feature.
+
+   EVERY heading level maps to the SAME step, on purpose and defensively.
+   There is one large size, not six, so a document cannot grow a hierarchy the
+   layout has no answer for — and it means the mapping holds whichever heading
+   button the CMS happens to render, which matters because the exact button
+   names could not be verified against Decap's source from the build sandbox.
+
+   Matched per LINE, not per paragraph: a heading typed among other lines in
+   one block still takes effect, which is how the credit lists are written. */
+function headingLines(html) {
+  return html.split('\n').map(line => {
+    const m = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line);
+    return m ? '<span class="t-l">' + m[1].trim() + '</span>' : line;
+  }).join('\n');
+}
+
 function paragraphs(text, label) {
   if (text === undefined || text === null || !String(text).trim()) return null;
   const parts = String(text).replace(/\r\n/g, '\n').split(/\n\s*\n/)
-    .map(s => s.trim().replace(/\s*\n\s*/g, ' ')).filter(Boolean);
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => {
+      const html = headingLines(inlineFormat(escapeHtml(s)));
+      // an unclosed bracket tag is a typo the author cannot see the effect of
+      // — it would ship as literal "[large]" in the middle of a sentence
+      const stray = html.match(/\[\/?(?:light|small|large)\]/);
+      if (stray) {
+        fail(`${label}: unclosed formatting tag "${stray[0]}". Every [name] needs a matching [/name].`);
+      }
+      return html.replace(/\n/g, '<br>');
+    });
   if (!parts.length) fail(`${label}: description is present but contains no text`);
   return parts.length === 1 ? parts[0] : parts;
 }
@@ -307,7 +421,7 @@ function buildProject(p, label) {
      (PLAN.md, Phase 5). buildData() reads named fields and ignores the rest, so
      carrying it is inert today. Dropping it would silently discard something a
      human typed into a form, which is the worse failure. */
-  const share = paragraphs(p.share_description, label);
+  const share = plainText(p.share_description, label);
   if (share !== null) out.shareDescription = Array.isArray(share) ? share[0] : share;
 
   // kept so the authored value survives the build; see the note in the PR /
@@ -374,7 +488,7 @@ function assemble() {
   const contact = { email };
   // the contact form is hand-built outside the data contract and has no intro
   // slot yet; carried rather than discarded, same reasoning as shareDescription
-  const intro = paragraphs(contactRaw.intro, contactLabel);
+  const intro = plainText(contactRaw.intro, contactLabel);
   if (intro !== null) contact.intro = intro;
 
   const siteRaw = readJSON(siteFile);
@@ -387,7 +501,7 @@ function assemble() {
     sections,
   };
   // Phase 5 metadata: collected now, consumed when the share/search tags land
-  const desc = paragraphs(siteRaw.description, siteLabel);
+  const desc = plainText(siteRaw.description, siteLabel);
   if (desc !== null) content.description = Array.isArray(desc) ? desc[0] : desc;
   if (siteRaw.share_image && String(siteRaw.share_image).trim()) {
     const src = String(siteRaw.share_image).trim();
