@@ -96,7 +96,17 @@ collections:
         hint: The short lines under the title — material, edition, year. Usually three.
 
       - name: summary
-        label: Description
+        # THE CHEAT SHEET LIVES IN THE LABEL, NOT THE HINT.
+        # Decap renders `hint` BELOW the control and offers no way to move it,
+        # so on a long description box the reference sits off the bottom of the
+        # screen — read it, scroll back up, type, forget, scroll down again.
+        # The label renders ABOVE the field, always in view while typing, which
+        # is the only place a reference is any use.
+        # The hint keeps the things learned once (paragraphs, line breaks);
+        # the label carries the things needed mid-sentence.
+        label: >-
+          Description — BUTTONS: bold · italic · heading (= large text).
+          TYPED: ++underline++ · [light]lighter[/light] · [small]smaller[/small]
         widget: markdown
         required: false
         # THE TOOLBAR IS RESTRICTED ON PURPOSE.
@@ -116,13 +126,11 @@ collections:
         editor_components: []
         minimal: true
         hint: >
-          FORMATTING — buttons above: bold, italic, and heading (= large text,
-          for a section label like ORGANIZERS).
-          TYPED, for the rest: ++underline++ · [light]lighter[/light] ·
-          [small]smaller[/small]. Every [name] needs its closing [/name] —
-          the build stops and names the file if one is missing.
-          LAYOUT: blank line = new paragraph. A single line break is kept, so
-          a list of names typed one per line stays one per line.
+          Blank line = new paragraph. A single line break is kept, so a list of
+          names typed one per line stays one per line. Every [name] needs its
+          closing [/name] — the build stops and names the file if one is
+          missing. In the grid layout a long body is clamped and opened by the
+          caret; elsewhere it runs on.
 
       - name: layout
         label: Layout
@@ -217,17 +225,19 @@ collections:
             widget: list
             field: { name: line, label: Line, widget: string }
           - name: summary
-            label: Description
+            # cheat sheet in the label — see the note on the project field
+            label: >-
+              Description — BUTTONS: bold · italic · heading (= large text).
+              TYPED: ++underline++ · [light]lighter[/light] ·
+              [small]smaller[/small]
             widget: markdown
             # see the note on the project Description field
             buttons: [bold, italic, heading-two, heading-three]
             editor_components: []
             minimal: true
             hint: >
-              FORMATTING — buttons above: bold, italic, heading (= large text).
-              TYPED: ++underline++ · [light]lighter[/light] ·
-              [small]smaller[/small]. Every [name] needs its closing [/name].
-              LAYOUT: blank line = new paragraph; a single line break is kept.
+              Blank line = new paragraph; a single line break is kept.
+              Every [name] needs its closing [/name].
 
       - name: contact
         label: CONTACT
