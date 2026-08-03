@@ -41,6 +41,7 @@ const CONTENT_DIR = path.join(ROOT, 'content');
 const PROJECTS_DIR = path.join(CONTENT_DIR, 'projects');
 const IMAGES_DIR = path.join(ROOT, 'images');
 const ADMIN_DIR = path.join(ROOT, 'admin');
+const FONTS_DIR = path.join(ROOT, 'fonts');
 const DIST     = path.join(ROOT, 'dist');
 
 const START = '/* CONTENT:START */';
@@ -481,11 +482,23 @@ function main() {
   }
   const adminFiles = copyDir(ADMIN_DIR, path.join(DIST, 'admin'));
 
+  /* THE TYPEFACE SHIPS TOO. index.html asks for /fonts/*.woff2 by URL, so a
+     missing fonts/ means every request 404s and the whole site silently falls
+     back to system-ui — legible, but not the design, and with nothing in the
+     build output to say so.
+     Same reasoning as admin/: checked-in source, so absence is a broken
+     repository rather than an empty one, and it FAILS rather than skips. */
+  if (!fs.existsSync(FONTS_DIR)) {
+    fail('fonts/: not found at the repository root. index.html references /fonts/*.woff2 and the site would fall back to system fonts.');
+  }
+  const fontFiles = copyDir(FONTS_DIR, path.join(DIST, 'fonts'));
+
   const count = content.sections.reduce((n, s) => n + s.projects.length, 0);
   console.log(
     `built dist/index.html — ${count} project${count === 1 ? '' : 's'} across ` +
     `${content.sections.length} sections, ${copied} image file${copied === 1 ? '' : 's'} copied, ` +
-    `${adminFiles} admin file${adminFiles === 1 ? '' : 's'} copied`
+    `${adminFiles} admin file${adminFiles === 1 ? '' : 's'} copied, ` +
+    `${fontFiles} font file${fontFiles === 1 ? '' : 's'} copied`
   );
 }
 
