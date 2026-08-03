@@ -272,13 +272,38 @@ function plainText(text, label) {
   return flat;
 }
 
+/* HEADING LINES -> THE LARGE STEP.
+
+   This exists so the size control can be a BUTTON rather than something the
+   author has to remember. Markdown headings are the only formatting Decap's
+   toolbar offers whose on-screen preview MATCHES what the site does: press
+   the heading button, the editor shows bigger text, the page shows bigger
+   text. Mapping some unrelated button — code, or blockquote — would have put
+   a control in the toolbar that previews as one thing and ships as another,
+   which is a trap rather than a feature.
+
+   EVERY heading level maps to the SAME step, on purpose and defensively.
+   There is one large size, not six, so a document cannot grow a hierarchy the
+   layout has no answer for — and it means the mapping holds whichever heading
+   button the CMS happens to render, which matters because the exact button
+   names could not be verified against Decap's source from the build sandbox.
+
+   Matched per LINE, not per paragraph: a heading typed among other lines in
+   one block still takes effect, which is how the credit lists are written. */
+function headingLines(html) {
+  return html.split('\n').map(line => {
+    const m = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line);
+    return m ? '<span class="t-l">' + m[1].trim() + '</span>' : line;
+  }).join('\n');
+}
+
 function paragraphs(text, label) {
   if (text === undefined || text === null || !String(text).trim()) return null;
   const parts = String(text).replace(/\r\n/g, '\n').split(/\n\s*\n/)
     .map(s => s.trim())
     .filter(Boolean)
     .map(s => {
-      const html = inlineFormat(escapeHtml(s));
+      const html = headingLines(inlineFormat(escapeHtml(s)));
       // an unclosed bracket tag is a typo the author cannot see the effect of
       // — it would ship as literal "[large]" in the middle of a sentence
       const stray = html.match(/\[\/?(?:light|small|large)\]/);

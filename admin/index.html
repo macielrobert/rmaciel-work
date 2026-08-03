@@ -7,6 +7,24 @@
   <title>Content</title>
 </head>
 <body>
+  <!-- ============================================================
+       THE VERSION RANGE IS A LIABILITY — pin it.
+
+       `^3.0.0` means "any 3.x", so unpkg serves whatever the newest 3.x is
+       on the day you open this page. The editor can therefore change, or
+       break, between one visit and the next, with no change on our side and
+       nothing in the repository to explain it. Everything else here is
+       deliberately pinned or vendored; this is the one moving part.
+
+       TO PIN: open https://unpkg.com/decap-cms@^3.0.0/package.json in a
+       browser and read the "version" field, then replace ^3.0.0 below with
+       that exact number. Update it on purpose after that, never by surprise.
+
+       Left as a range for now only because the build sandbox has no network
+       access and could not read a real version number to write here. Guessing
+       one would have been worse than leaving it: a version that does not exist
+       takes the whole CMS down.
+       ============================================================ -->
   <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
 </body>
 </html>
