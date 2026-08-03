@@ -513,6 +513,23 @@
   #nl-window.l-grid.more #nl-window-text { height: 100%; overflow-y: auto; }
   #nl-window.l-grid.more #nl-car         { display: none; }   /* copy covers the grid */
 
+  /* THE CARET IS DRAWN, NOT TYPED.
+     It used to be two characters swapped by JS — U+2304 down, U+2303 up.
+     Neither is in PP Neue Montreal, so BOTH fell through to the fallback
+     stack, and a fallback stack resolves each codepoint independently: the
+     two halves of one control could arrive from two different installed
+     fonts, at different weights and different optical sizes. The open and
+     closed states visibly disagreed, and which fonts you had decided how
+     badly.
+
+     Two borders on a rotated box has no such dependency. The closed and open
+     states are the SAME shape 180 degrees apart, so they are exact mirrors by
+     construction rather than by hoping two glyphs were designed as a pair.
+     It also finally matches the other controls: x and <- ARE in the typeface,
+     and a fallback caret sitting beside them never could.
+
+     currentColor keeps the existing colour, focus and hover rules working
+     untouched; sizing in em keeps it tracking the type. */
   #nl-more {
     display: none;
     flex: 0 0 auto; align-self: flex-start;
@@ -523,6 +540,20 @@
     pointer-events: auto; cursor: pointer;
     user-select: none;
   }
+  #nl-more::before {
+    content: '';
+    display: block;
+    width: 0.46em; height: 0.46em;
+    border-right:  1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    /* 45deg puts the open corner at the bottom: a chevron pointing DOWN */
+    transform: rotate(45deg);
+    /* the drawn mark sits high in its box once rotated; nudge it back onto
+       the optical centre. Identical in both states, so it cannot desync. */
+    margin: -0.12em 0 0.12em 0;
+  }
+  /* OPEN: the same shape, half a turn. Not a second glyph — the same one. */
+  #nl-window.l-grid.more #nl-more::before { transform: rotate(225deg); }
   /* shown only when the copy actually overflows its clamp */
   #nl-window.l-grid #nl-more.on   { display: block; }
   #nl-window.l-grid.x #nl-more    { display: none; }
@@ -825,7 +856,7 @@
     <!-- 'read more' caret: opens a clamped body to full height in l-grid.
          Sits between the text region and the images because that is exactly
          where it acts. Non-churn: it is a control, not copy. -->
-    <span id="nl-more" role="button" tabindex="0" aria-expanded="false" aria-label="Read more">&#x2304;</span>
+    <span id="nl-more" role="button" tabindex="0" aria-expanded="false" aria-label="Read more"></span>
     <!-- carousel HOST, pinned to the window's foot — the POSITION is shared,
          the carousels are not: one strip per entry is built in boot() from
          each entry's images and display-swapped in sync with the text. The
@@ -2201,11 +2232,14 @@ void main() {
   // its mirror — tap the coherent thing to dissolve it, the same gesture as
   // the frozen icon and the active thumb.
   const moreEl = document.getElementById('nl-more');
-  const CARET_DOWN = '\u2304', CARET_UP = '\u2303';
 
+  // The mark itself is CSS (see #nl-more::before) — the `more` class on the
+  // window turns it over. No character swap: the two states were two separate
+  // codepoints, neither in the typeface, and they arrived from whatever
+  // fallback fonts the visitor happened to have. Only the accessible state
+  // is set here; a screen reader never saw the glyph anyway.
   function setMore(on) {
     winEl.classList.toggle('more', on);
-    moreEl.textContent = on ? CARET_UP : CARET_DOWN;
     moreEl.setAttribute('aria-expanded', on ? 'true' : 'false');
     moreEl.setAttribute('aria-label', on ? 'Show less' : 'Read more');
   }

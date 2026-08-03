@@ -91,20 +91,19 @@ binary into the page source.
 - [x] `build.js` copies `fonts/` to `dist/fonts/`, and FAILS if it is missing
 - [x] `--measure` 66ch → 33em, `--measure-form` 96ch → 48em
 
-## Still to check — needs eyes on a preview, cannot be verified from the build
+## Checked on the preview — all passed
 
-- [ ] **Tune `--measure`.** 33em is arithmetic, not observation. Set real copy
-      at that width, count characters on a full line, adjust if outside 55-70.
-- [ ] **The vertical copyright.** `line-height: 1` is load-bearing there — in
-      vertical text the line box becomes the WIDTH. A proportional face has
-      different metrics and may overhang or under-fill the margin strip.
-- [ ] **Footer labels on a narrow phone.** BUILD / DESIGN / ART / CONTACT /
-      ABOUT were laid out in monospace. Proportional letterforms change their
-      combined width, and the footer is primary navigation.
-- [ ] **The no-WebGL fallback.** The seam follows the menu by measuring a
-      wrapped title list; that measurement now happens in a different face.
-      Test with `?nogl`.
-- [ ] **`▌` in the Light Work copy** — decide keep or replace.
+- [x] **`--measure`** — 67 characters on a full line. Inside the 55-70 target,
+      so 33em stands. No tuning needed.
+- [x] **Vertical copyright** fits the margin strip.
+- [x] **Footer labels** hold on a narrow phone.
+- [x] **`?nogl`** fallback works.
+- [x] **`▌`** removed from the copy, along with `━` and `↳` introduced in the
+      same rewrite. Every character in every prose field is now in the
+      typeface, verified against the `cmap` rather than by eye.
+
+## Still open
+
 - [ ] Letter-spacing. Values were tuned against monospace and may want
       revisiting; not changed here, since that is design judgement.
 
@@ -123,3 +122,12 @@ Append. Newest at the bottom.
   swap`; `build.js` copies the directory and fails if it is absent. `▌` found
   absent from the typeface and left for a decision. Nothing here has been seen
   rendered — the checks above need a preview.
+- **Checked and passed.** 67 characters on a line, copyright fits, footer
+  holds, `?nogl` works. Copy cleaned of every character the typeface lacks.
+- **Caret rebuilt as CSS.** The read-more control swapped two codepoints,
+  U+2304 and U+2303, and NEITHER is in Montreal. Both fell through to the
+  fallback stack, which resolves each codepoint independently — so the two
+  halves of one control could come from two different installed fonts and
+  visibly disagree. Replaced with two borders on a rotated box: one shape,
+  180 degrees apart, exact mirrors by construction. `×` and `←` were checked
+  at the same time and ARE in the typeface; the caret was the only one.
