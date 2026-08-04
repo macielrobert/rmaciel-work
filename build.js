@@ -6,16 +6,21 @@
    =========================================================================
 
    WHAT THIS IS
-     Decap CMS writes JSON into content/. index.html holds the site with an
-     EMPTY CONTENT block. This script reads the first, serialises it into the
-     second between the CONTENT:START / CONTENT:END markers, and writes the
-     result to dist/. The published artifact is unchanged: one file, one
-     request, everything inline.
+     Keystatic writes `.mdoc` files into content/ — JSON frontmatter, then the
+     rich text as Markdoc. index.html holds the site with an EMPTY CONTENT
+     block. This script reads the first, serialises it into the second between
+     the CONTENT:START / CONTENT:END markers, and writes the result to dist/.
+     The published artifact is unchanged: one file, one request, everything
+     inline, zero runtime dependencies.
 
-   WHY NODE BUILT-INS ONLY
-     No package.json, no install step, nothing to keep up to date. That is why
-     the CMS writes JSON and not YAML or Markdown — JSON.parse ships with Node
-     and a YAML parser does not. See the header of admin/config.yml.
+   ONE DEPENDENCY, AND WHY IT IS WORTH IT
+     `@markdoc/markdoc`, which has no dependencies of its own, and which is
+     required LAZILY so a repository with no .mdoc files still builds the whole
+     site with node_modules deleted.
+     It replaced roughly a hundred lines of regular expressions that could only
+     ever approximate a parser. Everything else here is still Node built-ins.
+     The editor's own dependencies (Astro, React) are separate: they build the
+     admin UI and touch nothing the visitor downloads.
 
    WHY IT FAILS LOUDLY
      A silent partial build is worse than a failed one. A missing marker, an
@@ -47,8 +52,8 @@ const START = '/* CONTENT:START */';
 const END   = '/* CONTENT:END */';
 
 /* THE SECTIONS ARE DEFINED HERE, NOT IN THE CMS.
-   A project picks its section from a fixed list (admin/config.yml, the
-   `section` select). The list itself is not editable content, because adding a
+   A project picks its section from a fixed list (the `section` select in
+   keystatic.config.tsx). The list itself is not editable content, because adding a
    fourth section is not a content change — the footer buttons in index.html
    are hand-written markup (`data-nav="build"` and friends) and would need a
    matching entry. Keeping the list here means the two places that must agree
@@ -77,7 +82,7 @@ function warn(msg) {
 
 /* WHY THE HEADER AND NOT A LIBRARY
      `ratio` is required by the site (without it the page downloads every image
-     at load just to measure its shape) and Decap's image widget does not
+     at load just to measure its shape) and the CMS's image field does not
      report dimensions. An image library would be an npm dependency. But the
      dimensions are in the first few bytes of the file by specification, and
      reading them is about forty lines — so it is forty lines.
@@ -86,9 +91,9 @@ function warn(msg) {
      Only the `images` list, because that is the only place the site READS a
      ratio. Icons and wordmarks are drawn as CSS/WebGL masks at a fixed cap
      (50px cell, 320px wordmark) and their aspect never enters a layout
-     calculation. That exemption is not laziness — admin/config.yml actively
-     recommends SVG for marks ("transparent PNG or SVG with real
-     counterforms"), and an SVG has neither an IHDR nor an SOF to read.
+     calculation. That exemption is not laziness — the CMS actively recommends
+     SVG for marks ("transparent PNG or SVG with real counterforms"), and an
+     SVG has neither an IHDR nor an SOF to read.
      Requiring a measurement there would reject the recommended format. */
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -145,9 +150,9 @@ function jpegSize(buf, label) {
   fail(`${label}: no JPEG frame header (SOFn) found — cannot determine dimensions`);
 }
 
-// Decap stores paths against `public_folder` ("/images"), while the files land
-// in `media_folder` ("images") at the repo root. One is the other without the
-// leading slash.
+// The CMS stores image paths against its public path ("/images"), while the
+// files land in the directory of the same name at the repo root. One is the
+// other without the leading slash.
 function resolveMedia(src, label) {
   if (typeof src !== 'string' || !src.trim()) fail(`${label}: image path is empty`);
   const rel = src.replace(/^\/+/, '');
