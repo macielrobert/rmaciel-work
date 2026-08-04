@@ -598,6 +598,16 @@
     text-decoration: underline;
     text-underline-offset: 0.18em;
     text-decoration-thickness: 1px;
+    transition: color 0.18s ease;
+  }
+  /* Hover DIMS rather than brightens: everywhere else on this site the
+     accent grey is the resting state and ink is the active one — the footer,
+     the caret, the close mark all go grey -> ink on hover. A link starts at
+     ink because it is content, so it has to travel the other way to say the
+     same thing. Focus matches, for the keyboard. */
+  #nl-window-text .body a:focus, #nl-about-text a:focus { color: rgba(143,143,153,0.9); }
+  @media (hover: hover) {
+    #nl-window-text .body a:hover, #nl-about-text a:hover { color: rgba(143,143,153,0.9); }
   }
 
   /* STRIKETHROUGH */

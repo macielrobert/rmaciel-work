@@ -513,38 +513,67 @@ function buildProject(p, label) {
 
 /* ----------------------------------------------------------------- gather */
 
-/* TWO LAYOUTS ON DISK, ON PURPOSE.
+/* TWO FILE FORMATS ON DISK, ON PURPOSE.
 
-   Decap wrote one file per project — `content/projects/vessel.json` — with the
-   description as a string inside it.
+   Decap wrote `content/projects/vessel.json` — pure JSON, description as a
+   string.
 
-   Keystatic writes a FOLDER per project — `content/projects/vessel/` holding
-   `index.json` for the data and `summary.mdoc` for the rich text — because the
-   collection is configured `format: { data: 'json', contentField: 'summary' }`.
+   Keystatic writes `content/projects/vessel.mdoc` — JSON frontmatter between
+   `---` fences, then the rich text as Markdoc:
 
-   Both are read here. Not indecision: it is what makes the migration
+       ---
+       { "title": "Big Deal Project", "section": "build", ... }
+       ---
+       this is {% large %}{% underline %}test{% /underline %}{% /large %}.
+
+   This shape was READ OFF A FILE THE EDITOR ACTUALLY WROTE. An earlier version
+   of this function expected a folder per entry holding index.json and
+   summary.mdoc, which is what `format: { data: 'json', contentField: 'summary' }`
+   sounded like it would produce. It produces neither of those filenames. The
+   lesson is the same one this project keeps learning: read the bytes.
+
+   Both formats are read here, and that is what makes the migration
    survivable. Entries move one at a time, the site builds at every point in
-   between, and nothing has to be converted in a single irreversible pass.
-   When the last `.json` file is gone, the legacy branch can be deleted. */
+   between, and nothing has to convert in a single irreversible pass. When the
+   last loose `.json` is gone, the legacy branch can be deleted.
+
+   THE SLUG COMES FROM THE FILENAME. Keystatic stores it there rather than as a
+   field — `slugField: 'title'` names the field the slug is DERIVED from, not a
+   field it writes. So the filename is the permanent address, which is also why
+   renaming a file is renaming a URL. */
+function parseMdoc(raw, label) {
+  if (!raw.startsWith('---')) {
+    fail(`${label}: expected JSON frontmatter between --- fences and found none.`);
+  }
+  // find the CLOSING fence only — the body may legitimately contain `---`,
+  // which is exactly what the editor's divider button writes
+  const end = raw.indexOf('\n---', 3);
+  if (end === -1) fail(`${label}: frontmatter opens with --- but never closes.`);
+
+  const head = raw.slice(3, end).trim();
+  const body = raw.slice(end + 4).replace(/^\r?\n/, '');
+
+  let data;
+  try { data = JSON.parse(head); }
+  catch (e) { fail(`${label}: the frontmatter is not valid JSON — ${e.message}`); }
+
+  if (body.trim()) data.summary = { markdoc: body };
+  return data;
+}
+
 function readProjectEntry(entry) {
   const abs = path.join(PROJECTS_DIR, entry.name);
+  const label = path.relative(ROOT, abs);
+  const base = entry.name.replace(/\.(mdoc|json)$/i, '');
 
-  if (entry.isDirectory()) {
-    const dataFile = path.join(abs, 'index.json');
-    const label = path.relative(ROOT, dataFile);
-    if (!fs.existsSync(dataFile)) {
-      fail(`${path.relative(ROOT, abs)}: project folder has no index.json. Keystatic writes the entry data there.`);
-    }
-    const raw = readJSON(dataFile);
-    const mdoc = path.join(abs, 'summary.mdoc');
-    if (fs.existsSync(mdoc)) {
-      raw.summary = { markdoc: fs.readFileSync(mdoc, 'utf8') };
-    }
-    return { raw, label, key: entry.name };
+  if (entry.name.toLowerCase().endsWith('.mdoc')) {
+    const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
+    // the filename IS the slug; buildProject requires the field, so supply it
+    if (!raw.slug) raw.slug = base;
+    return { raw, label, key: base };
   }
 
-  const label = path.relative(ROOT, abs);
-  return { raw: readJSON(abs), label, key: entry.name };
+  return { raw: readJSON(abs), label, key: base };
 }
 
 function loadProjects() {
@@ -552,7 +581,7 @@ function loadProjects() {
     fail(`content/projects/ does not exist. The CMS writes project files there; the repository layout is wrong.`);
   }
   const entries = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })
-    .filter(e => e.isDirectory() || e.name.toLowerCase().endsWith('.json'))
+    .filter(e => e.isFile() && /\.(json|mdoc)$/i.test(e.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!entries.length) warn('content/projects/ contains no projects — every section will be empty.');
 

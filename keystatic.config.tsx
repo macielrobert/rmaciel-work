@@ -35,13 +35,21 @@ const strokeIcon = (d: string) => (
 /* THE CUSTOM MARKS.
    `className` lands on a <span> in the output, and those class names are the
    ones index.html ALREADY styles (.w-l, .t-s, .t-l). So the editor emits the
-   markup the site is already built to render — no new CSS, no mapping table. */
+   markup the site is already built to render — no new CSS, no mapping table.
+
+   `style` exists only so the EDITOR shows the effect while typing. `className`
+   is what the site keys off, but the editor has no access to index.html's
+   stylesheet, so without an inline style a size or weight mark applied in the
+   description field looked like nothing had happened. The two must be kept in
+   step by hand — the values below mirror the CSS, and changing one means
+   changing the other. */
 const components = {
   light: mark({
     label: 'Lighter',
     icon: strokeIcon('M6 18 L12 6 L18 18'),
     tag: 'span',
     className: 'w-l',
+    style: { fontWeight: '300' },
     schema: {},
   }),
   small: mark({
@@ -49,6 +57,7 @@ const components = {
     icon: strokeIcon('M9 17 L9 9 M6 9 L12 9|M14 17 L18 17'),
     tag: 'span',
     className: 't-s',
+    style: { fontSize: '0.85em' },
     schema: {},
   }),
   large: mark({
@@ -56,6 +65,7 @@ const components = {
     icon: strokeIcon('M4 18 L10 6 L16 18 M6 14 L14 14'),
     tag: 'span',
     className: 't-l',
+    style: { fontSize: '1.27em' },
     schema: {},
   }),
   /* UNDERLINE IS A CUSTOM MARK HERE, not a built-in.

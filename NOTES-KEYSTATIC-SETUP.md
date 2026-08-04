@@ -149,11 +149,20 @@ deliberately stopped shipping. A rule for inline `<code>` remains anyway,
 because Markdoc still honours hand-typed backticks and unstyled code would
 look like a mistake rather than a choice.
 
-## Two content layouts, on purpose
+## Two file formats, on purpose
 
 - **Decap** wrote `content/projects/vessel.json`, description as a string.
-- **Keystatic** writes `content/projects/vessel/` — `index.json` for data,
-  `summary.mdoc` for prose.
+- **Keystatic** writes `content/projects/vessel.mdoc` — JSON frontmatter
+  between `---` fences, then the rich text as Markdoc.
+
+**This was read off a file the editor actually wrote.** An earlier version of
+the loader expected a folder per entry holding `index.json` and `summary.mdoc`,
+which is what `format: { data: 'json', contentField: 'summary' }` sounded like
+it would produce. It produces neither of those filenames.
+
+The slug comes from the FILENAME. `slugField: 'title'` names the field the slug
+is derived from, not a field Keystatic writes — so renaming a file renames a
+URL.
 
 `build.js` reads both. That is what makes the migration survivable: entries
 move one at a time and the site builds at every point in between. When the last
@@ -190,3 +199,23 @@ one running sentence.
       into child elements, so it should churn normally, but a size span changes
       the line box mid-animation and that has not been seen.
 - [ ] Lists, quote and divider at 11px on a phone — spacing is a first guess.
+
+
+---
+
+# The editor is pointed at `main`
+
+`storage: { kind: 'github', repo: … }` names no branch, so Keystatic commits to
+the repository's default branch: **`main`, directly, with no pull request.**
+
+Two consequences, both live now:
+
+1. **No review step.** Decap's editorial workflow opened a PR per edit with its
+   own preview. Keystatic as configured writes straight to production content.
+   Adding `branchPrefix` or working on a branch restores something like the old
+   loop, and is worth doing before real content is written this way.
+2. **`main` cannot read what the editor writes.** Only this branch's `build.js`
+   understands `.mdoc`. On `main` a `.mdoc` file is simply skipped, so a project
+   created in Keystatic is **silently absent from the site** — it builds green
+   and the entry is nowhere. That is the failure mode this project has been
+   bitten by repeatedly, and it will persist until this branch merges.
