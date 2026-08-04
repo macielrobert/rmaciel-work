@@ -97,12 +97,11 @@ const components = {
      divider        <hr>           a rule; it is a CONTROL-weight line, so it
                                    must not churn
      quote          <blockquote>   indent and measure
-     code block     <pre><code>    styling AND a monospace face — which this
-                                   site deliberately no longer ships. It would
-                                   fall back to the system mono, a fifth
-                                   typeface on a page with one chosen one.
+   Code blocks were enabled briefly and removed: they need a monospace face,
+   which this site deliberately stopped shipping, so they would fall back to
+   the system mono — a fifth typeface on a page with one chosen one.
 
-   Inline code and tables stay off: not asked for, and each carries the same
+   Inline code, code blocks and tables stay off: not asked for, and each carries the same
    renderer debt. Inline images stay off because imagery belongs to the
    `images` field, which the layout is built around.
 
@@ -120,7 +119,7 @@ const editorOptions = {
   link: true,
   image: false,
   divider: true,
-  codeBlock: true,
+  codeBlock: false,
 } as const;
 
 const description = (label: string) =>

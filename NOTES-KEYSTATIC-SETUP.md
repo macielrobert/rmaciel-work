@@ -113,3 +113,80 @@ That is a real difference in setup burden and it is worth weighing against the
 formatting capability it buys — which is the whole reason for the move.
 
 It is, however, **one-time**. None of it recurs while writing content.
+
+
+---
+
+# The renderer — build.js reads Markdoc
+
+## The vocabulary, end to end
+
+Each editor button maps to markup `index.html` has a rule for. **The toolbar in
+`keystatic.config.tsx`, the tag map in `build.js`, and the CSS in `index.html`
+are one decision in three files.** A button with no renderer entry produces
+nothing, silently; a CSS rule with no button is dead. None of the three may
+grow alone.
+
+| Button | Markdoc | HTML | Styled as |
+|---|---|---|---|
+| Bold | `**x**` | `<strong>` | weight 700 |
+| Italic | `*x*` | `<em>` | italic cut |
+| Strikethrough | `~~x~~` | `<s>` | line-through |
+| Underline | `{% underline %}` | `<u>` | offset to clear descenders |
+| Lighter | `{% light %}` | `<span class="w-l">` | weight 300 |
+| Smaller | `{% small %}` | `<span class="t-s">` | 0.85em |
+| Larger | `{% large %}` | `<span class="t-l">` | 1.27em |
+| Link | `[x](url)` | `<a>` | underlined, inherits ink — no third colour |
+| Bullet / Numbered | `- x` / `1. x` | `<ul>`/`<ol>` | indented INSIDE the measure |
+| Quote | `> x` | `<blockquote>` | margin rule, not italics |
+| Divider | `---` | `<hr>` | hairline at the seam's accent grey |
+
+Custom marks arrive as Markdoc **tags named after their component key**,
+verified against Keystatic's own deserializer rather than assumed.
+
+**Removed: code block.** It needs a monospace face, which this site
+deliberately stopped shipping. A rule for inline `<code>` remains anyway,
+because Markdoc still honours hand-typed backticks and unstyled code would
+look like a mistake rather than a choice.
+
+## Two content layouts, on purpose
+
+- **Decap** wrote `content/projects/vessel.json`, description as a string.
+- **Keystatic** writes `content/projects/vessel/` — `index.json` for data,
+  `summary.mdoc` for prose.
+
+`build.js` reads both. That is what makes the migration survivable: entries
+move one at a time and the site builds at every point in between. When the last
+loose `.json` is gone, the legacy branch can be deleted.
+
+## The dependency, and the escape hatch
+
+`@markdoc/markdoc` — zero runtime dependencies — is `require`d **lazily, inside
+the function that needs it**. A repository with no `.mdoc` files still builds
+the entire site with `node_modules` deleted. Verified by deleting it and
+building.
+
+Soft breaks are configured as hard breaks. Markdoc drops a single newline by
+default, which is the exact behaviour that once flattened a credit list into
+one running sentence.
+
+## Verified in the build
+
+- [x] Every control round-trips: bold, italic, strikethrough, all four custom
+      marks, link, both list types, quote, divider
+- [x] `<script>alert(1)</script>` renders as visible text, not as a script
+- [x] Bare `<` and `&` survive as characters
+- [x] Single line breaks preserved as `<br>`
+- [x] Legacy Decap entries still render through the old marker path
+- [x] `node build.js` succeeds with `node_modules` deleted
+- [x] CSS braces balanced; script parses
+
+## Still to check on a preview
+
+- [ ] Save a project through the editor and confirm the `.mdoc` on the branch
+      matches the syntax above — the tag format is verified from Keystatic's
+      source, but not yet from a file Keystatic actually wrote.
+- [ ] How formatted text behaves through the character churn. `spanify()` walks
+      into child elements, so it should churn normally, but a size span changes
+      the line box mid-animation and that has not been seen.
+- [ ] Lists, quote and divider at 11px on a phone — spacing is a first guess.
