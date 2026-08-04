@@ -136,9 +136,33 @@ const description = (label: string) =>
   fields.markdoc({ label, components, options: editorOptions });
 
 export default config({
+  /* REVIEW BEFORE PUBLISH — and it is NOT configured here.
+
+     Decap had `publish_mode: editorial_workflow`, so every save opened a pull
+     request with its own deploy preview. Keystatic has no equivalent setting:
+     left alone it commits straight to the default branch.
+
+     The equivalent lives on GITHUB, not in this file. With a branch protection
+     rule requiring pull requests on `main`, Keystatic receives
+     BRANCH_PROTECTION_RULE_VIOLATION on save and answers it with:
+
+       "Changes must be made via pull request to this branch.
+        Create a new branch to save changes."   [Create branch and save]
+
+     — which is the Decap loop back, driven by the repository rather than by a
+     CMS flag. Read out of Keystatic's own UI source, not assumed.
+
+     So the protection rule is load-bearing. Remove it and the editor silently
+     resumes writing to production content with no review step, and nothing in
+     this file will say so. See NOTES-KEYSTATIC-SETUP.md.
+
+     `branchPrefix` only prefills the new-branch name — it does not hide
+     branches — and mirrors the `cms/` names Decap used, so the branches an
+     editor creates stay distinguishable from the ones code work creates. */
   storage: {
     kind: 'github',
     repo: { owner: 'macielrobert', name: 'rmaciel-work' },
+    branchPrefix: 'cms/',
   },
 
   collections: {

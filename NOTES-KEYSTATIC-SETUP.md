@@ -203,19 +203,59 @@ one running sentence.
 
 ---
 
-# The editor is pointed at `main`
+# Review before publish — a GitHub setting, not a Keystatic one
 
-`storage: { kind: 'github', repo: … }` names no branch, so Keystatic commits to
-the repository's default branch: **`main`, directly, with no pull request.**
+Decap had `publish_mode: editorial_workflow`: every save opened a pull request
+with its own deploy preview. **Keystatic has no equivalent setting.** Left
+alone it commits straight to the default branch, which is what happened to the
+first project created through it.
 
-Two consequences, both live now:
+The equivalent lives on GitHub. Keystatic handles a rejected write like this,
+read out of its own UI source:
 
-1. **No review step.** Decap's editorial workflow opened a PR per edit with its
-   own preview. Keystatic as configured writes straight to production content.
-   Adding `branchPrefix` or working on a branch restores something like the old
-   loop, and is worth doing before real content is written this way.
-2. **`main` cannot read what the editor writes.** Only this branch's `build.js`
-   understands `.mdoc`. On `main` a `.mdoc` file is simply skipped, so a project
-   created in Keystatic is **silently absent from the site** — it builds green
-   and the entry is nowhere. That is the failure mode this project has been
-   bitten by repeatedly, and it will persist until this branch merges.
+```
+BRANCH_PROTECTION_RULE_VIOLATION →
+  "Changes must be made via pull request to this branch.
+   Create a new branch to save changes."
+  [ Create branch and save ]
+```
+
+So **protecting `main` restores the whole loop** — edit, branch, pull request,
+deploy preview, merge — driven by the repository rather than a CMS flag.
+
+## Enable it
+
+**Repo → Settings → Rules → Rulesets → New branch ruleset**
+
+| Setting | Value |
+|---|---|
+| Target | `main` (Default branch) |
+| Enforcement | Active |
+| **Require a pull request before merging** | ticked |
+| Required approvals | **0** |
+
+Zero approvals matters: a repository with one person cannot approve its own
+pull request, and any higher number locks the owner out of merging.
+
+If Rulesets are unavailable, the older **Settings → Branches → Add branch
+protection rule** does the same thing. Availability of each on a free private
+repository could not be checked from the build sandbox — if one is missing,
+try the other.
+
+**This rule is load-bearing.** Remove it and the editor silently resumes
+writing to production content with no review step, and nothing in
+`keystatic.config.tsx` will say so.
+
+## `branchPrefix: 'cms/'`
+
+Prefills the new-branch name so branches an editor creates stay
+distinguishable from branches code work creates — the same convention Decap
+used. It only prefills the field; it does not hide branches.
+
+## Until this branch merges
+
+**`main` cannot read what the editor writes.** Only this branch's `build.js`
+understands `.mdoc`. On `main` such a file is skipped, so a project created in
+Keystatic is **silently absent from the site** — the build goes green and the
+entry is nowhere. `content/projects/big-deal-project.mdoc` is in that state
+now.
