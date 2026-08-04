@@ -2,3 +2,9 @@
 # committed copy would only ever be a stale duplicate of the real site.
 # Netlify builds it during deploy; nothing needs it in the repository.
 dist/
+
+# npm, for the editor only. build.js still runs on Node built-ins alone and
+# works with node_modules deleted.
+node_modules/
+.astro/
+.netlify/
