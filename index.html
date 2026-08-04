@@ -1236,8 +1236,9 @@
          in one place, labelled. Nothing below this block needs touching to
          change copy.
        - This block is ALSO the exact shape a CMS emits later. When you add
-         one (e.g. Decap), it writes to this structure and the code below does
-         not change. So choosing inline now costs nothing later — the only
+         one, it writes to this structure and the code below does not change.
+         That prediction held: Decap plugged in without changing a line below,
+         and so did Keystatic when it replaced Decap. So choosing inline now costs nothing later — the only
          thing that ever moves is WHERE these bytes sit, never their shape.
          The one thing that reads this block (buildData, just under it) is the
          seam a CMS plugs into.

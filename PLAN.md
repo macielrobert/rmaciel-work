@@ -220,9 +220,11 @@ Not now; revisit if the conditions appear.
 
 - [ ] **Lazy section build** — only if the project list grows substantially.
       Currently ~4,700 DOM nodes and 33 icon bakes at boot.
-- [x] **Decap CMS** — done. `admin/config.yml` + `build.js`; editorial
-      workflow on, so a save opens a pull request. The data contract was
-      already CMS-shaped, so it was additive exactly as predicted.
+- [x] **CMS** — done twice. Decap arrived, hit its formatting ceiling, and was
+      replaced by Keystatic. The data contract was CMS-shaped exactly as
+      predicted: `buildData()` never changed for either. What Decap's editorial
+      workflow gave for free — a pull request per edit — did NOT survive the
+      move; see `PUNCH-LIST.md` section 0 and `NOTES-CMS-DECISION.md`.
 - [ ] **`<noscript>` block** — with JS off the page is blank. Six lines with
       your name and email would mean it's never truly empty.
 - [ ] **Move domain registration off Squarespace** — a transfer, not a

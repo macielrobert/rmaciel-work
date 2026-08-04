@@ -11,8 +11,15 @@ designer in New York. **One HTML file, zero dependencies, zero external
 assets** — vanilla JS + WebGL2 + GLSL. ~37 KB gzipped, one request.
 
 The **deployed** index.html is the entire site. That is not an accident or a stage on the way to a framework; it is the point.
-Since the CMS, the repository holds a source template plus a content folder, and build.js folds them into that one file at deploy. **The published artifact is unchanged** — one file, one request, zero runtime dependencies, no framework, no package manager. build.js runs on Node built-ins only and has no package.json.
-The bar still stands for anything that changes what ships: a framework, a bundler, a runtime dependency, or a second request need to clear a high bar and should be raised as a question, not implemented.
+
+The repository holds a source template plus a content folder, and build.js folds them into that one file at deploy. **What a visitor downloads is unchanged: one HTML file, one request, zero runtime dependencies, no framework.**
+
+The repository is no longer dependency-free, and that distinction is now load-bearing rather than pedantic:
+
+- **The site build** is `build.js` plus one package, `@markdoc/markdoc`, which has no dependencies of its own and is required lazily. Delete `node_modules` and the whole site still builds.
+- **The editor** is an Astro + React application serving `/keystatic`, with a Netlify function behind it for the GitHub login. It is ~950 packages and it touches nothing the visitor downloads.
+
+The bar still stands, and applies to the SHIPPED file: a framework, a bundler, a runtime dependency, or a second request in `index.html` need to clear a high bar and should be raised as a question, not implemented. The typeface is the one accepted exception — three font files, deliberately, for reasons recorded in `NOTES-CUSTOM-FONT.md`.
 
 The site is also a portfolio *piece* — the icon menu is the work as much as it
 is navigation.
@@ -88,7 +95,7 @@ still obey the length rules — a sentence, not a section.
 
 ## Architecture — seven systems, one file
 
-1. **Content block + adapter.** All editable copy lives in one labelled CONTENT block near the top of the IIFE, between the CONTENT:START and CONTENT:END markers. buildData() translates that authoring shape into the internal shape the code runs on. **This adapter is the CMS seam**, and it is now load-bearing: Decap writes JSON into content/, build.js serialises it between those markers, and nothing downstream changed when the CMS arrived — as designed. The markers are parsed by a script. Do not reformat, rename, or move them, and do not hand-edit CONTENT in the built output — the CMS is the source of truth and the next build overwrites it.
+1. **Content block + adapter.** All editable copy lives in one labelled CONTENT block near the top of the IIFE, between the CONTENT:START and CONTENT:END markers. buildData() translates that authoring shape into the internal shape the code runs on. **This adapter is the CMS seam**, and it has now survived two CMSs: Decap wrote JSON, Keystatic writes `.mdoc`, and `buildData()` never changed a line for either. The markers are parsed by a script. Do not reformat, rename, or move them, and do not hand-edit CONTENT in the built output — the CMS is the source of truth and the next build overwrites it.
 2. **WebGL icon grid.** Icons baked to textures, warped by a shared simplex
    noise shader. Selection = coherence: the chosen icon freezes, all others
    churn.
@@ -123,7 +130,7 @@ understanding why it exists will reintroduce a solved bug.
 
 - **The taskbar rule.** Things have a fixed size; only the *count* adapts.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
-  the image-grid cell (200), and body copy (`--measure` 66ch). Extra viewport
+  the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
@@ -135,6 +142,10 @@ understanding why it exists will reintroduce a solved bug.
   becomes the *width*; the default 1.2 overhangs the margin strip.
 - **`--measure` is for reading; `--measure-form` is for a form.** 45–75
   characters is a fact about prose, not about input fields.
+- **The measure is an ESTIMATE now, not a guarantee.** It was `66ch`, which in
+  a monospace face was exactly 66 characters. In PP Neue Montreal `ch` is the
+  width of a zero, so it is `33em` and measured at 67 characters by counting.
+  Re-tune by counting, never by arithmetic.
 
 ### Rendering
 
@@ -147,7 +158,12 @@ understanding why it exists will reintroduce a solved bug.
 - **SVG displacement filters are mobile-hostile at scale.** Confirmed from
   prior experience. WebGL fragment shader is the correct path for raster
   images on mobile. Do not propose SVG filters.
-- **Controls never churn.** `×`, `←`, the `⌄` caret, thumbs, footer,
+- **The caret is DRAWN, not typed.** It was two codepoints swapped by JS,
+  U+2304 and U+2303, and neither is in the typeface — both fell to the fallback
+  stack, which resolves each independently, so the two halves of one control
+  came from different fonts. It is now two borders on a rotated box: one shape,
+  180 degrees apart, mirrors by construction.
+- **Controls never churn.** `×`, `←`, the caret, thumbs, footer,
   copyright, focus marks. They appear and disappear with their views but stay
   resolved. Content churns; controls do not.
 - **Exactly one thing is coherent at any moment.** With a fixture open, that
@@ -183,7 +199,9 @@ understanding why it exists will reintroduce a solved bug.
 | Rejected | Why |
 |---|---|
 | Sveltia / TinaCMS / hand-edited JSON as the CMS | Each ruled out against a stated requirement, not on taste — see `NOTES-CMS-DECISION.md`. Keystatic is the chosen direction; Decap ships until it lands |
-| A custom Decap editor widget | A React component against a CMS's internal API, in the only interface for editing the site, untestable from the build sandbox |
+| A custom Decap editor widget | A React component against a CMS's internal API, in the only interface for editing the site, untestable from the build sandbox. Moot now: Keystatic's custom marks do the job as a supported API |
+| Code blocks in the editor | Need a monospace face the site deliberately stopped shipping — a fifth typeface on a page with one chosen one |
+| Headings in the editor | `Larger` is a real mark now, so borrowing a heading for size is obsolete. Six levels of hierarchy the layout has no answer for |
 | A framework, bundler, or npm dependency | The single-file, zero-dependency character of the **shipped** file is the point. build.js is exempt: Node built-ins only, no package.json, and its output is the same one file | | **Fetching** a content file at runtime | Browsers block fetching local files, and it would add a second request. Content is folded in at build time instead — the file the visitor gets still has everything inline | | Typing ratio by hand in the CMS | Decap's image widget does not report dimensions. build.js reads them from the uploaded file's header. A required field that a human can silently get wrong should not be a form field |
 | Minification | Comments are ~40% of the file but gzip to almost nothing. Stripping saves <100ms and costs the documentation |
 | anime.js | Only justifies itself for orchestration, timelines, stagger, or spring physics. For a single fixed-curve transition it equals a CSS transition |
@@ -235,11 +253,18 @@ Companion documents in this repo:
 
 Real content has started arriving; `CONTENT` is no longer all placeholder.
 
-**CMS: Decap today, Keystatic decided.** Decap's markdown toolbar cannot be
-extended, so underline, weight and size can only be typed — which does not
-scale across a real archive. The move is decided but NOT started, and nothing
-about Keystatic has been verified. `NOTES-CMS-DECISION.md` holds the
-comparison and the five questions to answer before any code is written.
+**CMS: Keystatic, migrated and live.** Decap is gone — `admin/` deleted, all
+content converted to `.mdoc`. The editor is at **`/keystatic`**. Formatting is
+real toolbar buttons, including three custom marks that emit the classes
+`index.html` already styles.
+
+**One thing is worse than it was, and it is not fixed.** Decap opened a pull
+request per edit. Keystatic writes straight to `main`, because the equivalent
+is a GitHub branch protection rule and **rulesets are not enforced on a private
+repository on the free plan.** Creating a branch in the editor before editing
+restores the loop manually. See `NOTES-KEYSTATIC-SETUP.md`.
+
+`NOTES-CMS-DECISION.md` holds every option and why each was kept or ruled out.
 
 ---
 
@@ -247,9 +272,9 @@ comparison and the five questions to answer before any code is written.
 
 **Build.** Netlify runs node build.js, publish directory dist. The script reads content/*.json, sorts projects by order, drops anything flagged draft, reads image dimensions for ratio, writes the assembled CONTENT between the markers in the source template, and emits dist/index.html plus dist/images/. No install step; nothing to keep up to date.
 
-**Editing.** Decap CMS at /admin, authenticated by a GitHub OAuth app registered in Netlify. Editorial workflow is on, so a save opens a pull request with its own deploy preview rather than publishing straight to live.
+**Editing.** Keystatic at `/keystatic`, authenticated by a **GitHub App** (not a plain OAuth app) with four environment variables in Netlify. A save commits to `main` immediately unless a branch is created first in the editor. Every setup step, and the exact symptom of each missing piece, is in `NOTES-KEYSTATIC-SETUP.md`.
 
-**Consequence worth knowing:** opening the repo's index.html directly no longer previews the real site — the source template's CONTENT block is empty by design. Previewing now means the deploy preview URL. This is the one thing the CMS cost.
+**Consequence worth knowing:** opening the repo's index.html directly no longer previews the real site — the source template's CONTENT block is empty by design. Previewing means a deploy URL.
 
 Static file on Netlify, deployed from this repo. The domain is registered at
 Squarespace with a live Google Workspace mailbox on it.
