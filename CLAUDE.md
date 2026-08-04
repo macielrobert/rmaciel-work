@@ -182,6 +182,8 @@ understanding why it exists will reintroduce a solved bug.
 
 | Rejected | Why |
 |---|---|
+| Sveltia / TinaCMS / hand-edited JSON as the CMS | Each ruled out against a stated requirement, not on taste — see `NOTES-CMS-DECISION.md`. Keystatic is the chosen direction; Decap ships until it lands |
+| A custom Decap editor widget | A React component against a CMS's internal API, in the only interface for editing the site, untestable from the build sandbox |
 | A framework, bundler, or npm dependency | The single-file, zero-dependency character of the **shipped** file is the point. build.js is exempt: Node built-ins only, no package.json, and its output is the same one file | | **Fetching** a content file at runtime | Browsers block fetching local files, and it would add a second request. Content is folded in at build time instead — the file the visitor gets still has everything inline | | Typing ratio by hand in the CMS | Decap's image widget does not report dimensions. build.js reads them from the uploaded file's header. A required field that a human can silently get wrong should not be a form field |
 | Minification | Comments are ~40% of the file but gzip to almost nothing. Stripping saves <100ms and costs the documentation |
 | anime.js | Only justifies itself for orchestration, timelines, stagger, or spring physics. For a single fixed-curve transition it equals a CSS transition |
@@ -224,8 +226,20 @@ Companion documents in this repo:
 - `README.md` — plain-language operating instructions for Robert: what the four
   parts do, how to publish a change, how to read a failed build. Written for
   the owner, not for a programmer. Keep it jargon-free if you touch it.
+- `NOTES-CMS-DECISION.md` — every CMS option, kept or ruled out, with each
+  claim marked verified or recalled. **Read before proposing anything about
+  the CMS.** The decision has been made three times because the reasoning was
+  never written down; it is written down now.
+- `NOTES-*.md` — design notes belonging to a branch. Each is that branch's
+  memory: read it first, update it last.
 
-Everything in `CONTENT` is still placeholder.
+Real content has started arriving; `CONTENT` is no longer all placeholder.
+
+**CMS: Decap today, Keystatic decided.** Decap's markdown toolbar cannot be
+extended, so underline, weight and size can only be typed — which does not
+scale across a real archive. The move is decided but NOT started, and nothing
+about Keystatic has been verified. `NOTES-CMS-DECISION.md` holds the
+comparison and the five questions to answer before any code is written.
 
 ---
 

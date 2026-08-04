@@ -40,7 +40,7 @@ const SRC_HTML = path.join(ROOT, 'index.html');
 const CONTENT_DIR = path.join(ROOT, 'content');
 const PROJECTS_DIR = path.join(CONTENT_DIR, 'projects');
 const IMAGES_DIR = path.join(ROOT, 'images');
-const ADMIN_DIR = path.join(ROOT, 'admin');
+const FONTS_DIR = path.join(ROOT, 'fonts');
 const DIST     = path.join(ROOT, 'dist');
 
 const START = '/* CONTENT:START */';
@@ -207,16 +207,108 @@ function needList(obj, key, label) {
   return v;
 }
 
-/* PARAGRAPHS. The CMS collects one text area with "blank line between
-   paragraphs" in the hint. buildData() accepts a string OR a list of strings
-   and normalises with paras(). Splitting here means the authoring convention
-   is honoured in one place rather than depending on downstream behaviour. */
-function paragraphs(text, label) {
+/* ------------------------------------------------------------- markdoc */
+
+/* THE ONE DEPENDENCY, LOADED ONLY WHEN IT IS NEEDED.
+
+   Keystatic stores rich text as Markdoc (`.mdoc`), which Node cannot parse
+   alone. `@markdoc/markdoc` has ZERO runtime dependencies — one package, no
+   tree — and it earns its place: parsing a real AST replaces the whole
+   hand-rolled marker layer below, and unknown syntax can no longer leak
+   through as literal characters.
+
+   `require`d lazily, inside the function that needs it, so a repository with
+   no `.mdoc` files still builds the entire site with node_modules deleted.
+   That escape hatch is the reason for the odd shape. */
+let _Markdoc = null;
+function markdoc(label) {
+  if (_Markdoc) return _Markdoc;
+  try { _Markdoc = require('@markdoc/markdoc'); }
+  catch {
+    fail(`${label}: this entry stores its description as Markdoc, which needs the @markdoc/markdoc package. Run \`npm install\` before building.`);
+  }
+  return _Markdoc;
+}
+
+/* THE RENDER VOCABULARY — the complete list of what can reach the page.
+
+   Each entry maps an editor button to markup index.html has a rule for. A
+   button with no entry here renders NOTHING, silently, which is why the
+   editor's toolbar in keystatic.config.tsx is restricted to exactly this set.
+   The two files are one decision; changing either alone breaks the pair.
+
+   The custom marks arrive as Markdoc TAGS named after their component key —
+   `{% light %}…{% /light %}` — verified against Keystatic's own deserializer,
+   not assumed. Their classes are the ones the site already styles. */
+function markdocTags(M) {
+  const wrap = (el, cls) => ({
+    render: el,
+    attributes: {},
+    transform(node, config) {
+      const attrs = cls ? { class: cls } : {};
+      return new M.Tag(el, attrs, node.transformChildren(config));
+    },
+  });
+  return {
+    light:     wrap('span', 'w-l'),
+    small:     wrap('span', 't-s'),
+    large:     wrap('span', 't-l'),
+    underline: wrap('u', null),
+  };
+}
+
+/* SOFT BREAKS ARE HARD BREAKS HERE.
+
+   Markdoc drops a single newline, joining the lines with a space — the exact
+   behaviour that flattened a credit list into one running sentence under the
+   previous CMS. A line typed as a line stays a line. */
+function markdocNodes(M) {
+  return {
+    softbreak: { transform: () => new M.Tag('br') },
+  };
+}
+
+function renderMarkdoc(src, label) {
+  const M = markdoc(label);
+  let ast;
+  try { ast = M.parse(String(src)); }
+  catch (e) { fail(`${label}: could not parse the description — ${e.message}`); }
+
+  const content = M.transform(ast, { tags: markdocTags(M), nodes: markdocNodes(M) });
+  let html = M.renderers.html(content);
+
+  // the html renderer wraps everything in <article>; the window supplies its
+  // own container, so unwrap rather than style a tag nothing else uses
+  html = html.replace(/^\s*<article>/, '').replace(/<\/article>\s*$/, '');
+  return html.trim();
+}
+
+/* THE HAND-ROLLED MARKER LAYER USED TO LIVE HERE, AND IS GONE.
+
+   HTML escaping, ++underline++, [small]…[/small] and friends, unclosed-tag
+   detection, stripping the backslashes Decap added to every square bracket,
+   mapping ## to a size step — roughly a hundred lines of string matching that
+   could only ever approximate a parser.
+
+   `renderMarkdoc` above replaced all of it. That is what the one dependency
+   bought: @markdoc/markdoc has no dependencies of its own, and in exchange the
+   text pipeline became a real AST walk instead of a stack of regular
+   expressions each of which had to be right about the others.
+
+   The `.json` reader went with it. Every project is `.mdoc` now; a stray
+   `.json` in content/projects/ would be a file no editor wrote. */
+
+/* PLAIN TEXT — for the fields that are NOT body copy.
+
+   Share descriptions and the site description end up in a link preview and a
+   search result, where a `<strong>` is not bold text, it is the characters
+   `<strong>`. These collapse to one line and carry no markup at all, which is
+   also why they are not escaped: nothing here reaches innerHTML. */
+function plainText(text, label) {
   if (text === undefined || text === null || !String(text).trim()) return null;
-  const parts = String(text).replace(/\r\n/g, '\n').split(/\n\s*\n/)
-    .map(s => s.trim().replace(/\s*\n\s*/g, ' ')).filter(Boolean);
-  if (!parts.length) fail(`${label}: description is present but contains no text`);
-  return parts.length === 1 ? parts[0] : parts;
+  const flat = String(text).replace(/\r\n/g, '\n').replace(/\s*\n\s*/g, ' ').trim();
+  if (!flat) fail(`${label}: field is present but contains no text`);
+  return flat;
 }
 
 /* ---------------------------------------------------------------- fields */
@@ -281,7 +373,8 @@ function buildProject(p, label) {
 
   const out = { title, details: needList(p, 'details', label) };
 
-  const summary = paragraphs(p.summary, label);
+  const summary = (p.summary && typeof p.summary.markdoc === 'string')
+    ? (renderMarkdoc(p.summary.markdoc, label) || null) : null;
   if (summary !== null) out.summary = summary;
 
   out.icon = buildIcon(p, label);
@@ -306,7 +399,7 @@ function buildProject(p, label) {
      (PLAN.md, Phase 5). buildData() reads named fields and ignores the rest, so
      carrying it is inert today. Dropping it would silently discard something a
      human typed into a form, which is the worse failure. */
-  const share = paragraphs(p.share_description, label);
+  const share = plainText(p.share_description, label);
   if (share !== null) out.shareDescription = Array.isArray(share) ? share[0] : share;
 
   // kept so the authored value survives the build; see the note in the PR /
@@ -318,20 +411,79 @@ function buildProject(p, label) {
 
 /* ----------------------------------------------------------------- gather */
 
+/* TWO FILE FORMATS ON DISK, ON PURPOSE.
+
+   Decap wrote `content/projects/vessel.json` — pure JSON, description as a
+   string.
+
+   Keystatic writes `content/projects/vessel.mdoc` — JSON frontmatter between
+   `---` fences, then the rich text as Markdoc:
+
+       ---
+       { "title": "Big Deal Project", "section": "build", ... }
+       ---
+       this is {% large %}{% underline %}test{% /underline %}{% /large %}.
+
+   This shape was READ OFF A FILE THE EDITOR ACTUALLY WROTE. An earlier version
+   of this function expected a folder per entry holding index.json and
+   summary.mdoc, which is what `format: { data: 'json', contentField: 'summary' }`
+   sounded like it would produce. It produces neither of those filenames. The
+   lesson is the same one this project keeps learning: read the bytes.
+
+   Both formats are read here, and that is what makes the migration
+   survivable. Entries move one at a time, the site builds at every point in
+   between, and nothing has to convert in a single irreversible pass. When the
+   last loose `.json` is gone, the legacy branch can be deleted.
+
+   THE SLUG COMES FROM THE FILENAME. Keystatic stores it there rather than as a
+   field — `slugField: 'title'` names the field the slug is DERIVED from, not a
+   field it writes. So the filename is the permanent address, which is also why
+   renaming a file is renaming a URL. */
+function parseMdoc(raw, label) {
+  if (!raw.startsWith('---')) {
+    fail(`${label}: expected JSON frontmatter between --- fences and found none.`);
+  }
+  // find the CLOSING fence only — the body may legitimately contain `---`,
+  // which is exactly what the editor's divider button writes
+  const end = raw.indexOf('\n---', 3);
+  if (end === -1) fail(`${label}: frontmatter opens with --- but never closes.`);
+
+  const head = raw.slice(3, end).trim();
+  const body = raw.slice(end + 4).replace(/^\r?\n/, '');
+
+  let data;
+  try { data = JSON.parse(head); }
+  catch (e) { fail(`${label}: the frontmatter is not valid JSON — ${e.message}`); }
+
+  if (body.trim()) data.summary = { markdoc: body };
+  return data;
+}
+
+function readProjectEntry(entry) {
+  const abs = path.join(PROJECTS_DIR, entry.name);
+  const label = path.relative(ROOT, abs);
+  const base = entry.name.replace(/\.(mdoc|json)$/i, '');
+
+  const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
+  // the filename IS the slug; buildProject requires the field, so supply it
+  if (!raw.slug) raw.slug = base;
+  return { raw, label, key: base };
+}
+
 function loadProjects() {
   if (!fs.existsSync(PROJECTS_DIR)) {
     fail(`content/projects/ does not exist. The CMS writes project files there; the repository layout is wrong.`);
   }
-  const files = fs.readdirSync(PROJECTS_DIR).filter(f => f.toLowerCase().endsWith('.json')).sort();
-  if (!files.length) warn('content/projects/ contains no .json files — every section will be empty.');
+  const entries = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })
+    .filter(e => e.isFile() && /\.mdoc$/i.test(e.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!entries.length) warn('content/projects/ contains no projects — every section will be empty.');
 
   const kept = [];
-  for (const f of files) {
-    const abs = path.join(PROJECTS_DIR, f);
-    const label = path.relative(ROOT, abs);
-    const raw = readJSON(abs);
+  for (const entry of entries) {
+    const { raw, label, key } = readProjectEntry(entry);
     if (raw && raw.draft === true) continue;            // held back, not published
-    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label), file: f });
+    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label), file: key });
   }
   return kept;
 }
@@ -357,7 +509,7 @@ function assemble() {
 
   const aboutRaw = readJSON(aboutFile);
   const aboutLabel = 'content/about.json';
-  const aboutSummary = paragraphs(need(aboutRaw, 'summary', aboutLabel), aboutLabel);
+  const aboutSummary = renderMarkdoc(need(aboutRaw, 'summary', aboutLabel), aboutLabel);
   const about = {
     title:   need(aboutRaw, 'title', aboutLabel),
     details: needList(aboutRaw, 'details', aboutLabel),
@@ -373,7 +525,7 @@ function assemble() {
   const contact = { email };
   // the contact form is hand-built outside the data contract and has no intro
   // slot yet; carried rather than discarded, same reasoning as shareDescription
-  const intro = paragraphs(contactRaw.intro, contactLabel);
+  const intro = plainText(contactRaw.intro, contactLabel);
   if (intro !== null) contact.intro = intro;
 
   const siteRaw = readJSON(siteFile);
@@ -386,7 +538,7 @@ function assemble() {
     sections,
   };
   // Phase 5 metadata: collected now, consumed when the share/search tags land
-  const desc = paragraphs(siteRaw.description, siteLabel);
+  const desc = plainText(siteRaw.description, siteLabel);
   if (desc !== null) content.description = Array.isArray(desc) ? desc[0] : desc;
   if (siteRaw.share_image && String(siteRaw.share_image).trim()) {
     const src = String(siteRaw.share_image).trim();
@@ -468,24 +620,24 @@ function main() {
   let copied = 0;
   if (fs.existsSync(IMAGES_DIR)) copied = copyDir(IMAGES_DIR, path.join(DIST, 'images'));
 
-  /* THE CMS ITSELF SHIPS TOO. Decap is served from /admin, and the publish
-     directory is dist — so without this copy the editor is simply not on the
-     deployed site and there is no way in to change anything.
-     Unlike images/, a missing admin/ is a FAILURE and not a skip: it is
-     checked-in source, not uploaded content, so its absence means the
-     repository is wrong rather than merely empty. Publishing a site whose
-     editor silently vanished is the exact class of quiet half-build this
-     script exists to prevent. */
-  if (!fs.existsSync(ADMIN_DIR)) {
-    fail('admin/: not found at the repository root. Decap CMS is served from /admin and would be missing from the deployed site.');
+
+
+  /* THE TYPEFACE SHIPS TOO. index.html asks for /fonts/*.woff2 by URL, so a
+     missing fonts/ means every request 404s and the whole site silently falls
+     back to system-ui — legible, but not the design, and with nothing in the
+     build output to say so.
+     Same reasoning as admin/: checked-in source, so absence is a broken
+     repository rather than an empty one, and it FAILS rather than skips. */
+  if (!fs.existsSync(FONTS_DIR)) {
+    fail('fonts/: not found at the repository root. index.html references /fonts/*.woff2 and the site would fall back to system fonts.');
   }
-  const adminFiles = copyDir(ADMIN_DIR, path.join(DIST, 'admin'));
+  const fontFiles = copyDir(FONTS_DIR, path.join(DIST, 'fonts'));
 
   const count = content.sections.reduce((n, s) => n + s.projects.length, 0);
   console.log(
     `built dist/index.html — ${count} project${count === 1 ? '' : 's'} across ` +
     `${content.sections.length} sections, ${copied} image file${copied === 1 ? '' : 's'} copied, ` +
-    `${adminFiles} admin file${adminFiles === 1 ? '' : 's'} copied`
+    `${fontFiles} font file${fontFiles === 1 ? '' : 's'} copied`
   );
 }
 

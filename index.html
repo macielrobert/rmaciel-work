@@ -10,6 +10,60 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <title>SVG Noise Lab — v80</title>
 <style>
+  /* =======================================================================
+     TYPEFACE — PP Neue Montreal, three static cuts, served as files.
+
+     NOT INLINED AS BASE64, and that is a deliberate reversal of the
+     one-request rule everywhere else in this project. Three cuts are ~90 KB;
+     base64 inflates a binary by about a third, so inlining would have put
+     ~120 KB inside the HTML document itself — and the document must arrive
+     in full before anything paints. This site is built the other way round:
+     a black shell paints immediately and boot() runs after. Inlining the
+     typeface would have undone the one behaviour the whole boot sequence
+     exists to protect.
+
+     As separate files with font-display: swap they load in parallel, off the
+     critical path, and cache independently across visits. The cost is three
+     extra requests. That was raised and accepted rather than assumed.
+
+     NOT A VARIABLE FONT. These files carry no fvar/gvar/STAT table — they are
+     five separate static instances, of which three ship. So weight and slant
+     come from the FILES, and font-variation-settings has nothing to act on.
+     Asking for a weight these files do not contain gets a synthesised one:
+     a smeared fake-bold, not the real cut. Only 400 and 700 exist here.
+
+     WHY THESE THREE. Book is the body. Bold and Italic exist for the text
+     formatting work. BoldItalic (+31 KB) is omitted until something actually
+     needs bold and italic at once — until then a browser synthesises it, and
+     the combination may never appear. Light shipped once the text-formatting
+     work gave it something to do — before that it was 29 KB of nothing.
+     BoldItalic remains in the repository history if that changes too.
+
+     THREE REAL WEIGHTS: 300, 400, 700. Nothing between them exists. Asking
+     for 500 gets a synthesised weight — the browser smearing the 400 — which
+     is why the size and weight controls offer named steps and not a number.
+     ======================================================================= */
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Light.woff2') format('woff2');
+    font-weight: 300; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Book.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'PP Neue Montreal';
+    src: url('/fonts/PPNeueMontreal-Italic.woff2') format('woff2');
+    font-weight: 400; font-style: italic; font-display: swap;
+  }
+
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
   /* WebKit inflates text on rotation to landscape unless told not to —
      this pins every size to its authored px value in both orientations */
@@ -41,29 +95,52 @@
        was the last element still growing with the viewport. It stops too
        now, and the extra room becomes space rather than longer lines.
 
-       In a monospace face `ch` IS the character advance, so 66ch is EXACTLY
-       66 characters — not an estimate. It resolves against the window's 11px
-       text, so a later type-size change widens the column on its own and the
-       character COUNT holds. And because it CAPS rather than switches, no
-       breakpoint is needed: a phone in portrait only reaches 48ch and never
-       feels it. 66 is the middle of the comfortable 45-75 range. */
-    --measure: 66ch;
+       WAS 66ch, AND `ch` NO LONGER MEANS WHAT IT MEANT. In a monospace face
+       `ch` IS the character advance, so 66ch was EXACTLY 66 characters. In a
+       proportional face `ch` is only the width of the digit zero, which is
+       one of the WIDER glyphs — keeping 66ch here would have held roughly 80
+       characters per line and quietly pushed the measure past the comfortable
+       range while still reading as "66" in the source. Worse than wrong: wrong
+       and self-documenting as right.
+
+       So the unit changes with the typeface. Average Latin lowercase runs
+       ~0.5em per character, so 66 characters is ~33em. This is an ESTIMATE
+       where the old value was a guarantee — that is the real cost of leaving
+       monospace, and it is worth saying plainly rather than pretending the
+       number is still exact.
+
+       `em` keeps the one property that mattered: it resolves against the
+       window's 11px text, so a later type-size change widens the column on its
+       own and the character count holds. Still a CAP, not a breakpoint — a
+       phone in portrait never reaches it. 66 characters is the middle of the
+       comfortable 45-75 range.
+
+       TUNE THIS against the real face once it is in: set copy at this width,
+       count the characters on a full line, and adjust if it lands outside
+       55-70. */
+    --measure: 33em;
     /* THE SAME IDEA, DIFFERENT JOB. --measure is a fact about READING: a line
        of prose stops being comfortable past ~75 characters. A form is not
        prose — its fields are targets to hit, not lines to follow — so the
        reading measure only makes them needlessly small. The form gets its own,
        wider cap.
-       Still a CAP, still in ch, still absolute: the taskbar rule holds, only
-       the number changes. 96ch lands at roughly the left half of a laptop
-       window and stops there, so a 27" monitor gains space around the form
-       rather than a wider one. */
-    --measure-form: 96ch;
+       Still a CAP, still absolute: the taskbar rule holds, only the number
+       changes. It lands at roughly the left half of a laptop window and stops
+       there, so a 27" monitor gains space around the form rather than a wider
+       one.
+
+       WAS 96ch. Converted with the same reasoning as --measure above, but on
+       a different basis: this value was never a character count, so what is
+       preserved is its RATIO to the reading measure — it was 1.45x, and 33em
+       x 1.45 is 48em. A form that stops being comfortably wider than the prose
+       column has lost the only thing this variable exists to say. */
+    --measure-form: 48em;
     width: 100vw;
     height: 100vh;
     height: 100dvh;                           /* mobile address-bar aware */
     background: var(--bg);
     color: var(--ink);
-    font-family: monospace;
+    font-family: 'PP Neue Montreal', system-ui, -apple-system, 'Segoe UI', sans-serif;
     display: flex;
     /* Orientation is now FIXED: contact top, menu bottom, all screens.
        (Was menu-top on desktop; the contact brief pins the top half.) */
@@ -441,10 +518,131 @@
      mark. */
   #nl-window.l-grid .body      { max-height: var(--body-clamp, 84px); overflow: hidden; }
   #nl-window.l-grid.more .body { max-height: none; overflow: visible; }
+
+  /* =======================================================================
+     TEXT FORMATTING — the marks build.js emits from the CMS copy.
+
+     These are the ONLY elements that appear inside body copy. build.js
+     escapes the author's text first and then emits this fixed set, so the
+     CMS cannot introduce any other tag: what is styled here is the whole
+     vocabulary, not a starting point.
+
+     WHY NAMED STEPS AND NOT NUMBERS. Three weights exist as files — 300,
+     400, 700 — and nothing between them. A free numeric control would let
+     the author pick 500 and get a synthesised smear that looks like a bad
+     render rather than a choice. Same for size: free values fight the 33em
+     reading measure and overflow the column. Both are therefore closed sets.
+
+     em, NOT px, on the sizes: they resolve against the 11px body text, so a
+     later type-size change carries them along instead of stranding them.
+
+     THESE STILL CHURN. spanify() walks into child elements, so characters
+     inside a <strong> or a size span resolve out of noise like any other
+     text. Formatting does not opt copy out of the transition. */
+  #nl-window-text strong, #nl-about-text strong { font-weight: 700; }
+  #nl-window-text em,     #nl-about-text em     { font-style: italic; }
+  #nl-window-text u,      #nl-about-text u {
+    text-decoration: underline;
+    /* the default underline sits on the baseline and cuts descenders; at
+       11px that reads as a strikethrough on g, p and y */
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+  /* weight: light. Bold is <strong>; there is no third weight class. */
+  #nl-window-text .w-l, #nl-about-text .w-l { font-weight: 300; }
+  /* size: small and large. Normal needs no class — it is the absence of one. */
+  #nl-window-text .t-s, #nl-about-text .t-s { font-size: 0.85em; }
+  #nl-window-text .t-l, #nl-about-text .t-l { font-size: 1.27em; }
+
+  /* ---- BLOCK STRUCTURE from the rich-text editor -----------------------
+     Markdoc emits real elements now, where the old marker layer emitted a
+     string joined with <br><br>. Every element below corresponds to a button
+     in the editor; the two lists are one decision (see keystatic.config.tsx).
+     Anything NOT here has no button, and a button with no rule here would
+     render nothing — which is why neither list may grow alone. */
+
+  /* paragraphs replace the old double-break convention. The last one carries
+     no trailing space, so a body never pushes the layout below it. */
+  #nl-window-text .body p, #nl-about-text p { margin: 0 0 1em; }
+  #nl-window-text .body p:last-child, #nl-about-text p:last-child { margin-bottom: 0; }
+
+  /* LISTS sit inside the reading measure rather than outdenting past it: the
+     text column starts at a left margin everywhere else on the site, and a
+     bullet hanging into that margin would be the only thing breaking it. */
+  #nl-window-text .body ul, #nl-window-text .body ol,
+  #nl-about-text ul, #nl-about-text ol { margin: 0 0 1em; padding-left: 1.4em; }
+  #nl-window-text .body li, #nl-about-text li { margin: 0 0 0.25em; }
+
+  /* QUOTE — marked by a rule in the margin, not by italics or quotation
+     marks, both of which already mean something else here. */
+  #nl-window-text .body blockquote, #nl-about-text blockquote {
+    margin: 0 0 1em; padding-left: 1em;
+    border-left: 1px solid rgba(143,143,153,0.5);
+  }
+  #nl-window-text .body blockquote p:last-child,
+  #nl-about-text blockquote p:last-child { margin-bottom: 0; }
+
+  /* DIVIDER — a hairline at the same accent grey as the seam between the two
+     halves of the page, so the one horizontal rule in the copy matches the
+     one horizontal rule in the layout. */
+  #nl-window-text .body hr, #nl-about-text hr {
+    border: 0; height: 1px; margin: 1.6em 0;
+    background: rgba(143,143,153,0.5);
+  }
+
+  /* LINK — underlined, offset to clear descenders like the underline mark,
+     and inheriting ink rather than introducing a colour. This site has two
+     colours; a link is not the place to add a third. */
+  #nl-window-text .body a, #nl-about-text a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+    transition: color 0.18s ease;
+  }
+  /* Hover DIMS rather than brightens: everywhere else on this site the
+     accent grey is the resting state and ink is the active one — the footer,
+     the caret, the close mark all go grey -> ink on hover. A link starts at
+     ink because it is content, so it has to travel the other way to say the
+     same thing. Focus matches, for the keyboard. */
+  #nl-window-text .body a:focus, #nl-about-text a:focus { color: rgba(143,143,153,0.9); }
+  @media (hover: hover) {
+    #nl-window-text .body a:hover, #nl-about-text a:hover { color: rgba(143,143,153,0.9); }
+  }
+
+  /* STRIKETHROUGH */
+  #nl-window-text .body s, #nl-about-text s { text-decoration: line-through; }
+
+  /* INLINE CODE has no button — it is off in the editor. This rule exists
+     because Markdoc still honours backticks typed by hand, and unstyled
+     <code> would inherit a proportional face and look like a mistake rather
+     than a choice. The site ships no monospace, so this borrows the system's
+     and accepts that it is the one place a fifth typeface appears. */
+  #nl-window-text .body code, #nl-about-text code {
+    font-family: ui-monospace, Menlo, Monaco, monospace;
+    font-size: 0.92em;
+  }
   #nl-window.l-grid.more #nl-main        { flex: 1 1 auto; min-height: 0; }
   #nl-window.l-grid.more #nl-window-text { height: 100%; overflow-y: auto; }
   #nl-window.l-grid.more #nl-car         { display: none; }   /* copy covers the grid */
 
+  /* THE CARET IS DRAWN, NOT TYPED.
+     It used to be two characters swapped by JS — U+2304 down, U+2303 up.
+     Neither is in PP Neue Montreal, so BOTH fell through to the fallback
+     stack, and a fallback stack resolves each codepoint independently: the
+     two halves of one control could arrive from two different installed
+     fonts, at different weights and different optical sizes. The open and
+     closed states visibly disagreed, and which fonts you had decided how
+     badly.
+
+     Two borders on a rotated box has no such dependency. The closed and open
+     states are the SAME shape 180 degrees apart, so they are exact mirrors by
+     construction rather than by hoping two glyphs were designed as a pair.
+     It also finally matches the other controls: x and <- ARE in the typeface,
+     and a fallback caret sitting beside them never could.
+
+     currentColor keeps the existing colour, focus and hover rules working
+     untouched; sizing in em keeps it tracking the type. */
   #nl-more {
     display: none;
     flex: 0 0 auto; align-self: flex-start;
@@ -455,6 +653,20 @@
     pointer-events: auto; cursor: pointer;
     user-select: none;
   }
+  #nl-more::before {
+    content: '';
+    display: block;
+    width: 0.46em; height: 0.46em;
+    border-right:  1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    /* 45deg puts the open corner at the bottom: a chevron pointing DOWN */
+    transform: rotate(45deg);
+    /* the drawn mark sits high in its box once rotated; nudge it back onto
+       the optical centre. Identical in both states, so it cannot desync. */
+    margin: -0.12em 0 0.12em 0;
+  }
+  /* OPEN: the same shape, half a turn. Not a second glyph — the same one. */
+  #nl-window.l-grid.more #nl-more::before { transform: rotate(225deg); }
   /* shown only when the copy actually overflows its clamp */
   #nl-window.l-grid #nl-more.on   { display: block; }
   #nl-window.l-grid.x #nl-more    { display: none; }
@@ -757,7 +969,7 @@
     <!-- 'read more' caret: opens a clamped body to full height in l-grid.
          Sits between the text region and the images because that is exactly
          where it acts. Non-churn: it is a control, not copy. -->
-    <span id="nl-more" role="button" tabindex="0" aria-expanded="false" aria-label="Read more">&#x2304;</span>
+    <span id="nl-more" role="button" tabindex="0" aria-expanded="false" aria-label="Read more"></span>
     <!-- carousel HOST, pinned to the window's foot — the POSITION is shared,
          the carousels are not: one strip per entry is built in boot() from
          each entry's images and display-swapped in sync with the text. The
@@ -2133,11 +2345,14 @@ void main() {
   // its mirror — tap the coherent thing to dissolve it, the same gesture as
   // the frozen icon and the active thumb.
   const moreEl = document.getElementById('nl-more');
-  const CARET_DOWN = '\u2304', CARET_UP = '\u2303';
 
+  // The mark itself is CSS (see #nl-more::before) — the `more` class on the
+  // window turns it over. No character swap: the two states were two separate
+  // codepoints, neither in the typeface, and they arrived from whatever
+  // fallback fonts the visitor happened to have. Only the accessible state
+  // is set here; a screen reader never saw the glyph anyway.
   function setMore(on) {
     winEl.classList.toggle('more', on);
-    moreEl.textContent = on ? CARET_UP : CARET_DOWN;
     moreEl.setAttribute('aria-expanded', on ? 'true' : 'false');
     moreEl.setAttribute('aria-label', on ? 'Show less' : 'Read more');
   }

@@ -1,20 +1,30 @@
 # Netlify build configuration.
 #
 # WHY THIS FILE EXISTS RATHER THAN THE SETTINGS PANEL:
-#   The build command and publish directory are now facts about the repository,
-#   not preferences about the host. index.html no longer stands alone — its
-#   CONTENT block is empty and build.js fills it — so publishing the repo root
-#   would serve a site with no content in it. Keeping that here means the repo
-#   carries its own build instructions and a fresh Netlify site cannot be
-#   wired up wrong.
+#   The build command and publish directory are facts about the repository,
+#   not preferences about the host. Keeping them here means the repo carries
+#   its own build instructions and a fresh Netlify site cannot be wired wrong.
 #
-# NOTE: settings entered in the Netlify UI are OVERRIDDEN by this file. If a
-# build ever seems to ignore the panel, this is why.
-#
-# There is no install step and no package.json — build.js runs on Node
-# built-ins only, so Netlify's default Node is sufficient and nothing here
-# needs to track a dependency.
+# NOTE: settings entered in the Netlify UI are OVERRIDDEN by this file.
 
 [build]
-  command = "node build.js"
+  # ORDER IS LOAD-BEARING, NOT COSMETIC.
+  #
+  # `node build.js` DELETES dist/ and rebuilds it from scratch — that is
+  # deliberate, so a stale file from a previous build can never survive and
+  # ship. `astro build` then writes the editor's assets alongside, with
+  # emptyOutDir disabled so it adds to dist/ instead of wiping it.
+  #
+  # Reverse these two and the site disappears from the deploy.
+  #
+  # The two halves stay independent on purpose: `node build.js` alone still
+  # produces the whole site, on Node built-ins, with node_modules deleted.
+  # If the Keystatic experiment is abandoned, removing the second half and the
+  # dependencies leaves the site build exactly as it was.
+  command = "npm run build"
   publish = "dist"
+
+[build.environment]
+  # Astro 7 needs a current Node. Pinned rather than left to Netlify's
+  # default, which moves without notice.
+  NODE_VERSION = "22"
