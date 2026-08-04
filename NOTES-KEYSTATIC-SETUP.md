@@ -1,6 +1,7 @@
-# Keystatic — GitHub App setup
+# Keystatic — setup, renderer and the review-step gap
 
-**Branch:** `keystatic-spike`
+**Merged and live.** The editor is at `/keystatic`; Decap and `admin/` are
+gone. Read this before changing anything about the CMS.
 
 Keystatic's GitHub storage does not use a plain OAuth app the way Decap does.
 It needs **a GitHub App you create once**, plus four environment variables in
@@ -164,9 +165,10 @@ The slug comes from the FILENAME. `slugField: 'title'` names the field the slug
 is derived from, not a field Keystatic writes — so renaming a file renames a
 URL.
 
-`build.js` reads both. That is what makes the migration survivable: entries
-move one at a time and the site builds at every point in between. When the last
-loose `.json` is gone, the legacy branch can be deleted.
+**The `.json` reader has since been removed.** It existed only so entries could
+migrate one at a time with the site building at every point in between. All
+fifteen are `.mdoc` now, so a stray `.json` in `content/projects/` would be a
+file no editor wrote.
 
 ## The dependency, and the escape hatch
 
@@ -186,15 +188,16 @@ one running sentence.
 - [x] `<script>alert(1)</script>` renders as visible text, not as a script
 - [x] Bare `<` and `&` survive as characters
 - [x] Single line breaks preserved as `<br>`
-- [x] Legacy Decap entries still render through the old marker path
+- [x] All fifteen projects render identically to before the migration —
+      compared on text, marks, slugs, details, layout, expand and icons
 - [x] `node build.js` succeeds with `node_modules` deleted
 - [x] CSS braces balanced; script parses
 
 ## Still to check on a preview
 
-- [ ] Save a project through the editor and confirm the `.mdoc` on the branch
-      matches the syntax above — the tag format is verified from Keystatic's
-      source, but not yet from a file Keystatic actually wrote.
+- [x] Confirmed against a file the editor actually wrote. The tag syntax was
+      right; the FILE LAYOUT was not — see above. Reading real bytes beat
+      reasoning about the config three separate times in this migration.
 - [ ] How formatted text behaves through the character churn. `spanify()` walks
       into child elements, so it should churn normally, but a size span changes
       the line box mid-animation and that has not been seen.

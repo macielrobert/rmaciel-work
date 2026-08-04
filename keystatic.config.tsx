@@ -1,23 +1,23 @@
 /* =========================================================================
-   Keystatic configuration — SPIKE
+   Keystatic configuration — THE CMS. Live at /keystatic.
    =========================================================================
 
-   PURPOSE OF THIS FILE, RIGHT NOW: prove the editor can be served, logged
-   into against a PRIVATE repository, and used on a phone. Nothing here has
-   been used to write real content yet, and `build.js` does not read any of
-   it. Decap remains the working CMS at /admin until this is judged.
-
    THE WHOLE REASON THIS EXISTS is the `mark()` calls further down. Decap's
-   toolbar takes names from a fixed built-in list and cannot be extended, so
-   underline, weight and size could only ever be typed as bracket tags. Here
-   a custom mark REQUIRES an icon — the type will not compile without one —
-   so a formatting control cannot exist without a button. That inversion is
-   the entire argument for the migration.
+   toolbar took names from a fixed built-in list and could not be extended, so
+   underline, weight and size could only ever be TYPED as bracket tags — a tax
+   that grows with the archive. Here a custom mark REQUIRES an icon: the type
+   will not compile without one, so a formatting control cannot exist without a
+   button. That inversion is the entire argument for the migration, and it is
+   the only reason the cost below was worth paying.
 
-   STORAGE: `format: { data: 'json', contentField: 'summary' }` keeps entry
-   data as JSON, which `JSON.parse` still reads with no dependency, and puts
-   only the rich text in a `.mdoc` file. So the build gains ONE parser for
-   prose and keeps its dependency-free path for everything else.
+   STORAGE: `format: { data: 'json', contentField: 'summary' }` writes one
+   `content/projects/<slug>.mdoc` per project — JSON frontmatter between `---`
+   fences, then the rich text as Markdoc. Entry data stays JSON, which
+   `JSON.parse` reads with no dependency; only prose needs the parser.
+
+   THIS FILE AND TWO OTHERS ARE ONE DECISION. A button here writes markup;
+   `build.js` must map it; `index.html` must style it. A button with no
+   renderer entry produces NOTHING, silently. None of the three may grow alone.
    ========================================================================= */
 
 import { config, fields, collection, singleton } from '@keystatic/core';
