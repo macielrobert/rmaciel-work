@@ -58,27 +58,54 @@ const components = {
     className: 't-l',
     schema: {},
   }),
+  /* UNDERLINE IS A CUSTOM MARK HERE, not a built-in.
+     `fields.document` has an `inlineMarks.underline` option; `fields.markdoc`
+     does NOT — its option list is bold / italic / strikethrough / code and
+     nothing else. Checked against MarkdocEditorOptions rather than assumed a
+     second time. */
+  underline: mark({
+    label: 'Underline',
+    icon: strokeIcon('M6 4 L6 11 A6 6 0 0 0 18 11 L18 4|M5 20 L19 20'),
+    tag: 'u',
+    schema: {},
+  }),
 };
 
-/* Formatting offered in the editor. Deliberately narrow — every entry here
-   has to have a matching rule in the build, exactly as with Decap's toolbar.
-   `underline` is BUILT IN here, which it was not in Decap. */
-const formatting = {
-  inlineMarks: {
-    bold: true,
-    italic: true,
-    underline: true,
-  },
-  headingLevels: [2, 3] as const,
-  softBreaks: true,     // a single newline stays a line break
+/* THE TOOLBAR, STATED EXHAUSTIVELY.
+
+   Every one of these thirteen is named, including the ones set to false.
+   The first attempt listed three and assumed the rest defaulted off; they
+   defaulted ON, and the editor shipped with H1-H6, strikethrough, links,
+   lists, quotes, dividers and code blocks — every one of them able to write
+   markup the site has no rules for. A button that produces broken output is
+   worse than a missing button, and silence is not a setting.
+
+   HEADINGS ARE OFF. Under Decap a heading was borrowed to mean "large text",
+   because it was the only honest button available. That workaround is now
+   obsolete: `Larger` is a real mark. Headings would emit <h2> and <h3> that
+   index.html does not style, and six levels of hierarchy the layout has no
+   answer for.
+
+   What remains is exactly the vocabulary the site renders: bold, italic, and
+   the four custom marks. */
+const editorOptions = {
+  bold: true,
+  italic: true,
+  strikethrough: false,
+  code: false,
+  heading: false,
+  blockquote: false,
+  orderedList: false,
+  unorderedList: false,
+  table: false,
+  link: false,
+  image: false,
+  divider: false,
+  codeBlock: false,
 } as const;
 
 const description = (label: string) =>
-  fields.markdoc({
-    label,
-    components,
-    options: { image: false, link: false, table: false },
-  });
+  fields.markdoc({ label, components, options: editorOptions });
 
 export default config({
   storage: {
