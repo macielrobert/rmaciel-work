@@ -40,7 +40,6 @@ const SRC_HTML = path.join(ROOT, 'index.html');
 const CONTENT_DIR = path.join(ROOT, 'content');
 const PROJECTS_DIR = path.join(CONTENT_DIR, 'projects');
 const IMAGES_DIR = path.join(ROOT, 'images');
-const ADMIN_DIR = path.join(ROOT, 'admin');
 const FONTS_DIR = path.join(ROOT, 'fonts');
 const DIST     = path.join(ROOT, 'dist');
 
@@ -284,130 +283,32 @@ function renderMarkdoc(src, label) {
   return html.trim();
 }
 
-/* ------------------------------------------------------- text formatting */
+/* THE HAND-ROLLED MARKER LAYER USED TO LIVE HERE, AND IS GONE.
 
-/* ESCAPE FIRST, ALWAYS.
-   The site inserts body copy with innerHTML, so any `<` an author types would
-   otherwise be live markup. Escaping here and emitting a FIXED set of tags
-   afterwards means the vocabulary below is the complete list of what can ever
-   reach the page — not the list of what is expected to. */
-function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+   HTML escaping, ++underline++, [small]…[/small] and friends, unclosed-tag
+   detection, stripping the backslashes Decap added to every square bracket,
+   mapping ## to a size step — roughly a hundred lines of string matching that
+   could only ever approximate a parser.
 
-/* THE FORMATTING VOCABULARY.
+   `renderMarkdoc` above replaced all of it. That is what the one dependency
+   bought: @markdoc/markdoc has no dependencies of its own, and in exchange the
+   text pipeline became a real AST walk instead of a stack of regular
+   expressions each of which had to be right about the others.
 
-   Bold and italic are markdown, because the CMS gives them TOOLBAR BUTTONS
-   and the editor writes that syntax itself — nothing to memorise.
+   The `.json` reader went with it. Every project is `.mdoc` now; a stray
+   `.json` in content/projects/ would be a file no editor wrote. */
 
-   Underline, weight and size are bracket tags, because markdown has no
-   syntax for any of them. They share one shape so there is one rule to
-   remember rather than three: [name]...[/name].
-
-   Deliberately absent: headings, lists, quotes, links, images, code. The
-   markdown widget's toolbar is restricted in admin/config.yml to exactly the
-   buttons supported here, so no button can produce syntax this does not
-   understand. Adding one means adding both, together. */
-/* DECAP ESCAPES SQUARE BRACKETS. VERIFIED, NOT ASSUMED.
-
-   The editor's markdown serialiser treats `[` as the start of link syntax, so
-   saving `[small]ARTISTS[/small]` stores `\[small]ARTISTS\[/small]`. The
-   conversion below still matched, but the stray backslashes survived it and
-   would have shipped as visible `\` characters on the page.
-
-   `++underline++` came back untouched in the same save, so this is specific to
-   brackets rather than to unknown syntax in general.
-
-   Stripped rather than honoured: the author never types `\[` — the editor
-   adds it — so treating it as a deliberate escape would break the tag the
-   author meant. The cost is that a literal `[small]` cannot be written in
-   copy, which is a sentence nobody is going to want. */
-function unescapeBrackets(s) {
-  return s.replace(/\\([\[\]])/g, '$1');
-}
-
-function inlineFormat(s) {
-  return unescapeBrackets(s)
-    // bracket tags first: their contents may themselves contain bold/italic
-    .replace(/\[light\]([\s\S]+?)\[\/light\]/g, '<span class="w-l">$1</span>')
-    .replace(/\[small\]([\s\S]+?)\[\/small\]/g, '<span class="t-s">$1</span>')
-    .replace(/\[large\]([\s\S]+?)\[\/large\]/g, '<span class="t-l">$1</span>')
-    .replace(/\+\+(?=\S)([\s\S]+?)(?<=\S)\+\+/g, '<u>$1</u>')
-    // ** before *, __ before _ — otherwise the single-character rule eats the
-    // first half of a double marker and the result is mismatched tags
-    .replace(/\*\*(?=\S)([\s\S]+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(?=\S)([\s\S]+?)(?<=\S)__/g, '<strong>$1</strong>')
-    .replace(/\*(?=\S)([^*]+?)(?<=\S)\*/g, '<em>$1</em>')
-    // `_` only when it stands alone as a word boundary, so snake_case and
-    // file_names in the copy are left alone
-    .replace(/(^|[\s(])_(?=\S)([^_]+?)(?<=\S)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
-}
-
-/* PARAGRAPHS. The CMS collects one field with "blank line between paragraphs"
-   in the hint. buildData() accepts a string OR a list of strings and
-   normalises with paras(). Splitting here means the authoring convention is
-   honoured in one place rather than depending on downstream behaviour.
-
-   SINGLE LINE BREAKS ARE KEPT. They used to be collapsed into spaces, which
-   silently destroyed any copy laid out as lines rather than prose — a credit
-   list typed one name per line came out as one running sentence, with nothing
-   to indicate the author's line breaks had been thrown away. A blank line
-   still starts a new paragraph; a single newline is now a hard break, which is
-   what typing one plainly means. */
 /* PLAIN TEXT — for the fields that are NOT body copy.
+
    Share descriptions and the site description end up in a link preview and a
    search result, where a `<strong>` is not bold text, it is the characters
-   `<strong>`. These fields collapse to one line and carry no markup at all,
-   which is also why they do not get escaped: nothing here reaches innerHTML. */
+   `<strong>`. These collapse to one line and carry no markup at all, which is
+   also why they are not escaped: nothing here reaches innerHTML. */
 function plainText(text, label) {
   if (text === undefined || text === null || !String(text).trim()) return null;
   const flat = String(text).replace(/\r\n/g, '\n').replace(/\s*\n\s*/g, ' ').trim();
   if (!flat) fail(`${label}: field is present but contains no text`);
   return flat;
-}
-
-/* HEADING LINES -> THE LARGE STEP.
-
-   This exists so the size control can be a BUTTON rather than something the
-   author has to remember. Markdown headings are the only formatting Decap's
-   toolbar offers whose on-screen preview MATCHES what the site does: press
-   the heading button, the editor shows bigger text, the page shows bigger
-   text. Mapping some unrelated button — code, or blockquote — would have put
-   a control in the toolbar that previews as one thing and ships as another,
-   which is a trap rather than a feature.
-
-   EVERY heading level maps to the SAME step, on purpose and defensively.
-   There is one large size, not six, so a document cannot grow a hierarchy the
-   layout has no answer for — and it means the mapping holds whichever heading
-   button the CMS happens to render, which matters because the exact button
-   names could not be verified against Decap's source from the build sandbox.
-
-   Matched per LINE, not per paragraph: a heading typed among other lines in
-   one block still takes effect, which is how the credit lists are written. */
-function headingLines(html) {
-  return html.split('\n').map(line => {
-    const m = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line);
-    return m ? '<span class="t-l">' + m[1].trim() + '</span>' : line;
-  }).join('\n');
-}
-
-function paragraphs(text, label) {
-  if (text === undefined || text === null || !String(text).trim()) return null;
-  const parts = String(text).replace(/\r\n/g, '\n').split(/\n\s*\n/)
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => {
-      const html = headingLines(inlineFormat(escapeHtml(s)));
-      // an unclosed bracket tag is a typo the author cannot see the effect of
-      // — it would ship as literal "[large]" in the middle of a sentence
-      const stray = html.match(/\[\/?(?:light|small|large)\]/);
-      if (stray) {
-        fail(`${label}: unclosed formatting tag "${stray[0]}". Every [name] needs a matching [/name].`);
-      }
-      return html.replace(/\n/g, '<br>');
-    });
-  if (!parts.length) fail(`${label}: description is present but contains no text`);
-  return parts.length === 1 ? parts[0] : parts;
 }
 
 /* ---------------------------------------------------------------- fields */
@@ -472,11 +373,8 @@ function buildProject(p, label) {
 
   const out = { title, details: needList(p, 'details', label) };
 
-  /* Markdoc from Keystatic renders to HTML; a plain string is legacy Decap
-     copy and keeps the marker path until that entry is migrated. */
-  const summary = (p.summary && typeof p.summary === 'object' && typeof p.summary.markdoc === 'string')
-    ? (renderMarkdoc(p.summary.markdoc, label) || null)
-    : paragraphs(p.summary, label);
+  const summary = (p.summary && typeof p.summary.markdoc === 'string')
+    ? (renderMarkdoc(p.summary.markdoc, label) || null) : null;
   if (summary !== null) out.summary = summary;
 
   out.icon = buildIcon(p, label);
@@ -566,14 +464,10 @@ function readProjectEntry(entry) {
   const label = path.relative(ROOT, abs);
   const base = entry.name.replace(/\.(mdoc|json)$/i, '');
 
-  if (entry.name.toLowerCase().endsWith('.mdoc')) {
-    const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
-    // the filename IS the slug; buildProject requires the field, so supply it
-    if (!raw.slug) raw.slug = base;
-    return { raw, label, key: base };
-  }
-
-  return { raw: readJSON(abs), label, key: base };
+  const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
+  // the filename IS the slug; buildProject requires the field, so supply it
+  if (!raw.slug) raw.slug = base;
+  return { raw, label, key: base };
 }
 
 function loadProjects() {
@@ -581,7 +475,7 @@ function loadProjects() {
     fail(`content/projects/ does not exist. The CMS writes project files there; the repository layout is wrong.`);
   }
   const entries = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })
-    .filter(e => e.isFile() && /\.(json|mdoc)$/i.test(e.name))
+    .filter(e => e.isFile() && /\.mdoc$/i.test(e.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!entries.length) warn('content/projects/ contains no projects — every section will be empty.');
 
@@ -615,7 +509,7 @@ function assemble() {
 
   const aboutRaw = readJSON(aboutFile);
   const aboutLabel = 'content/about.json';
-  const aboutSummary = paragraphs(need(aboutRaw, 'summary', aboutLabel), aboutLabel);
+  const aboutSummary = renderMarkdoc(need(aboutRaw, 'summary', aboutLabel), aboutLabel);
   const about = {
     title:   need(aboutRaw, 'title', aboutLabel),
     details: needList(aboutRaw, 'details', aboutLabel),
@@ -726,18 +620,7 @@ function main() {
   let copied = 0;
   if (fs.existsSync(IMAGES_DIR)) copied = copyDir(IMAGES_DIR, path.join(DIST, 'images'));
 
-  /* THE CMS ITSELF SHIPS TOO. Decap is served from /admin, and the publish
-     directory is dist — so without this copy the editor is simply not on the
-     deployed site and there is no way in to change anything.
-     Unlike images/, a missing admin/ is a FAILURE and not a skip: it is
-     checked-in source, not uploaded content, so its absence means the
-     repository is wrong rather than merely empty. Publishing a site whose
-     editor silently vanished is the exact class of quiet half-build this
-     script exists to prevent. */
-  if (!fs.existsSync(ADMIN_DIR)) {
-    fail('admin/: not found at the repository root. Decap CMS is served from /admin and would be missing from the deployed site.');
-  }
-  const adminFiles = copyDir(ADMIN_DIR, path.join(DIST, 'admin'));
+
 
   /* THE TYPEFACE SHIPS TOO. index.html asks for /fonts/*.woff2 by URL, so a
      missing fonts/ means every request 404s and the whole site silently falls
@@ -754,7 +637,6 @@ function main() {
   console.log(
     `built dist/index.html — ${count} project${count === 1 ? '' : 's'} across ` +
     `${content.sections.length} sections, ${copied} image file${copied === 1 ? '' : 's'} copied, ` +
-    `${adminFiles} admin file${adminFiles === 1 ? '' : 's'} copied, ` +
     `${fontFiles} font file${fontFiles === 1 ? '' : 's'} copied`
   );
 }
