@@ -73,35 +73,54 @@ const components = {
 
 /* THE TOOLBAR, STATED EXHAUSTIVELY.
 
-   Every one of these thirteen is named, including the ones set to false.
-   The first attempt listed three and assumed the rest defaulted off; they
-   defaulted ON, and the editor shipped with H1-H6, strikethrough, links,
-   lists, quotes, dividers and code blocks — every one of them able to write
-   markup the site has no rules for. A button that produces broken output is
-   worse than a missing button, and silence is not a setting.
+   Every one of the thirteen settings is named, including the false ones.
+   An earlier version listed three and assumed the rest defaulted off; they
+   default ON. Silence is not a setting, so nothing here is left unsaid.
 
-   HEADINGS ARE OFF. Under Decap a heading was borrowed to mean "large text",
-   because it was the only honest button available. That workaround is now
-   obsolete: `Larger` is a real mark. Headings would emit <h2> and <h3> that
-   index.html does not style, and six levels of hierarchy the layout has no
-   answer for.
+   HEADINGS ARE OFF, and are the only omission.
+   Under Decap a heading was borrowed to mean "large text" because it was the
+   only honest button available. That workaround is obsolete now `Larger` is a
+   real mark. Headings would emit <h1>-<h6> that index.html does not style, and
+   six levels of hierarchy the layout has no answer for. Paragraph goes with
+   them: with no headings to switch back from, a block-type menu has one entry.
 
-   What remains is exactly the vocabulary the site renders: bold, italic, and
-   the four custom marks. */
+   EVERYTHING ELSE IS ON BY REQUEST — and each one is a promise the RENDERER
+   has to keep. A button here writes markup; the build has to turn that markup
+   into something the window can show. Until it does, these produce nothing on
+   the site. What each still needs, in build.js and in CSS:
+
+     strikethrough  <s>            a rule; trivial
+     link           <a>            styling, and a decision about how a link
+                                   behaves inside churning text
+     bullet list    <ul><li>       list styling inside the window measure
+     numbered list  <ol><li>       the same
+     divider        <hr>           a rule; it is a CONTROL-weight line, so it
+                                   must not churn
+     quote          <blockquote>   indent and measure
+     code block     <pre><code>    styling AND a monospace face — which this
+                                   site deliberately no longer ships. It would
+                                   fall back to the system mono, a fifth
+                                   typeface on a page with one chosen one.
+
+   Inline code and tables stay off: not asked for, and each carries the same
+   renderer debt. Inline images stay off because imagery belongs to the
+   `images` field, which the layout is built around.
+
+   Clear Formatting needs no setting — it appears wherever marks exist. */
 const editorOptions = {
   bold: true,
   italic: true,
-  strikethrough: false,
+  strikethrough: true,
   code: false,
   heading: false,
-  blockquote: false,
-  orderedList: false,
-  unorderedList: false,
+  blockquote: true,
+  orderedList: true,
+  unorderedList: true,
   table: false,
-  link: false,
+  link: true,
   image: false,
-  divider: false,
-  codeBlock: false,
+  divider: true,
+  codeBlock: true,
 } as const;
 
 const description = (label: string) =>
