@@ -4,9 +4,34 @@
 
 Keystatic's GitHub storage does not use a plain OAuth app the way Decap does.
 It needs **a GitHub App you create once**, plus four environment variables in
-Netlify. Until those exist, `/api/keystatic/github/login` returns an error with
-no content type and the browser **downloads a file called `login`** instead of
-redirecting. That symptom means "not configured", not "broken".
+Netlify.
+
+## The symptom, and exactly what causes it
+
+Clicking "Sign in with GitHub" **downloads an empty file called `login`**.
+
+That is not a fault in this repository's code. Traced to source in
+`@keystatic/core/api/generic`: when any of the three server variables is
+missing, Keystatic replaces its entire API handler with a stub —
+
+```js
+if (!clientId || !clientSecret || !secret) {
+  return async (req) => {
+    if (joined === 'github/login' || ...) return redirect('/keystatic/setup');
+    return { status: 404, body: 'Not Found' };
+  };
+}
+```
+
+— and `redirect()` returns `{ body: null, status: 307 }` with only a
+`Location` header. No content type, no body. Safari saves that as a file named
+after the last path segment: `login`.
+
+**An empty downloaded `login` file means "not configured" and nothing else.**
+The intended destination, `/keystatic/setup`, is worth opening directly — but
+note that Keystatic's *automatic* GitHub App creation refuses to run outside
+local development (`'App setup only allowed in development'`), so on a deployed
+preview the App still has to be created by hand, as below.
 
 Keystatic can create the App for you automatically, but only when running
 locally — the code refuses in production with *"App setup only allowed in
