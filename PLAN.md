@@ -197,8 +197,10 @@ Not now; revisit if the conditions appear.
 
 - [ ] **Lazy section build** — only if the project list grows substantially.
       Currently ~4,700 DOM nodes and 33 icon bakes at boot.
-- [ ] **Decap / Keystatic CMS** — the data contract is already CMS-shaped, so
-      adding one is additive, not a rewrite
+- [x] **CMS** — done twice. Decap arrived, hit its formatting ceiling, and was
+      replaced by Keystatic. The data contract was CMS-shaped exactly as
+      predicted: `buildData()` never changed for either. See
+      `NOTES-CMS-DECISION.md`.
 - [ ] **`<noscript>` block** — with JS off the page is blank. Six lines with
       your name and email would mean it's never truly empty.
 - [ ] **Move domain registration off Squarespace** — a transfer, not a

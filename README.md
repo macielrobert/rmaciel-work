@@ -13,7 +13,7 @@ Each does exactly one job. Nothing else.
 | **GitHub** | The filing cabinet. Every version of every file, kept forever. Nothing there is running. |
 | **Netlify** | The printer. Watches the cabinet, and whenever a file changes it rebuilds the site and puts it on the web. |
 | **`build.js`** | The assembler. Your words live in `content/` as small data files; the site lives in `index.html` with a hole in it. This pours the first into the second. |
-| **The CMS** (at `/admin`) | The form you type into, so you never open a data file by hand. |
+| **The CMS** (at `/keystatic`) | The form you type into, so you never open a data file by hand. |
 
 You do not upload anything, ever. You change words in the CMS and the rest happens on its own.
 
@@ -21,13 +21,13 @@ You do not upload anything, ever. You change words in the CMS and the rest happe
 
 ## To change something
 
-1. Go to your site's address with **`/admin`** on the end. Log in with GitHub.
-2. Edit what you want. **Projects** are the work; **Fixtures** are ABOUT, CONTACT, and the site settings.
+1. Go to your site's address with **`/keystatic`** on the end. Log in with GitHub.
+2. Edit what you want. **Projects** are the work; **Singletons** are ABOUT, CONTACT and the site settings.
 3. Press **Save**.
-4. Go to the **Workflow** tab. Your change is waiting there with its own preview link — a private copy of the site with your edit in it, which nobody else can see.
-5. Look at the preview. If it's right, press **Publish**. That is the button that makes it real.
 
-Saving does not publish. That is deliberate: it means you always see a change before the world does.
+**Saving publishes, right now.** This is the one thing that changed with the new editor and it is worth knowing: there is no review step in front of it. The old editor parked every change in a pull request first; this one writes straight to the live content.
+
+To get a review step back, click the branch name at the top of the editor and **create a branch** before you start editing. Your saves go there instead, and you can look at them on that branch's preview before merging. It is one extra click at the start of a session, and it is the difference between "seen it" and "hoped".
 
 ---
 
@@ -54,7 +54,8 @@ The build stops on purpose rather than publishing something broken, and it alway
 | `required field "details" is missing or empty` | A project is missing something it needs. |
 | `image "…" is referenced but does not exist` | An image was deleted but a project still points at it. |
 | `cannot measure "…"` | An image in a project's image list is the wrong format. Those must be **PNG or JPEG**. |
-| `is not valid JSON` | A data file got damaged — usually from editing it by hand instead of through the CMS. |
+| `the frontmatter is not valid JSON` | A project file got damaged — usually from editing it by hand instead of through the CMS. |
+| `needs the @markdoc/markdoc package` | Someone ran the build without installing first. |
 
 To read the actual message: open the failed deploy in Netlify and look for the line beginning `BUILD FAILED`.
 
@@ -65,6 +66,7 @@ Warnings are different from failures. `section "art" has no published projects` 
 ## Things not to do
 
 - **Don't edit `index.html` by hand to change words.** The CMS is the source of truth, and the next build will overwrite whatever you typed.
+- **Don't rename a project's URL slug once it's set.** It renames the file, which is the permanent address. A link you have already sent breaks.
 - **Don't open `index.html` from the filing cabinet expecting to see the site.** It has a deliberate hole in it where the content goes. To see the real thing, use a preview link.
 - **Don't touch anything to do with DNS, nameservers, MX or TXT records.** Your email runs on those. `PLAN.md` opens with four standing rules about this — read them before changing any domain setting anywhere.
 
