@@ -208,6 +208,82 @@ function needList(obj, key, label) {
   return v;
 }
 
+/* ------------------------------------------------------------- markdoc */
+
+/* THE ONE DEPENDENCY, LOADED ONLY WHEN IT IS NEEDED.
+
+   Keystatic stores rich text as Markdoc (`.mdoc`), which Node cannot parse
+   alone. `@markdoc/markdoc` has ZERO runtime dependencies — one package, no
+   tree — and it earns its place: parsing a real AST replaces the whole
+   hand-rolled marker layer below, and unknown syntax can no longer leak
+   through as literal characters.
+
+   `require`d lazily, inside the function that needs it, so a repository with
+   no `.mdoc` files still builds the entire site with node_modules deleted.
+   That escape hatch is the reason for the odd shape. */
+let _Markdoc = null;
+function markdoc(label) {
+  if (_Markdoc) return _Markdoc;
+  try { _Markdoc = require('@markdoc/markdoc'); }
+  catch {
+    fail(`${label}: this entry stores its description as Markdoc, which needs the @markdoc/markdoc package. Run \`npm install\` before building.`);
+  }
+  return _Markdoc;
+}
+
+/* THE RENDER VOCABULARY — the complete list of what can reach the page.
+
+   Each entry maps an editor button to markup index.html has a rule for. A
+   button with no entry here renders NOTHING, silently, which is why the
+   editor's toolbar in keystatic.config.tsx is restricted to exactly this set.
+   The two files are one decision; changing either alone breaks the pair.
+
+   The custom marks arrive as Markdoc TAGS named after their component key —
+   `{% light %}…{% /light %}` — verified against Keystatic's own deserializer,
+   not assumed. Their classes are the ones the site already styles. */
+function markdocTags(M) {
+  const wrap = (el, cls) => ({
+    render: el,
+    attributes: {},
+    transform(node, config) {
+      const attrs = cls ? { class: cls } : {};
+      return new M.Tag(el, attrs, node.transformChildren(config));
+    },
+  });
+  return {
+    light:     wrap('span', 'w-l'),
+    small:     wrap('span', 't-s'),
+    large:     wrap('span', 't-l'),
+    underline: wrap('u', null),
+  };
+}
+
+/* SOFT BREAKS ARE HARD BREAKS HERE.
+
+   Markdoc drops a single newline, joining the lines with a space — the exact
+   behaviour that flattened a credit list into one running sentence under the
+   previous CMS. A line typed as a line stays a line. */
+function markdocNodes(M) {
+  return {
+    softbreak: { transform: () => new M.Tag('br') },
+  };
+}
+
+function renderMarkdoc(src, label) {
+  const M = markdoc(label);
+  let ast;
+  try { ast = M.parse(String(src)); }
+  catch (e) { fail(`${label}: could not parse the description — ${e.message}`); }
+
+  const content = M.transform(ast, { tags: markdocTags(M), nodes: markdocNodes(M) });
+  let html = M.renderers.html(content);
+
+  // the html renderer wraps everything in <article>; the window supplies its
+  // own container, so unwrap rather than style a tag nothing else uses
+  html = html.replace(/^\s*<article>/, '').replace(/<\/article>\s*$/, '');
+  return html.trim();
+}
+
 /* ------------------------------------------------------- text formatting */
 
 /* ESCAPE FIRST, ALWAYS.
@@ -396,7 +472,11 @@ function buildProject(p, label) {
 
   const out = { title, details: needList(p, 'details', label) };
 
-  const summary = paragraphs(p.summary, label);
+  /* Markdoc from Keystatic renders to HTML; a plain string is legacy Decap
+     copy and keeps the marker path until that entry is migrated. */
+  const summary = (p.summary && typeof p.summary === 'object' && typeof p.summary.markdoc === 'string')
+    ? (renderMarkdoc(p.summary.markdoc, label) || null)
+    : paragraphs(p.summary, label);
   if (summary !== null) out.summary = summary;
 
   out.icon = buildIcon(p, label);
@@ -433,20 +513,83 @@ function buildProject(p, label) {
 
 /* ----------------------------------------------------------------- gather */
 
+/* TWO FILE FORMATS ON DISK, ON PURPOSE.
+
+   Decap wrote `content/projects/vessel.json` — pure JSON, description as a
+   string.
+
+   Keystatic writes `content/projects/vessel.mdoc` — JSON frontmatter between
+   `---` fences, then the rich text as Markdoc:
+
+       ---
+       { "title": "Big Deal Project", "section": "build", ... }
+       ---
+       this is {% large %}{% underline %}test{% /underline %}{% /large %}.
+
+   This shape was READ OFF A FILE THE EDITOR ACTUALLY WROTE. An earlier version
+   of this function expected a folder per entry holding index.json and
+   summary.mdoc, which is what `format: { data: 'json', contentField: 'summary' }`
+   sounded like it would produce. It produces neither of those filenames. The
+   lesson is the same one this project keeps learning: read the bytes.
+
+   Both formats are read here, and that is what makes the migration
+   survivable. Entries move one at a time, the site builds at every point in
+   between, and nothing has to convert in a single irreversible pass. When the
+   last loose `.json` is gone, the legacy branch can be deleted.
+
+   THE SLUG COMES FROM THE FILENAME. Keystatic stores it there rather than as a
+   field — `slugField: 'title'` names the field the slug is DERIVED from, not a
+   field it writes. So the filename is the permanent address, which is also why
+   renaming a file is renaming a URL. */
+function parseMdoc(raw, label) {
+  if (!raw.startsWith('---')) {
+    fail(`${label}: expected JSON frontmatter between --- fences and found none.`);
+  }
+  // find the CLOSING fence only — the body may legitimately contain `---`,
+  // which is exactly what the editor's divider button writes
+  const end = raw.indexOf('\n---', 3);
+  if (end === -1) fail(`${label}: frontmatter opens with --- but never closes.`);
+
+  const head = raw.slice(3, end).trim();
+  const body = raw.slice(end + 4).replace(/^\r?\n/, '');
+
+  let data;
+  try { data = JSON.parse(head); }
+  catch (e) { fail(`${label}: the frontmatter is not valid JSON — ${e.message}`); }
+
+  if (body.trim()) data.summary = { markdoc: body };
+  return data;
+}
+
+function readProjectEntry(entry) {
+  const abs = path.join(PROJECTS_DIR, entry.name);
+  const label = path.relative(ROOT, abs);
+  const base = entry.name.replace(/\.(mdoc|json)$/i, '');
+
+  if (entry.name.toLowerCase().endsWith('.mdoc')) {
+    const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
+    // the filename IS the slug; buildProject requires the field, so supply it
+    if (!raw.slug) raw.slug = base;
+    return { raw, label, key: base };
+  }
+
+  return { raw: readJSON(abs), label, key: base };
+}
+
 function loadProjects() {
   if (!fs.existsSync(PROJECTS_DIR)) {
     fail(`content/projects/ does not exist. The CMS writes project files there; the repository layout is wrong.`);
   }
-  const files = fs.readdirSync(PROJECTS_DIR).filter(f => f.toLowerCase().endsWith('.json')).sort();
-  if (!files.length) warn('content/projects/ contains no .json files — every section will be empty.');
+  const entries = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })
+    .filter(e => e.isFile() && /\.(json|mdoc)$/i.test(e.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!entries.length) warn('content/projects/ contains no projects — every section will be empty.');
 
   const kept = [];
-  for (const f of files) {
-    const abs = path.join(PROJECTS_DIR, f);
-    const label = path.relative(ROOT, abs);
-    const raw = readJSON(abs);
+  for (const entry of entries) {
+    const { raw, label, key } = readProjectEntry(entry);
     if (raw && raw.draft === true) continue;            // held back, not published
-    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label), file: f });
+    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label), file: key });
   }
   return kept;
 }

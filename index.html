@@ -553,6 +553,75 @@
   /* size: small and large. Normal needs no class — it is the absence of one. */
   #nl-window-text .t-s, #nl-about-text .t-s { font-size: 0.85em; }
   #nl-window-text .t-l, #nl-about-text .t-l { font-size: 1.27em; }
+
+  /* ---- BLOCK STRUCTURE from the rich-text editor -----------------------
+     Markdoc emits real elements now, where the old marker layer emitted a
+     string joined with <br><br>. Every element below corresponds to a button
+     in the editor; the two lists are one decision (see keystatic.config.tsx).
+     Anything NOT here has no button, and a button with no rule here would
+     render nothing — which is why neither list may grow alone. */
+
+  /* paragraphs replace the old double-break convention. The last one carries
+     no trailing space, so a body never pushes the layout below it. */
+  #nl-window-text .body p, #nl-about-text p { margin: 0 0 1em; }
+  #nl-window-text .body p:last-child, #nl-about-text p:last-child { margin-bottom: 0; }
+
+  /* LISTS sit inside the reading measure rather than outdenting past it: the
+     text column starts at a left margin everywhere else on the site, and a
+     bullet hanging into that margin would be the only thing breaking it. */
+  #nl-window-text .body ul, #nl-window-text .body ol,
+  #nl-about-text ul, #nl-about-text ol { margin: 0 0 1em; padding-left: 1.4em; }
+  #nl-window-text .body li, #nl-about-text li { margin: 0 0 0.25em; }
+
+  /* QUOTE — marked by a rule in the margin, not by italics or quotation
+     marks, both of which already mean something else here. */
+  #nl-window-text .body blockquote, #nl-about-text blockquote {
+    margin: 0 0 1em; padding-left: 1em;
+    border-left: 1px solid rgba(143,143,153,0.5);
+  }
+  #nl-window-text .body blockquote p:last-child,
+  #nl-about-text blockquote p:last-child { margin-bottom: 0; }
+
+  /* DIVIDER — a hairline at the same accent grey as the seam between the two
+     halves of the page, so the one horizontal rule in the copy matches the
+     one horizontal rule in the layout. */
+  #nl-window-text .body hr, #nl-about-text hr {
+    border: 0; height: 1px; margin: 1.6em 0;
+    background: rgba(143,143,153,0.5);
+  }
+
+  /* LINK — underlined, offset to clear descenders like the underline mark,
+     and inheriting ink rather than introducing a colour. This site has two
+     colours; a link is not the place to add a third. */
+  #nl-window-text .body a, #nl-about-text a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+    transition: color 0.18s ease;
+  }
+  /* Hover DIMS rather than brightens: everywhere else on this site the
+     accent grey is the resting state and ink is the active one — the footer,
+     the caret, the close mark all go grey -> ink on hover. A link starts at
+     ink because it is content, so it has to travel the other way to say the
+     same thing. Focus matches, for the keyboard. */
+  #nl-window-text .body a:focus, #nl-about-text a:focus { color: rgba(143,143,153,0.9); }
+  @media (hover: hover) {
+    #nl-window-text .body a:hover, #nl-about-text a:hover { color: rgba(143,143,153,0.9); }
+  }
+
+  /* STRIKETHROUGH */
+  #nl-window-text .body s, #nl-about-text s { text-decoration: line-through; }
+
+  /* INLINE CODE has no button — it is off in the editor. This rule exists
+     because Markdoc still honours backticks typed by hand, and unstyled
+     <code> would inherit a proportional face and look like a mistake rather
+     than a choice. The site ships no monospace, so this borrows the system's
+     and accepts that it is the one place a fifth typeface appears. */
+  #nl-window-text .body code, #nl-about-text code {
+    font-family: ui-monospace, Menlo, Monaco, monospace;
+    font-size: 0.92em;
+  }
   #nl-window.l-grid.more #nl-main        { flex: 1 1 auto; min-height: 0; }
   #nl-window.l-grid.more #nl-window-text { height: 100%; overflow-y: auto; }
   #nl-window.l-grid.more #nl-car         { display: none; }   /* copy covers the grid */
