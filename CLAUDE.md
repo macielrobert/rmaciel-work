@@ -238,6 +238,9 @@ Companion documents in this repo:
   breaking his email — read them before touching anything DNS-related.**
 - `STRESS-TESTS.md` — the test list, including which tests are impossible in a
   sandboxed preview and need a real URL.
+- `PUNCH-LIST.md` — the pre-launch gate: everything that must be true before
+  the domain points here. The launch-time phases of `PLAN.md` point at it so
+  nothing is tracked twice. **Work from this once real content starts.**
 - `README.md` — plain-language operating instructions for Robert: what the four
   parts do, how to publish a change, how to read a failed build. Written for
   the owner, not for a programmer. Keep it jargon-free if you touch it.
