@@ -13,9 +13,16 @@ keeps working until the migration lands.
 
 ## A note on evidence
 
-This repository's convention is to verify before presenting. That was not
-possible for most of this document: the build sandbox has no outbound network,
-so no vendor documentation, changelog or package could be read.
+This repository's convention is to verify before presenting.
+
+The build sandbox cannot reach the open web — vendor documentation sites all
+return 403. **The npm registry, however, is reachable.** Every Keystatic claim
+below marked [verified] was read out of `@keystatic/core` 0.6.4's own
+TypeScript declarations, downloaded from the registry and inspected. That is
+stronger evidence than documentation prose: it is the API itself.
+
+Claims about products with nothing to download — Sveltia, Pages CMS, Decap's
+maintenance status — remain unverified.
 
 Claims are therefore marked:
 
@@ -104,43 +111,31 @@ project.
 
 ## Keystatic — CHOSEN
 
-**Why** [recall, and the central claim to verify first]: its rich-text field
-supports **custom components and marks**, so underline, weight and size can be
-real buttons rather than typed syntax. That is precisely the ceiling Decap hit,
-and no amount of configuration gets Decap over it.
+**Why** [VERIFIED — see the verification section below]: its rich-text field
+supports **custom marks with required toolbar icons**, so underline, weight and
+size become real buttons rather than typed syntax. That is precisely the
+ceiling Decap hit, and no amount of configuration gets Decap over it.
 
-Also believed [recall]:
-
-- Git-backed, storing content as files in the repository — so the deploy model
-  and the build seam survive.
-- Underline is a **built-in** mark, not a custom one.
-- Runs against a local repository as well as GitHub.
+Underline is a **built-in** mark [verified]. Weight and size become custom
+marks carrying a `className` [verified], which maps straight onto the CSS
+classes the site already has.
 
 ### What it costs, stated plainly
 
-- **npm and a framework enter the repository.** [recall] Keystatic's admin UI
-  ships as framework integrations — `@keystatic/next`, `@keystatic/astro` and
-  similar — with no script-tag build. There is no CDN path equivalent to
-  Decap's one-line install.
+- **npm and a framework enter the repository.** [verified] The only published
+  integrations are `@keystatic/next`, `@keystatic/astro` and `@keystatic/remix`.
+  There is no script-tag or framework-free build.
 
   This does **not** touch the shipped `index.html`: the site stays one file,
   one request, zero runtime dependencies. But it ends "no package manager" as a
   property of the repository, and `build.js`'s deliberate simplicity stops
   being the whole build story. That was raised before the decision and accepted.
 
-- **The content format changes, and it may drag npm into `build.js` too.**
-  [recall, and the highest-risk unknown] Keystatic stores rich text as Markdoc
-  or MDX. Neither parses with Node built-ins. If the stored format is a markup
-  language, `build.js` needs a parser — a runtime dependency in the build,
-  which is a much bigger concession than one in the editor.
-
-  **Investigate first whether Keystatic can store the document as a JSON AST.**
-  If it can, this inverts from the biggest risk into the biggest prize:
-  `JSON.parse` reads it with no dependency, `build.js` walks the tree and emits
-  exactly the HTML the site wants, and the entire marker-parsing layer —
-  escaping, bracket tags, unclosed-tag detection, Decap's backslashes —
-  **deletes**. That would leave the build simpler than it is today, not more
-  complex.
+- **`build.js` gains a parser.** [verified] The JSON-storing field is
+  deprecated; rich text is stored as Markdoc or MDX. But `@markdoc/markdoc` has
+  **zero runtime dependencies**, and in exchange the whole marker layer in
+  `build.js` deletes — roughly a hundred lines of string-bashing replaced by
+  walking a real AST. See the verification section.
 
 - **Migration work.** Field names and file layout will likely change, and
   `build.js` reads specific field names. Content is files either way, so this
@@ -227,23 +222,107 @@ be had again from scratch. Recording it here so it is not had a fourth time:
 
 ---
 
-## Before any migration work begins
+## VERIFIED against the real package — 2026-08
 
-None of the Keystatic claims above have been checked. In priority order:
+The npm registry turned out to be reachable from the build sandbox even
+though the open web is not. So these answers come from **`@keystatic/core`
+0.6.4's own TypeScript declarations**, downloaded and read — not from
+documentation prose and not from recall.
 
-1. **Can Keystatic store rich text as JSON rather than Markdoc/MDX?** This
-   decides whether `build.js` stays dependency-free or gains a parser. Biggest
-   single unknown; check it first.
-2. **Can custom inline marks be added with toolbar buttons** — specifically for
-   weight and size, not only block-level components?
-3. **What exactly does the admin UI require** — which framework integrations
-   exist, whether any of them can be built into static files that Netlify can
-   serve from `dist/admin/`, and what that build costs.
-4. **Is the editor usable on an iPhone?** Requirement 3, and the one most
+### Q2: custom marks with toolbar buttons — YES [verified]
+
+The blocking question, and the answer is unambiguous.
+
+`fields.document`'s built-in `inlineMarks` already include **underline**:
+
+```
+inlineMarks?: true | { bold, italic, underline, strikethrough,
+                       code, superscript, subscript, keyboard }
+```
+
+And custom formatting is a first-class component kind. From
+`content-components.d.ts`:
+
+```
+MarkComponentConfig = {
+  label: string;
+  icon: ReactElement;          // REQUIRED — this is the toolbar button
+  schema: Schema;
+  tag?: 'span' | 'strong' | 'em' | 'u' | 'small' | ... ;
+  className?: ...;
+  style?: ...;
+}
+```
+
+`icon` being **required** is the point: a custom mark cannot exist without a
+toolbar button. `className` and `tag` mean light and small map straight onto
+the CSS classes the site already has. Five component kinds exist —
+`mark`, `inline`, `block`, `wrapper`, `repeating`.
+
+**This is the thing Decap cannot do at any price, and Keystatic does it as a
+documented, typed API.** The move achieves what it is for.
+
+### Q1: storage format — Markdoc or MDX, NOT JSON [verified]
+
+The hoped-for answer was no. `fields.document`, which stores a JSON AST,
+carries this in its own declaration:
+
+> `@deprecated` `fields.markdoc` has superseded this field. `fields.mdx` is
+> also available if you prefer MDX.
+
+So the supported path writes `.mdoc` or `.mdx` — markup, not JSON. **`build.js`
+needs a parser.**
+
+**But the cost is far smaller than feared.** `@markdoc/markdoc` 0.5.8 has
+**zero runtime dependencies** [verified from its registry metadata] — its only
+peers are React and its types, needed for its React renderer, not for parsing.
+One package, no dependency tree.
+
+And the trade buys something real: `Markdoc.parse` returns a proper AST, so
+`build.js` walks a tree and emits exactly the HTML the site wants. The entire
+marker layer — escaping, bracket tags, unclosed-tag detection, stripping
+Decap's backslashes, the heading-line mapping — **deletes**. The build gets
+one dependency and loses roughly a hundred lines of string-bashing.
+
+### Q3: what the admin UI requires — a framework, unavoidably [verified]
+
+The only integrations published are `@keystatic/next`, `@keystatic/astro` and
+`@keystatic/remix`. **There is no framework-free or script-tag path**, and no
+static-only build among them. Peer dependencies are React 18/19 plus the
+framework itself.
+
+Astro is the lightest of the three and the obvious candidate, but the
+conclusion stands: npm, `node_modules` and a framework enter this repository
+for the editor. The shipped `index.html` is untouched — one file, one request,
+zero runtime dependencies — but "no package manager" ends as a property of the
+repo. Raised before the decision, accepted.
+
+### NEW RISK, not previously weighed: it is pre-1.0 [verified]
+
+`@keystatic/core` is at **0.6.4**, published 2026-07-31. Two readings, both
+true:
+
+- **Actively maintained** — a release within days. Compare Decap's "community
+  maintenance" reputation.
+- **Pre-1.0** — by semver convention, breaking changes may land in any minor
+  release. Decap is at 3.15.1.
+
+This sits directly against the stated requirement that nothing be fragile
+against updates. It does not reverse the decision — the formatting ceiling is
+the deciding factor and Decap cannot clear it — but it means **the version
+must be pinned exactly, as Decap now is, and upgrades treated as deliberate
+work with a preview check.** Expect the custom marks to need revisiting at
+some upgrades.
+
+---
+
+## Still unanswered — cannot be checked from the sandbox
+
+1. **Is the editor usable on an iPhone?** Requirement 3, and the one most
    likely to be discovered too late.
-5. **How does it authenticate against a private repository?** Decap needed
+2. **How does it authenticate against a private repository?** Decap needed
    `auth_scope: repo` and failed silently without it — logged in fine, showed
-   nothing. Expect an equivalent trap.
-
-Answer 1 and 2 before writing any code. If either answer is no, the move does
-not achieve what it is for.
+   nothing at all. Expect an equivalent trap and look for it early.
+3. **Can the Astro admin build be emitted as files Netlify serves from
+   `dist/admin/`,** or does it need a running server for the GitHub OAuth
+   callback? This decides whether `netlify.toml` grows a second build step.
