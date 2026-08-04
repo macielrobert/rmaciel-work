@@ -21,12 +21,51 @@ written down here.
 
 ---
 
+## 0. Carried over from the CMS migration
+
+Everything here was created or discovered while replacing Decap with
+Keystatic. None of it blocks writing content; all of it blocks launch.
+
+- [ ] **Decide what to do about review-before-publish.** Keystatic writes
+      straight to `main`. The fix is a GitHub branch protection rule, and
+      **rulesets are not enforced on a private repository on the free plan** —
+      GitHub says so on the ruleset page. Four options, none free-and-automatic:
+      - **Create a branch in the editor** before each session. Works today, one
+        click, relies on remembering.
+      - **Make the repository public.** Rules become free — but the licensed
+        font files would then be redistributed in a public repo, which is a
+        different permission from web embedding. **Check the licence first.**
+      - **Pay for GitHub Team.**
+      - **Swap the default branch** so Keystatic writes to `content` and
+        production deploys from `main`. Free and structural; costs one more
+        branch to keep track of.
+- [ ] **Add `rmaciel.work` to the GitHub App's Callback URLs** at cutover.
+      Keystatic builds the redirect from whatever host the request arrived on,
+      so a new address cannot log in until its callback is listed. One per
+      origin; GitHub accepts no wildcards.
+- [ ] Update the GitHub App's **Homepage URL** to the real domain. Cosmetic —
+      it plays no part in the login flow.
+- [ ] **Decide whether the editor should be public at all.** `/keystatic` will
+      be reachable at `rmaciel.work/keystatic`. Only someone who can write to
+      the repository can save anything, so it is not a hole — but it is a login
+      page on a portfolio. Netlify can password-protect a path on paid plans;
+      the free alternative is to accept it.
+- [ ] **Keystatic is pre-1.0** (`0.6.4`). Versions are pinned exactly in
+      `package.json`, which is deliberate: by semver a minor release may break
+      the custom marks. Upgrade on purpose, check `/keystatic` on a preview
+      first, never let it float.
+- [ ] **First image upload creates `images/`**, which does not exist yet. The
+      build skips a missing directory by design, so nothing is wrong today —
+      but the first upload is the first time that path runs for real.
+
+---
+
 ## 1. Content — do this first, it is the long pole
 
 - [ ] **Set the real contact address.** Currently `hello@studio.xyz`, a
       placeholder. This is what the SEND button on the site mails to, so
       shipping it wrong means enquiries go nowhere.
-      → CMS: **Fixtures → CONTACT → Email address**
+      → CMS: **CONTACT → Email address**
 - [ ] Replace the 14 placeholder projects with real work
 - [ ] Real icons and wordmarks. **Transparent PNG or SVG with real
       counterforms** — alpha is the shape, so an opaque PNG or any JPG bakes
@@ -40,6 +79,13 @@ written down here.
 - [ ] Once no project relies on them, delete the ~120 lines of placeholder
       generators in `index.html` (`placeholderImages`, `placeholderWordmark`,
       `makeTestPNG`, the `SVG_*` shapes)
+- [ ] **Delete `big-deal-project`** — a test entry written while proving the
+      editor. It is on the live site.
+- [ ] **Check formatted copy through the character churn.** `spanify()` walks
+      into child elements so it should churn normally, but a size span changes
+      the line box mid-animation and that has never been seen running.
+- [ ] **Judge lists, quote and divider at 11px on a phone.** The spacing is a
+      first guess, never looked at.
 
 ---
 
