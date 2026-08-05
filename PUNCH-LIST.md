@@ -57,30 +57,22 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
 - [ ] **First image upload creates `images/`**, which does not exist yet. The
       build skips a missing directory by design, so nothing is wrong today —
       but the first upload is the first time that path runs for real.
-- [ ] **Decide which slug is the real URL — three files currently disagree,
-      and one of them is lying to you in the editor.** Found by the post-
-      migration debugging pass. Nothing is broken today; it is a trap set for
-      the moment real titles get edited.
-      - `index.html` derives the URL from the **title**
-        (`slugify(p.title)`), and says so in a comment: *"Change a title and
-        its URL changes — that is the trade, and it is the right one."*
-      - `keystatic.config.tsx` calls the slug field a *"Frozen permanent
-        address. Set once and never change it"*, and `README.md` says
-        *"Renaming the title is safe; changing the slug is not."* **Both are
-        the opposite of what the code does.** Changing the slug renames the
-        file, which the site never reads; changing the title silently moves
-        the URL.
-      - It is invisible right now because Keystatic derives the filename from
-        the title too, so all fifteen agree exactly — checked, zero
-        differences. They diverge the first time a title is edited after the
-        entry exists.
-      - **Recommended:** make the authored slug win — `build.js` already
-        carries it through to `CONTENT` unused, so it is one line in
-        `buildData()` (`en.slug = p.slug || slugify(p.title)`). That makes the
-        editor's promise true, frees titles to be edited while real copy is
-        being written, and changes no URL today. The alternative is to correct
-        the CMS help text and the README to say the URL follows the title.
-      - Whichever way it goes, all three files change together.
+- [x] **Which slug is the real URL — DECIDED: the authored one.** Three files
+      had disagreed, and the editor was promising the opposite of what the
+      site did: `index.html` built the URL from the **title**, while
+      `keystatic.config.tsx` called the slug field a *"Frozen permanent
+      address"* and `README.md` said *"Renaming the title is safe; changing
+      the slug is not."*
+
+      `buildData()` now prefers `p.slug` — the CMS filename — and falls back
+      to `slugify(title)` only for ABOUT and hand-written entries. **No
+      existing URL changed** (verified across all fifteen; Keystatic derives
+      filenames from titles too, so they agreed exactly at the moment of the
+      switch). The editor's help text and the README are now true as written.
+
+      What this buys while writing real content: **a title can be edited
+      freely without moving a link.** The slug still cannot — that part of the
+      warning stands, and it is now the only thing that carries it.
 
 ---
 

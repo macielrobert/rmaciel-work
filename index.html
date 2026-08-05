@@ -1376,10 +1376,16 @@
   // copy may be one string or a list of paragraphs — normalise to a list
   const paras = v => Array.isArray(v) ? v : [v];
 
-  // TITLE -> URL SLUG. Derived from the title, not from the entry's position,
-  // so reordering a section never breaks a link someone already sent. Change a
-  // title and its URL changes — that is the trade, and it is the right one:
-  // positions shift constantly while titles rarely do.
+  // TITLE -> URL SLUG. THE FALLBACK, NOT THE RULE — see buildData() below,
+  // which prefers the slug the CMS authored. Kept for entries that carry no
+  // slug of their own: ABOUT, and anything hand-written into CONTENT.
+  //
+  // It used to be the rule, on the reasoning that a title changes less often
+  // than a position does. True, but it made a title edit silently move a URL,
+  // while the CMS was promising the editor the opposite — that the slug field
+  // is the permanent address. The authored slug wins now, so that promise is
+  // real and titles are free to be edited. Never derived from an INDEX either
+  // way: reordering a section must not break a link someone already sent.
   const slugify = s => String(s).toLowerCase()
     .replace(/['\u2018\u2019]/g, '')          // drop apostrophes rather than hyphenate
     .replace(/[^a-z0-9]+/g, '-')
@@ -1411,8 +1417,14 @@
         const seed = si * 100 + i;             // per-section placeholder variety
         const en = { icon: resolveIcon(p.icon), hd: p.title, lines: p.details,
                      blurb: paras(p.summary) };
-        // unique slug within the section; collisions get -2, -3, ...
-        let sl = slugify(p.title);
+        // THE AUTHORED SLUG WINS. In the CMS it is the filename, which is the
+        // permanent address the editor's help text promises — set once, never
+        // changed. Falling back to the title keeps hand-written CONTENT and
+        // any entry predating the field working unchanged.
+        // The de-duplication below still stands: authored slugs are unique by
+        // construction (they are filenames), but a title-derived fallback is
+        // not, and two entries answering to one URL is the bug it prevents.
+        let sl = p.slug || slugify(p.title);
         if (usedSlugs[sl]) { let n = 2; while (usedSlugs[sl + '-' + n]) n++; sl = sl + '-' + n; }
         usedSlugs[sl] = 1;
         en.slug = sl;

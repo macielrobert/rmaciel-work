@@ -181,10 +181,15 @@ understanding why it exists will reintroduce a solved bug.
   `history.replaceState` throws. `syncRoute()` runs inside `commit()`, so an
   unguarded throw takes *selection* down with it. A convenience feature must
   never be able to break a core one.
-- **Slugs come from titles, not indices.** Reordering a section must not break
-  a link someone already sent. **But see the open question in
-  `PUNCH-LIST.md` §0:** the CMS now also has a "URL slug" field whose help text
-  promises the opposite, and the two have not been reconciled.
+- **The authored slug is the URL; a title-derived one is only the fallback.**
+  Never an index either way — reordering a section must not break a link
+  someone already sent. In the CMS the authored slug is the FILENAME, which is
+  what makes the editor's "set once and never change it" promise true and lets
+  titles be edited freely. It was title-derived until a debugging pass found
+  that `keystatic.config.tsx` and `README.md` both promised the opposite;
+  switching changed no existing URL, because Keystatic derives filenames from
+  titles too. `buildData()` falls back to `slugify(title)` for ABOUT and any
+  hand-written entry.
 - **The CMS decides the content filenames, not us.** A Keystatic singleton or
   collection with a rich-text `contentField` is stored as ONE `.mdoc` file —
   JSON frontmatter, then the prose. Without one it stays pure `.json`. So

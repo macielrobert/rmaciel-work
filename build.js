@@ -417,8 +417,9 @@ function buildProject(p, label) {
   const share = plainText(p.share_description, label);
   if (share !== null) out.shareDescription = Array.isArray(share) ? share[0] : share;
 
-  // kept so the authored value survives the build; see the note in the PR /
-  // README about buildData() deriving slugs from titles today
+  // THE URL. buildData() prefers this over a title-derived one, which is what
+  // makes the CMS's "set once and never change it" promise true — the value
+  // here is the filename, and the filename is the permanent address.
   out.slug = slug;
 
   return out;
