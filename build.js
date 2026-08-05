@@ -2,7 +2,7 @@
 'use strict';
 
 /* =========================================================================
-   build.js — folds content/*.json into index.html, emits dist/index.html
+   build.js — folds content/ into index.html, emits dist/index.html
    =========================================================================
 
    WHAT THIS IS
@@ -15,8 +15,17 @@
 
    ONE DEPENDENCY, AND WHY IT IS WORTH IT
      `@markdoc/markdoc`, which has no dependencies of its own, and which is
-     required LAZILY so a repository with no .mdoc files still builds the whole
-     site with node_modules deleted.
+     required LAZILY — inside the one function that needs it, not at the top.
+
+     THAT LAZINESS NO LONGER MEANS THE BUILD RUNS WITHOUT node_modules, and the
+     distinction is worth stating because three documents used to claim it did.
+     The escape hatch only holds while NO .mdoc file has a body to parse. Every
+     project has one now, so `node build.js` with node_modules deleted fails on
+     the first entry — by design, loudly, naming the file and saying to run
+     `npm install`. Netlify installs before it builds, so nothing about the
+     deploy depends on this; what is gone is the ability to build the site from
+     a bare checkout.
+
      It replaced roughly a hundred lines of regular expressions that could only
      ever approximate a parser. Everything else here is still Node built-ins.
      The editor's own dependencies (Astro, React) are separate: they build the
@@ -222,9 +231,10 @@ function needList(obj, key, label) {
    hand-rolled marker layer below, and unknown syntax can no longer leak
    through as literal characters.
 
-   `require`d lazily, inside the function that needs it, so a repository with
-   no `.mdoc` files still builds the entire site with node_modules deleted.
-   That escape hatch is the reason for the odd shape. */
+   `require`d lazily, inside the function that needs it. That was once an
+   escape hatch — a repository with no `.mdoc` files built the whole site with
+   node_modules deleted — and it is now only a clean error message, because
+   every project is `.mdoc` with a body. See the header. */
 let _Markdoc = null;
 function markdoc(label) {
   if (_Markdoc) return _Markdoc;
@@ -435,10 +445,11 @@ function buildProject(p, label) {
    sounded like it would produce. It produces neither of those filenames. The
    lesson is the same one this project keeps learning: read the bytes.
 
-   Both formats are read here, and that is what makes the migration
-   survivable. Entries move one at a time, the site builds at every point in
-   between, and nothing has to convert in a single irreversible pass. When the
-   last loose `.json` is gone, the legacy branch can be deleted.
+   ONLY `.mdoc` IS READ NOW. Both formats were read during the migration so
+   entries could move one at a time with the site building at every point in
+   between; all fifteen arrived, so the `.json` branch is gone and
+   `loadProjects()` ignores anything that is not `.mdoc`. A stray `.json` in
+   content/projects/ would be a file no editor wrote.
 
    THE SLUG COMES FROM THE FILENAME. Keystatic stores it there rather than as a
    field — `slugField: 'title'` names the field the slug is DERIVED from, not a
@@ -467,7 +478,7 @@ function parseMdoc(raw, label) {
 function readProjectEntry(entry) {
   const abs = path.join(PROJECTS_DIR, entry.name);
   const label = path.relative(ROOT, abs);
-  const base = entry.name.replace(/\.(mdoc|json)$/i, '');
+  const base = entry.name.replace(/\.mdoc$/i, '');
 
   const raw = parseMdoc(fs.readFileSync(abs, 'utf8'), label);
   // the filename IS the slug; buildProject requires the field, so supply it
@@ -505,16 +516,40 @@ function assemble() {
     return { id: sec.id, label: sec.label, projects: mine.map(p => p.project) };
   });
 
-  const aboutFile = path.join(CONTENT_DIR, 'about.json');
+  /* THE THREE SINGLETON FILENAMES ARE NOT A CHOICE — Keystatic derives each
+     one from the singleton's `format`, and reading a different name means the
+     editor and the build are looking at two different files.
+
+       about    format: { data:'json', contentField:'summary' }  ->  about.mdoc
+       contact  format: { data:'json' }                          ->  contact.json
+       site     format: { data:'json' }                          ->  site.json
+
+     The rule, read out of getDataFileExtension() in @keystatic/core rather
+     than assumed: a singleton with a contentField is written as ONE .mdoc
+     file — JSON frontmatter, then the rich text — exactly like a project. Only
+     a singleton with no rich-text field stays pure .json.
+
+     ABOUT was left as about.json by the migration, which the editor cannot
+     see: opening ABOUT showed an empty form, and the first save would have
+     written about.mdoc alongside it and failed this build on the missing
+     about.json. Both halves are fixed together — the file was converted and
+     this reader follows it. */
+  const aboutFile = path.join(CONTENT_DIR, 'about.mdoc');
   const contactFile = path.join(CONTENT_DIR, 'contact.json');
   const siteFile = path.join(CONTENT_DIR, 'site.json');
   for (const f of [aboutFile, contactFile, siteFile]) {
     if (!fs.existsSync(f)) fail(`${path.relative(ROOT, f)}: required content file is missing`);
   }
 
-  const aboutRaw = readJSON(aboutFile);
-  const aboutLabel = 'content/about.json';
-  const aboutSummary = renderMarkdoc(need(aboutRaw, 'summary', aboutLabel), aboutLabel);
+  const aboutLabel = 'content/about.mdoc';
+  const aboutRaw = parseMdoc(fs.readFileSync(aboutFile, 'utf8'), aboutLabel);
+  // parseMdoc hands the body back as { markdoc } — the same shape a project's
+  // summary arrives in, so ABOUT gets the same toolbar and the same renderer.
+  const aboutBody = need(aboutRaw, 'summary', aboutLabel);
+  if (typeof aboutBody.markdoc !== 'string') {
+    fail(`${aboutLabel}: the description is empty. It is the ABOUT copy and the site has nowhere else to get it.`);
+  }
+  const aboutSummary = renderMarkdoc(aboutBody.markdoc, aboutLabel);
   const about = {
     title:   need(aboutRaw, 'title', aboutLabel),
     details: needList(aboutRaw, 'details', aboutLabel),
@@ -631,8 +666,9 @@ function main() {
      missing fonts/ means every request 404s and the whole site silently falls
      back to system-ui — legible, but not the design, and with nothing in the
      build output to say so.
-     Same reasoning as admin/: checked-in source, so absence is a broken
-     repository rather than an empty one, and it FAILS rather than skips. */
+     Opposite of images/ above: fonts are checked-in source, so an absence is a
+     broken repository rather than an empty one, and it FAILS rather than
+     skips. */
   if (!fs.existsSync(FONTS_DIR)) {
     fail('fonts/: not found at the repository root. index.html references /fonts/*.woff2 and the site would fall back to system fonts.');
   }

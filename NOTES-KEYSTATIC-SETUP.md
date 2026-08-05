@@ -173,9 +173,24 @@ file no editor wrote.
 ## The dependency, and the escape hatch
 
 `@markdoc/markdoc` — zero runtime dependencies — is `require`d **lazily, inside
-the function that needs it**. A repository with no `.mdoc` files still builds
-the entire site with `node_modules` deleted. Verified by deleting it and
-building.
+the function that needs it**.
+
+**The escape hatch it used to provide is gone, and this file claimed otherwise
+until it was re-tested.** Lazy loading only avoided the dependency while no
+`.mdoc` file had a body to parse. All fifteen projects have one, so `node
+build.js` with `node_modules` deleted now stops on the first entry:
+
+```
+BUILD FAILED
+  content/projects/big-deal-project.mdoc: this entry stores its description as
+  Markdoc, which needs the @markdoc/markdoc package. Run `npm install` before
+  building.
+```
+
+That is the designed failure — loud, named, actionable — and Netlify installs
+before it builds, so no deploy depends on the old behaviour. What is gone is
+building the site from a bare checkout. The lazy `require` is now worth keeping
+for the error message, not for the independence.
 
 Soft breaks are configured as hard breaks. Markdoc drops a single newline by
 default, which is the exact behaviour that once flattened a credit list into
@@ -190,7 +205,10 @@ one running sentence.
 - [x] Single line breaks preserved as `<br>`
 - [x] All fifteen projects render identically to before the migration —
       compared on text, marks, slugs, details, layout, expand and icons
-- [x] `node build.js` succeeds with `node_modules` deleted
+- [ ] ~~`node build.js` succeeds with `node_modules` deleted~~ — **no longer
+      true, and it was true when ticked.** It held while entries were still
+      `.json`; every project is `.mdoc` with a body now. See "The dependency,
+      and the escape hatch" above.
 - [x] CSS braces balanced; script parses
 
 ## Still to check on a preview
@@ -255,10 +273,46 @@ Prefills the new-branch name so branches an editor creates stay
 distinguishable from branches code work creates — the same convention Decap
 used. It only prefills the field; it does not hide branches.
 
-## Until this branch merges
+## ~~Until this branch merges~~ — merged
 
-**`main` cannot read what the editor writes.** Only this branch's `build.js`
-understands `.mdoc`. On `main` such a file is skipped, so a project created in
-Keystatic is **silently absent from the site** — the build goes green and the
-entry is nowhere. `content/projects/big-deal-project.mdoc` is in that state
-now.
+Kept because the failure it describes is worth recognising if it recurs: while
+only the migration branch understood `.mdoc`, a project created in Keystatic
+was **silently absent from the site** on `main` — the build went green and the
+entry was nowhere. That is resolved; `main` reads `.mdoc` and nothing else.
+
+`content/projects/big-deal-project.mdoc` — the entry written while proving the
+editor — is still present and still on the live site. Deleting it is on the
+punch list.
+
+---
+
+# The singleton filenames are Keystatic's to choose
+
+Found by a debugging pass after the migration, and worth stating plainly
+because it silently split ABOUT in two.
+
+**A singleton with a rich-text `contentField` is stored as ONE `.mdoc` file**,
+exactly like a project: JSON frontmatter between `---` fences, then the prose.
+Only a singleton with no rich-text field stays pure `.json`. Read out of
+`getDataFileExtension()` in `@keystatic/core`, not assumed:
+
+| Singleton | `format` | File Keystatic reads and writes |
+|---|---|---|
+| `about` | `{ data: 'json', contentField: 'summary' }` | `content/about.mdoc` |
+| `contact` | `{ data: 'json' }` | `content/contact.json` |
+| `site` | `{ data: 'json' }` | `content/site.json` |
+
+The migration converted every project to `.mdoc` and left ABOUT as
+`content/about.json`. The editor therefore looked at `content/about.mdoc`,
+found nothing, and showed an **empty ABOUT form** — not an error, just blank
+fields, which reads as "nothing written yet" rather than "wrong filename".
+Saving it would have written `about.mdoc` alongside the orphaned `about.json`
+and failed the next build on the file it could no longer find.
+
+Both halves are fixed: the file is `content/about.mdoc` and `build.js` reads
+it. ABOUT now goes through the same Markdoc renderer as a project, so the
+toolbar works there too.
+
+**A trailing slash also matters.** `path: 'content/about'` puts the file at
+`content/about.mdoc`; `path: 'content/about/'` would put it at
+`content/about/index.mdoc`. Do not add one.

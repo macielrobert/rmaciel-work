@@ -6,8 +6,14 @@ once before any CMS existed, once when Decap was installed, and once when
 Decap's ceiling was hit — and each time the previous reasoning had to be
 reconstructed from scratch.
 
-**Current decision: move to Keystatic.** Reached 2026-08. Decap ships today and
-keeps working until the migration lands.
+**Current decision: Keystatic. Migrated, merged and live.** Decision reached
+2026-08 and carried out in the same month. Decap is gone from the repository —
+`admin/` deleted, all fifteen entries converted to `.mdoc`.
+
+Everything below is kept in the tense it was written in, because the point of
+this file is the reasoning at the time the choice was made. Where a section
+still says Decap "ships today" or a question is still open, read it as a record
+of that moment; the status lines added since say where each one landed.
 
 ---
 
@@ -58,10 +64,11 @@ What the CMS has to do, in priority order:
 
 ---
 
-## Decap — INSTALLED, being replaced
+## Decap — REMOVED
 
-The CMS in the repository today. Loaded from a CDN as a single script tag,
-pinned to `3.15.1`.
+**Status: gone.** It was the CMS in the repository while this was written —
+loaded from a CDN as a single script tag, pinned to `3.15.1`. The migration to
+Keystatic removed `admin/`, the config, and the last `.json` project file.
 
 **What it does well** — all [verified] by using it:
 
@@ -316,13 +323,23 @@ some upgrades.
 
 ---
 
-## Still unanswered — cannot be checked from the sandbox
+## The three open questions — two answered by shipping it
 
 1. **Is the editor usable on an iPhone?** Requirement 3, and the one most
-   likely to be discovered too late.
+   likely to be discovered too late. **STILL OPEN.** Nothing in the repository
+   can answer it; it needs a phone and the live `/keystatic`.
 2. **How does it authenticate against a private repository?** Decap needed
-   `auth_scope: repo` and failed silently without it — logged in fine, showed
-   nothing at all. Expect an equivalent trap and look for it early.
-3. **Can the Astro admin build be emitted as files Netlify serves from
-   `dist/admin/`,** or does it need a running server for the GitHub OAuth
-   callback? This decides whether `netlify.toml` grows a second build step.
+   `auth_scope: repo` and failed silently without it. **ANSWERED — and there
+   was an equivalent trap.** Keystatic needs a **GitHub App**, not a plain
+   OAuth app, plus four environment variables. Missing any of the three server
+   variables makes "Sign in with GitHub" download an empty file called `login`
+   and nothing else. Every step and every symptom is in
+   `NOTES-KEYSTATIC-SETUP.md`.
+3. **Can the Astro admin build be emitted as static files,** or does it need a
+   running server for the OAuth callback? **ANSWERED: it needs a server.**
+   `astro.config.mjs` runs `output: 'server'` behind the Netlify adapter, and
+   `netlify.toml` did grow a second build step — `npm run build` is
+   `node build.js && astro build`, in that order. The editor is at
+   `/keystatic`, not `dist/admin/`, and the function that serves it declares
+   `preferStatic`, so the static site still wins every URL the editor does not
+   own.

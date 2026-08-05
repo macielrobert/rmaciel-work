@@ -1,7 +1,26 @@
 # Design note — text formatting
 
-**Branch:** `text-formatting` · **Status:** implemented, needs looking at on a
-real preview
+> ## ⚠️ SUPERSEDED BY THE KEYSTATIC MIGRATION — HISTORY, NOT INSTRUCTIONS
+>
+> **Every mechanism described below has been replaced.** This file documents
+> the Decap-era system: bracket tags, a hand-rolled converter, and heading
+> buttons borrowed to mean "large text". None of that exists now. Typing
+> `[small]x[/small]` or `++x++` into the editor today produces those literal
+> characters on the page.
+>
+> **For what the controls actually are, read `NOTES-KEYSTATIC-SETUP.md`** —
+> the section "The vocabulary, end to end" is the live table. In short:
+> underline, lighter, smaller and larger are real toolbar buttons now, which
+> is the entire reason the CMS was replaced.
+>
+> Kept, rather than deleted, for two things that are still true and written
+> down nowhere else: **why the weight and size steps are a closed set rather
+> than free numbers**, and **why sizes are in `em` rather than `px`**. Both
+> still govern the marks in `keystatic.config.tsx`. The three unchecked boxes
+> under "Still to check" are also still genuinely open — they are tracked in
+> `PUNCH-LIST.md` §1, which is where to work from.
+
+**Branch:** `text-formatting` · **Status:** superseded — see the banner above
 
 Bold, italic, underline, three weights and three sizes in project and ABOUT
 copy — plus single line breaks, which were being silently discarded.
