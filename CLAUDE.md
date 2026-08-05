@@ -16,7 +16,7 @@ The repository holds a source template plus a content folder, and build.js folds
 
 The repository is no longer dependency-free, and that distinction is now load-bearing rather than pedantic:
 
-- **The site build** is `build.js` plus one package, `@markdoc/markdoc`, which has no dependencies of its own and is required lazily. Delete `node_modules` and the whole site still builds.
+- **The site build** is `build.js` plus one package, `@markdoc/markdoc`, which has no dependencies of its own and is required lazily — inside the one function that parses a description, not at the top of the file. **It is a real dependency now, not an optional one.** The lazy require used to mean the site built with `node_modules` deleted; that only held while no `.mdoc` file had a body, and all fifteen projects have one. A bare checkout now fails on the first entry with a message naming the file and saying to run `npm install`. Netlify installs before it builds, so the deploy is unaffected.
 - **The editor** is an Astro + React application serving `/keystatic`, with a Netlify function behind it for the GitHub login. It is ~950 packages and it touches nothing the visitor downloads.
 
 The bar still stands, and applies to the SHIPPED file: a framework, a bundler, a runtime dependency, or a second request in `index.html` need to clear a high bar and should be raised as a question, not implemented. The typeface is the one accepted exception — three font files, deliberately, for reasons recorded in `NOTES-CUSTOM-FONT.md`.
@@ -181,8 +181,22 @@ understanding why it exists will reintroduce a solved bug.
   `history.replaceState` throws. `syncRoute()` runs inside `commit()`, so an
   unguarded throw takes *selection* down with it. A convenience feature must
   never be able to break a core one.
-- **Slugs come from titles, not indices.** Reordering a section must not break
-  a link someone already sent.
+- **The authored slug is the URL; a title-derived one is only the fallback.**
+  Never an index either way — reordering a section must not break a link
+  someone already sent. In the CMS the authored slug is the FILENAME, which is
+  what makes the editor's "set once and never change it" promise true and lets
+  titles be edited freely. It was title-derived until a debugging pass found
+  that `keystatic.config.tsx` and `README.md` both promised the opposite;
+  switching changed no existing URL, because Keystatic derives filenames from
+  titles too. `buildData()` falls back to `slugify(title)` for ABOUT and any
+  hand-written entry.
+- **The CMS decides the content filenames, not us.** A Keystatic singleton or
+  collection with a rich-text `contentField` is stored as ONE `.mdoc` file —
+  JSON frontmatter, then the prose. Without one it stays pure `.json`. So
+  `about` is `content/about.mdoc` while `contact` and `site` are `.json`, and
+  that asymmetry is Keystatic's rule (`getDataFileExtension`), not a choice.
+  Read a different name than the editor writes and the two silently diverge —
+  which is exactly what happened to ABOUT after the migration.
 - **`ratio` on image records is effectively required.** Without it the page
   downloads every image on the site at load just to measure its shape.
 
@@ -198,11 +212,13 @@ understanding why it exists will reintroduce a solved bug.
 
 | Rejected | Why |
 |---|---|
-| Sveltia / TinaCMS / hand-edited JSON as the CMS | Each ruled out against a stated requirement, not on taste — see `NOTES-CMS-DECISION.md`. Keystatic is the chosen direction; Decap ships until it lands |
+| Sveltia / TinaCMS / hand-edited JSON as the CMS | Each ruled out against a stated requirement, not on taste — see `NOTES-CMS-DECISION.md`. Keystatic is installed and Decap is gone |
 | A custom Decap editor widget | A React component against a CMS's internal API, in the only interface for editing the site, untestable from the build sandbox. Moot now: Keystatic's custom marks do the job as a supported API |
 | Code blocks in the editor | Need a monospace face the site deliberately stopped shipping — a fifth typeface on a page with one chosen one |
 | Headings in the editor | `Larger` is a real mark now, so borrowing a heading for size is obsolete. Six levels of hierarchy the layout has no answer for |
-| A framework, bundler, or npm dependency | The single-file, zero-dependency character of the **shipped** file is the point. build.js is exempt: Node built-ins only, no package.json, and its output is the same one file | | **Fetching** a content file at runtime | Browsers block fetching local files, and it would add a second request. Content is folded in at build time instead — the file the visitor gets still has everything inline | | Typing ratio by hand in the CMS | Decap's image widget does not report dimensions. build.js reads them from the uploaded file's header. A required field that a human can silently get wrong should not be a form field |
+| A framework, bundler, or npm dependency **in the shipped file** | The single-file, zero-dependency character of the **shipped** file is the point. build.js is not exempt from npm any more — it needs `@markdoc/markdoc` — but its output is still the same one file, and nothing the editor depends on reaches a visitor |
+| **Fetching** a content file at runtime | Browsers block fetching local files, and it would add a second request. Content is folded in at build time instead — the file the visitor gets still has everything inline |
+| Typing ratio by hand in the CMS | The CMS's image field does not report dimensions. build.js reads them from the uploaded file's header. A required field that a human can silently get wrong should not be a form field |
 | Minification | Comments are ~40% of the file but gzip to almost nothing. Stripping saves <100ms and costs the documentation |
 | anime.js | Only justifies itself for orchestration, timelines, stagger, or spring physics. For a single fixed-curve transition it equals a CSS transition |
 | SVG displacement filters | Mobile-hostile at scale |
@@ -229,7 +245,8 @@ understanding why it exists will reintroduce a solved bug.
 
 ## Current state
 
-Live build: **v80** (to become `index.html`).
+The site is `index.html` at the repository root. Version numbers in filenames
+are gone; `<title>` still reads `SVG Noise Lab — v80` and is on the punch list.
 
 Companion documents in this repo:
 
@@ -270,7 +287,11 @@ restores the loop manually. See `NOTES-KEYSTATIC-SETUP.md`.
 
 ## Deployment
 
-**Build.** Netlify runs node build.js, publish directory dist. The script reads content/*.json, sorts projects by order, drops anything flagged draft, reads image dimensions for ratio, writes the assembled CONTENT between the markers in the source template, and emits dist/index.html plus dist/images/. No install step; nothing to keep up to date.
+**Build.** Netlify runs `npm run build`, publish directory `dist`. That is two commands and **the order is load-bearing**: `node build.js` deletes `dist/` and rebuilds it, then `astro build` writes the editor's assets alongside with `emptyOutDir` off. Reversed, the second command wipes the first's output and the site disappears from the deploy — verified by running it both ways, not inferred from the comment.
+
+`build.js` reads `content/projects/*.mdoc` plus the three singleton files, sorts projects by order, drops anything flagged draft, reads image dimensions for ratio, writes the assembled CONTENT between the markers in the source template, and emits `dist/index.html`, `dist/fonts/` and `dist/images/`.
+
+Both halves land in one `dist/` and neither shadows the other: the Netlify function Astro emits declares `path: '/*'` with `preferStatic: true`, so a request for `/` gets the static `index.html` and only `/keystatic` and its API route reach the function.
 
 **Editing.** Keystatic at `/keystatic`, authenticated by a **GitHub App** (not a plain OAuth app) with four environment variables in Netlify. A save commits to `main` immediately unless a branch is created first in the editor. Every setup step, and the exact symptom of each missing piece, is in `NOTES-KEYSTATIC-SETUP.md`.
 

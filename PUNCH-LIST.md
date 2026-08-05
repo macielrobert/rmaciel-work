@@ -57,6 +57,22 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
 - [ ] **First image upload creates `images/`**, which does not exist yet. The
       build skips a missing directory by design, so nothing is wrong today —
       but the first upload is the first time that path runs for real.
+- [x] **Which slug is the real URL — DECIDED: the authored one.** Three files
+      had disagreed, and the editor was promising the opposite of what the
+      site did: `index.html` built the URL from the **title**, while
+      `keystatic.config.tsx` called the slug field a *"Frozen permanent
+      address"* and `README.md` said *"Renaming the title is safe; changing
+      the slug is not."*
+
+      `buildData()` now prefers `p.slug` — the CMS filename — and falls back
+      to `slugify(title)` only for ABOUT and hand-written entries. **No
+      existing URL changed** (verified across all fifteen; Keystatic derives
+      filenames from titles too, so they agreed exactly at the moment of the
+      switch). The editor's help text and the README are now true as written.
+
+      What this buys while writing real content: **a title can be edited
+      freely without moving a link.** The slug still cannot — that part of the
+      warning stands, and it is now the only thing that carries it.
 
 ---
 
