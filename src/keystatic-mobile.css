@@ -1,0 +1,61 @@
+/* =========================================================================
+   The editor on a phone — stop it running off the bottom of the screen
+   =========================================================================
+
+   THE BUG. On an iPhone the Projects list scrolls to its end with the last
+   rows still below the bottom edge, unreachable. Nothing is wrong with the
+   list. Three facts about the editor's own stylesheet combine to cause it,
+   and not one of them is a mistake on its own:
+
+     1. `body { overflow: hidden }`, injected globally by @keystatic/core.
+        The PAGE itself never scrolls. Every scrollbar in the editor is an
+        inner one, belonging to a panel.
+     2. The whole editor sits in one box set to `height: 100vh`.
+     3. On iOS Safari `100vh` does NOT mean "the part of the screen you can
+        see". It means the height the page WOULD have if the browser's own
+        address bar were slid out of the way — always the larger number.
+
+   The address bar only slides away when the PAGE scrolls, and fact 1 means
+   the page can never scroll. So the editor is permanently taller than the
+   visible area by exactly the height of the browser's bars, and every panel
+   inside is a percentage of that too-tall box. The last rows of the list are
+   underneath the address bar, and no gesture can reach them: the panel is
+   already at the end of its own travel.
+
+   THE FIX IS THE UNIT, NOT THE LAYOUT. `dvh` is the *dynamic* viewport
+   height: the area actually visible at this moment, re-measured as the
+   browser's bars slide in and out. On a desktop, where no bars slide,
+   `100dvh` and `100vh` are the same number — so this is not a phone-only
+   patch bolted on beside a desktop one. It is one correct measurement.
+
+   WHY `!important`. Keystatic styles that box with Emotion, a library that
+   writes its <style> tags into the page at run time — after this file has
+   already loaded. Later rules win ties, so a tie is a loss. This is the one
+   place in this repository where `!important` is the right answer.
+
+   WHY THIS SELECTOR, AND NOT A CLASS NAME. Emotion's class names are content
+   hashes: `.css-1x2y3z4`, regenerated whenever Keystatic ships a release.
+   Naming one would be a fix with a shelf life. `data-split-pane` is
+   Keystatic's own attribute and part of how its layout identifies itself, so
+   the box is found by what it CONTAINS rather than by what it is called.
+   Verified against the package: the editor builds exactly one of these, so
+   this matches exactly one element.
+
+   OLD BROWSERS GET TODAY'S BEHAVIOUR, NOT A WORSE ONE. iOS before 15.4 has
+   no `dvh`. There the declaration is invalid, the browser discards the whole
+   rule, and Keystatic's `100vh` stands — which is the situation now. That is
+   why there is no `@supports` guard: the failure mode is already correct.
+
+   THIS IS NOT SHIPPED TO VISITORS. astro.config.mjs reads this file at build
+   time and puts it in the <head> of the editor's pages. Astro builds only
+   /keystatic; the site is built by build.js, which never sees this file.
+   index.html is still one request with nothing attached to it.
+
+   IT IS ALSO NOT LOADED AS A STYLESHEET, and that is not an oversight — the
+   reasons, and the two tidier-looking approaches that fail, are recorded in
+   astro.config.mjs beside the code that reads this.
+   ========================================================================= */
+
+div:has(> [data-split-pane='secondary']) {
+  height: 100dvh !important;
+}
