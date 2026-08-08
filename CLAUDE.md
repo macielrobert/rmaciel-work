@@ -250,13 +250,13 @@ are gone; `<title>` still reads `SVG Noise Lab — v80` and is on the punch list
 
 Companion documents in this repo:
 
-- `PLAN.md` — the single master to-do, code debt and the domain/DNS migration
+- `TO-DO.md` — the single master to-do, code debt and the domain/DNS migration
   interleaved in execution order. **Includes four standing rules about not
   breaking his email — read them before touching anything DNS-related.**
 - `STRESS-TESTS.md` — the test list, including which tests are impossible in a
   sandboxed preview and need a real URL.
 - `PUNCH-LIST.md` — the pre-launch gate: everything that must be true before
-  the domain points here. The launch-time phases of `PLAN.md` point at it so
+  the domain points here. The launch-time phases of `TO-DO.md` point at it so
   nothing is tracked twice. **Work from this once real content starts.**
 - `README.md` — plain-language operating instructions for Robert: what the four
   parts do, how to publish a change, how to read a failed build. Written for
@@ -301,4 +301,4 @@ Static file on Netlify, deployed from this repo. The domain is registered at
 Squarespace with a live Google Workspace mailbox on it.
 
 **Do not touch nameservers, MX records, or TXT records.** See the standing
-rules in `PLAN.md`. The site cutover is two records; everything else stays.
+rules in `TO-DO.md`. The site cutover is two records; everything else stays.

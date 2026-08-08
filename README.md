@@ -68,7 +68,7 @@ Warnings are different from failures. `section "art" has no published projects` 
 - **Don't edit `index.html` by hand to change words.** The CMS is the source of truth, and the next build will overwrite whatever you typed.
 - **Don't rename a project's URL slug once it's set.** It renames the file, which is the permanent address. A link you have already sent breaks.
 - **Don't open `index.html` from the filing cabinet expecting to see the site.** It has a deliberate hole in it where the content goes. To see the real thing, use a preview link.
-- **Don't touch anything to do with DNS, nameservers, MX or TXT records.** Your email runs on those. `PLAN.md` opens with four standing rules about this — read them before changing any domain setting anywhere.
+- **Don't touch anything to do with DNS, nameservers, MX or TXT records.** Your email runs on those. `TO-DO.md` opens with four standing rules about this — read them before changing any domain setting anywhere.
 
 ---
 
@@ -85,7 +85,7 @@ Warnings are different from failures. `section "art" has no published projects` 
 
 ## Where the other documents fit
 
-- **`PLAN.md`** — the master to-do list, including the domain move. Start here when deciding what's next.
+- **`TO-DO.md`** — the master to-do list, including the domain move. Start here when deciding what's next.
 - **`CLAUDE.md`** — context for Claude. Read it if you want to know why the site is built the way it is.
 - **`STRESS-TESTS.md`** — the testing checklist.
 - **`DNS-BASELINE.md`** — a record of your domain's settings as they were before any of this. The restore point if something goes wrong.

@@ -427,7 +427,7 @@ function buildProject(p, label) {
 
   /* CARRIED, NOT YET CONSUMED. The CMS collects a per-project share
      description; the share/search metadata that will use it is still open work
-     (PLAN.md, Phase 5). buildData() reads named fields and ignores the rest, so
+     (TO-DO.md, Phase 5). buildData() reads named fields and ignores the rest, so
      carrying it is inert today. Dropping it would silently discard something a
      human typed into a form, which is the worse failure. */
   const share = plainText(p.share_description, label);

@@ -70,7 +70,7 @@ file in is what makes iterative updates possible at all.
       Version numbers in the filename were a workaround for passing files
       through chat; Git handles history now.
 - [x] Add the four companion docs to the repo root:
-      `CLAUDE.md`, `PLAN.md` (this file), `STRESS-TESTS.md`, and the
+      `CLAUDE.md`, `TO-DO.md` (this file), `STRESS-TESTS.md`, and the
       system handoff
 - [x] Commit and push
 
@@ -229,3 +229,140 @@ Not now; revisit if the conditions appear.
       your name and email would mean it's never truly empty.
 - [ ] **Move domain registration off Squarespace** — a transfer, not a
       cancel, and a separate operation entirely. Much later, if ever.
+
+---
+
+## HANDOFF — Netlify build cost
+
+### The loose end
+
+The build rebuilds the editor on every deploy, including content-only edits.
+Diagnosed with numbers, **not fixed**. A direction was recommended and Robert
+asked what it costs; he has not yet said go.
+
+### Why it surfaced
+
+Netlify hit its free-plan limit. Published sites stay live; **production
+deploys are paused until the cycle resets in ~3 weeks** (from 2026-08-05).
+Robert does not want to upgrade.
+
+**Update:** still on the free plan, still stalled. Robert may upgrade soon —
+until then, no PR against this repo actually deploys once merged, including
+#22 and #23 below.
+
+### The measurement
+
+Taken in the build sandbox — ratios hold, absolute times will differ on
+Netlify.
+
+| | packages | size | time |
+|---|---|---|---|
+| What the site build needs | **2** (`@markdoc/markdoc` + 1) | 2.8 MB | ~1 s |
+| What every deploy installs | **721** | 594 MB | 14–17 s |
+| `astro build` (the editor) | | | 6.5–22 s |
+| `node build.js` (the whole site) | | | **0.09–0.46 s** |
+
+A one-word content edit costs ~30–40 s of build for ~1.5 s of real work.
+**Root cause: all ten dependencies sit in `dependencies` in `package.json`,
+so the site build cannot tell the editor's 719 packages from the one it
+needs.**
+
+### Recommended direction — awaiting approval
+
+**Split into two Netlify sites.** Portfolio builds
+`npm ci --omit=dev && node build.js` (two packages, seconds, no serverless
+function). Editor becomes its own site, rebuilt only when its own files
+change. Each needs an `ignore` rule scoping it to its own inputs.
+
+Rejected alternative: one site plus a custom Netlify build plugin to cache
+the editor's output. More moving parts, and the least verifiable option.
+
+Costs stated to Robert: a second GitHub App callback URL; the editor's
+address changes; a second dashboard to check when a build goes red; nine
+deps move to `devDependencies`. **No extra money — both sites share one team
+credit pool, so the saving is less work, not a second free allowance.** Side
+benefits: the portfolio ships no function at all, the four secrets leave the
+portfolio site, and it settles the punch-list question about `/keystatic`
+being a login page on a portfolio.
+
+### The blocker — read before building anything
+
+1. **`netlify.toml` lives in the repo, so both sites read the same one.** No
+   verified way yet to give them different build commands. This is the open
+   technical question.
+2. **Netlify's docs return 403 from the build sandbox** — the same wall
+   recorded in `NOTES-CMS-DECISION.md`. The npm registry *is* reachable;
+   `@netlify/cache-utils` 7.1.1 was read that way and its cache API
+   confirmed (`save`/`restore`/`has`, default cache dir `.netlify/cache/`).
+   Use that route to verify claims.
+3. **Nothing can be tested until deploys resume.** Do not merge a build
+   change that has not been run.
+
+Agreed sequence: prepare the `package.json` split and both configs on a
+branch now, resolve the `netlify.toml` question against a real deploy the
+day the cycle resets, merge nothing until it has actually run.
+
+### One measured finding worth keeping
+
+An `ignore` rule skipping docs-only commits was tested against real
+history: **only 1 of the last 6 commits would have been skipped**, and
+roughly none of Robert's future Keystatic content saves. Small win, does not
+address the main cost. Not shipped.
+
+### Also worth carrying
+
+Robert can keep writing in `/keystatic` now — saves commit to GitHub
+normally, they just won't appear on the site until deploys resume, then
+publish together.
+
+### Not loose ends — already landed
+
+PR #21 (`claude/debug-cleanup-l5z2y9`, two commits, pushed, open): the ABOUT
+filename bug fixed on both sides, the authored slug made the URL at his
+instruction (zero existing URLs changed), and the stale documentation
+corrected. That work is complete and merge-ready; it just won't deploy
+until the cycle resets.
+
+---
+
+## HANDOFF — Mobile scroll fix + optional `details`
+
+Two unrelated fixes split onto their own branches so each gets a focused
+PR, no template.
+
+* **PR #22** — [mobile scroll fix](https://github.com/macielrobert/rmaciel-work/pull/22)
+  (`astro.config.mjs`, `src/keystatic-mobile.css`). Fixes the iPhone
+  Projects-list scroll bug (`100vh` → `100dvh` override, scoped to
+  Keystatic's own `data-split-pane` attribute). Confirmed present in the
+  built SSR output; **not yet tested in an actual mobile browser** — needs
+  the deploy preview.
+* **PR #23** — [details optional](https://github.com/macielrobert/rmaciel-work/pull/23)
+  (`build.js`). `details` is now optional on projects (defaults to `[]`),
+  matching Robert's batch-entry workflow. `about.json` still requires it.
+  Confirmed `node build.js` gets past the `details` check now.
+
+Both confirmed only by local build/grep checks, not a live deploy.
+
+### Still blocking the live site — neither PR touches this
+
+The build now stops on `icon_glyph`, required on **15 of 18 projects**,
+none of which have it yet. Expected given the batching order (icons haven't
+been done); left required deliberately since the WebGL grid has no
+blank-icon fallback. Nothing saved through the CMS reaches the live site
+until those are filled in, or the projects are marked `draft`.
+
+### Loose ends for the next thread
+
+1. Review and merge PR #22 and #23 (independent, either order) — but see
+   the Netlify status update above: merging doesn't deploy until the free
+   plan resets or Robert upgrades.
+2. Get icons onto the 15 projects that need them, or mark them `draft`, to
+   unblock the live build.
+3. `claude/github-repo-overview-a3bbo3` still exists with both commits
+   combined — now redundant since they're split into #22/#23. Fine to
+   delete once those merge.
+4. From the earlier debugging pass, still open per `PUNCH-LIST.md`:
+   review-before-publish branch protection, `<title>` still `v80`,
+   placeholder contact email, no favicon/OG/404,
+   `big-deal-project.mdoc` test entry to delete.
+5. `grid-motion` branch — parked, not touched.

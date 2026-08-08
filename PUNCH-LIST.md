@@ -4,14 +4,14 @@ The last pass before the domain points at this site. Nothing here is
 exploratory: each line is a known, specific thing that is currently wrong or
 missing, and every one has been verified against the repository as it stands.
 
-`PLAN.md` is the master plan and holds the history. **This is the gate.**
+`TO-DO.md` is the master plan and holds the history. **This is the gate.**
 
 ---
 
 ## A note on wording: this is not a domain transfer
 
 Moving the *registration* away from Squarespace is a separate operation, is not
-required to launch, and is deferred indefinitely (`PLAN.md`, DEFERRED).
+required to launch, and is deferred indefinitely (`TO-DO.md`, DEFERRED).
 
 What launch actually involves is **changing two DNS records** so the domain
 points at Netlify instead of Squarespace. The registration, the nameservers,
@@ -143,7 +143,7 @@ these on the deploy preview **before** the cutover, not after:
 
 ## 4. Cutover — about five minutes of actual work
 
-**Read the four standing rules at the top of `PLAN.md` first.** They are the
+**Read the four standing rules at the top of `TO-DO.md` first.** They are the
 four ways to lose the email.
 
 - [ ] In Netlify: add the custom domain, open **Check DNS configuration**, and
