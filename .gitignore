@@ -8,3 +8,4 @@ dist/
 node_modules/
 .astro/
 .netlify/
+.DS_Store
