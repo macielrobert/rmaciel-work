@@ -221,6 +221,22 @@ function needList(obj, key, label) {
   return v;
 }
 
+/* Projects are entered in batches — all titles first, then all descriptions,
+   then all icons, and so on — so a project can sit for a while with no detail
+   lines yet without that meaning anything is wrong. Unlike needList this never
+   fails: missing or absent becomes [], and the array is only checked for the
+   shape it must have if it exists (strings, non-empty) so a stray blank line
+   still fails loudly rather than shipping a blank row in the window. */
+function optionalList(obj, key, label) {
+  const v = obj[key];
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) fail(`${label}: "${key}" must be a list`);
+  v.forEach((line, i) => {
+    if (typeof line !== 'string' || !line.trim()) fail(`${label}: "${key}" entry ${i + 1} is empty`);
+  });
+  return v;
+}
+
 /* ------------------------------------------------------------- markdoc */
 
 /* THE ONE DEPENDENCY, LOADED ONLY WHEN IT IS NEEDED.
@@ -386,7 +402,7 @@ function buildProject(p, label) {
     fail(`${label}: required field "order" is missing or not a number`);
   }
 
-  const out = { title, details: needList(p, 'details', label) };
+  const out = { title, details: optionalList(p, 'details', label) };
 
   const summary = (p.summary && typeof p.summary.markdoc === 'string')
     ? (renderMarkdoc(p.summary.markdoc, label) || null) : null;
