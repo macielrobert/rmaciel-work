@@ -75,7 +75,14 @@ What to know if you touch it:
 - **The feel knobs are all near `CELL_PX`** — friction, the flick ceiling, the
   overscroll resistance, the settle rate. Every one is per SECOND, so a change
   behaves the same on a 60Hz phone and a 120Hz one. `ROW_FRICTION` is the one
-  to touch first if the glide runs too long or too short.
+  to touch first if the glide runs too long or too short: bigger stops sooner.
+- **The glide is tuned as a bearing, not a brake.** `ROW_FRICTION` is 1.6,
+  slightly freer than iOS (which decelerates at about 2.0/s). It shipped at 4.6
+  first and read as drag — a flick died in under a second. At 1.6 a firm flick
+  coasts about 1250px, and the phone only has ~435px of row, so most flicks now
+  arrive at an end. That is why the ends are springs (`ROW_EDGE_K`,
+  `ROW_EDGE_DAMP`) and not clamps: measured, a hard flick carries ~27px past
+  the end and returns in half a second without ringing.
 - **Keyboard, deep links and section switches all move the row.** Arrowing off
   the visible end pulls the row along; opening `#build/vca` scrolls that icon
   into view; switching section starts the new row at its first icon.

@@ -1167,15 +1167,32 @@
   // NAMING: this file already had a "carousel" — the image strip pinned at
   // the foot of the window (#nl-car, --car-h). That one is unrelated. This is
   // the MENU ROW, and everything belonging to it is ROW_ / row.
-  const ROW_FRICTION = 4.6;     // glide decay: velocity e-folds this often /s
-  const ROW_STOP_V   = 30;      // px/s — below this the glide is over
+  // THE GLIDE IS A BEARING, NOT A BRAKE. Friction is the e-folds per second of
+  // the coast: bigger stops sooner. iOS UIScrollView decelerates at about
+  // 2.0/s (its "normal" rate is 0.998 per millisecond, and ln(0.998) * 1000 is
+  // -2.0), so this is a little freer than the platform the phone came with.
+  // It started at 4.6 and that read as drag, not as a bearing — a flick died
+  // in under a second. At 1.6 a firm flick coasts ~1250px, which on a phone is
+  // the whole row plus slack, so most flicks now arrive at an end. That is the
+  // point, and it is why the ends bounce (ROW_EDGE_* below) instead of
+  // stopping dead — a bearing that hits a hard stop reads as a broken one.
+  const ROW_FRICTION = 1.6;     // glide decay: velocity e-folds this often /s
+  const ROW_STOP_V   = 14;      // px/s — below this the glide is over. Low, so
+                                // the coast ends by running out rather than by
+                                // being switched off
   const ROW_MAX_V    = 5000;    // px/s — a flick cannot throw harder than this
   const ROW_TAP_SLOP = 8;       // px of travel still counted as a TAP, not a drag
   const ROW_STALE_MS = 90;      // finger held still this long before lifting
                                 // means place, not throw: no momentum
   const ROW_RUBBER   = 0.35;    // resistance while dragging past either end
-  const ROW_SPRING   = 12;      // settle rate /s — edge spring-back, and
-                                // scroll-into-view for focus and routing
+  const ROW_SPRING   = 12;      // settle rate /s for scroll-into-view (focus,
+                                // routing) — a move the row makes on its own
+  // Past either end the row meets a spring, not a wall: it carries a little
+  // way out, is pulled back, and settles without ringing. Overshoot is
+  // v0 / (sqrt(K) * e) — about 40px arriving at 2500px/s. Damping sits just
+  // above critical (2 * sqrt(K) = 35.8), so it returns once and stops.
+  const ROW_EDGE_K    = 320;    // spring rate back toward the end, /s^2
+  const ROW_EDGE_DAMP = 36;     // damping on that spring, /s
 
   // Baked content fill: source art occupies this fraction of its tile,
   // leaving a transparent ring for the warp to spill into.
@@ -1877,14 +1894,29 @@ void main() {
       applyScroll();
       return;
     }
-    if (scrollV === 0) return;
-    scrollX += scrollV * dt;
-    scrollV *= Math.exp(-ROW_FRICTION * dt);    // exponential, not linear: a
+    const bound = rowClamp(scrollX);
+    const off   = scrollX - bound;
+    if (scrollV === 0 && off === 0) return;
+
+    if (off !== 0) {
+      // PAST AN END. A spring pulls back and swallows whatever speed is left,
+      // whether the row arrived here on a glide or the finger let go mid-
+      // overscroll. Clamping instead — which is what this did — stops a moving
+      // row dead against an invisible wall, and at this friction most flicks
+      // reach an end, so that stop is the thing you would feel most.
+      scrollV += -off * ROW_EDGE_K * dt;
+      scrollV *= Math.exp(-ROW_EDGE_DAMP * dt);
+      scrollX += scrollV * dt;
+      if (Math.abs(scrollX - bound) < 0.5 && Math.abs(scrollV) < ROW_STOP_V) {
+        scrollX = bound; scrollV = 0;
+      }
+    } else {
+      scrollX += scrollV * dt;
+      scrollV *= Math.exp(-ROW_FRICTION * dt);  // exponential, not linear: a
                                                 // hard flick runs long and a
                                                 // nudge stops soon
-    if (Math.abs(scrollV) < ROW_STOP_V) scrollV = 0;
-    if (scrollX < 0)              { scrollX = 0;         scrollV = 0; }
-    else if (scrollX > scrollMax) { scrollX = scrollMax; scrollV = 0; }
+      if (Math.abs(scrollV) < ROW_STOP_V) scrollV = 0;
+    }
     applyScroll();
   }
 
@@ -2357,7 +2389,8 @@ void main() {
     // a finger that stopped before lifting is placing the row, not throwing it
     if (performance.now() - dragLastT > ROW_STALE_MS) scrollV = 0;
     scrollV = Math.max(-ROW_MAX_V, Math.min(ROW_MAX_V, scrollV));
-    if (scrollX < 0 || scrollX > scrollMax) { rowTarget = rowClamp(scrollX); scrollV = 0; }
+    // letting go while overscrolled needs no special case: stepRowScroll sees
+    // the row is past an end and the same spring brings it back
     if (!cancelled && dragMoved <= ROW_TAP_SLOP) { scrollV = 0; selectAt(iconAtPointer(ev)); }
   }
   canvas.addEventListener('pointerup',     (ev) => endDrag(ev, false));
