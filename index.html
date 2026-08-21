@@ -8,7 +8,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<title>SVG Noise Lab — v80</title>
+<title>Robert Maciel</title>
 <style>
   /* =======================================================================
      TYPEFACE — PP Neue Montreal, three static cuts, served as files.
@@ -917,9 +917,30 @@
   /* the active section reads as the coherent one — ink against the grey row.
      (applied by JS once section switching is wired) */
   #nl-fns [data-nav].on { color: var(--ink); }
+
+  /* ===== TEMPORARY — REMOVE BEFORE MERGING TO main =====================
+     Branch-preview indicator. Confirms at a glance that the tab is showing
+     the mobiledev branch deploy and not the production site, which are
+     otherwise identical. Fixed rather than absolute so it survives every
+     view swap, and z-index 9999 because the only other z-index in this
+     file is 1 (#nl-close). pointer-events: none so it can never eat a tap
+     meant for the canvas underneath.
+     ==================================================================== */
+  #branch-dot {
+    position: fixed;
+    top: 8px; left: 8px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #2f6fed;
+    z-index: 9999;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
+
+<!-- TEMPORARY — REMOVE BEFORE MERGING TO main. Branch-preview indicator; see #branch-dot in the stylesheet. -->
+<div id="branch-dot" aria-hidden="true"></div>
 
 <div id="noiselab">
   <div id="nl-grid">
