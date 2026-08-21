@@ -132,6 +132,18 @@ understanding why it exists will reintroduce a solved bug.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
   the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
+- **The menu is ONE ROW at every width.** Overflow scrolls; it never wraps and
+  it never shrinks the icons. Narrow viewports used to gain rows (390px
+  portrait was 6 x 3), which spent a third of a phone on navigation and moved
+  the seam every time the icon count changed. The row is swipeable with
+  momentum when it overflows (`rowScrolls` in `index.html`, `ROW_*` knobs).
+  Note the name collision the code avoids: the *carousel* in this file has
+  always been the image strip at the foot of the window (`#nl-car`,
+  `--car-h`). The menu row is `ROW_` / `row`, never `car`.
+- **On a scrolling row a tap commits on RELEASE, not on press.** Below
+  `ROW_TAP_SLOP` of travel it was a tap; above it, a swipe. Selecting on press
+  fires a project every time a swipe starts on an icon — which is most of the
+  time. When the row fits and nothing scrolls, press still selects, unchanged.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
   no-WebGL fallback obeys this too, measuring the wrapped title list.

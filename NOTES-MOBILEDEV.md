@@ -47,8 +47,57 @@ See `NOTES-KEYSTATIC-SETUP.md`, "The callback URL is the fiddly part".
    `content/site.json`, so the site name has one source and cannot drift.
    The template carries a loud `PLACEHOLDER` string instead of the real name.
 
-Neither is mobile layout work. Both were the vehicle for getting the branch
-to build the first time.
+The first two are not mobile layout work — both were the vehicle for getting
+the branch to build the first time.
+
+3. **The menu is one swipeable row.** The first real mobile layout change.
+
+## The menu row (commit 3)
+
+The icon grid no longer wraps. At every width it is ONE row; when the row is
+wider than the screen it scrolls, and you swipe it left and right with
+momentum. Icon size never changes — that was the point.
+
+On a 390px phone it was 6 x 3, and three rows of icons spent 252px of an 844px
+screen on navigation. It is 127px now, and the extra 125px goes to the window,
+which is where the work is.
+
+What to know if you touch it:
+
+- **Two different things in this file are called a carousel.** The old one is
+  the image strip at the foot of the window (`#nl-car`, `--car-h`, `.car`).
+  The new one is the menu row, and everything belonging to it is named
+  `ROW_` / `row` / `.scroll-row` so the two can never be confused in a grep.
+- **A tap now commits on RELEASE, not on press** — but only while the row
+  actually scrolls. Under `ROW_TAP_SLOP` (8px) of travel it was a tap; over
+  it, a swipe. Selecting on press, which is what it did before and still does
+  on a wide screen, opened a project every time a swipe started on an icon.
+- **The feel knobs are all near `CELL_PX`** — friction, the flick ceiling, the
+  overscroll resistance, the settle rate. Every one is per SECOND, so a change
+  behaves the same on a 60Hz phone and a 120Hz one. `ROW_FRICTION` is the one
+  to touch first if the glide runs too long or too short.
+- **Keyboard, deep links and section switches all move the row.** Arrowing off
+  the visible end pulls the row along; opening `#build/vca` scrolls that icon
+  into view; switching section starts the new row at its first icon.
+- The no-WebGL fallback is untouched. There the menu is a wrapped list of
+  titles and always was.
+
+### Verified in a real browser
+
+Chromium at 390x844 with touch, over the built `dist/`: one row of 50px cells;
+swipe glides on after release and clamps at both ends; overscroll rubber-bands
+and springs back; a tap selects, a drag from an icon does not; a 5px jiggle
+still counts as a tap; deep link scrolls into view; section switch resets;
+landscape (844x390) fits all 13 and does not scroll; `?nogl` unchanged; no page
+errors. Confirm on a real iPhone anyway — momentum is a feel, not a number.
+
+### One thing left open, deliberately
+
+At rest on a 390px screen the row happens to end almost exactly at the right
+edge, so nothing peeks past it and there is no visual hint that it scrolls.
+Once you swipe, the cut-off icon on the left makes it obvious. Fixing the rest
+state means an edge treatment (a fade, or offsetting the row) and that is a
+design decision, not a bug — flagged, not decided.
 
 ## Three writers to this repo
 
