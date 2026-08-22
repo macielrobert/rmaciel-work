@@ -98,13 +98,30 @@ still counts as a tap; deep link scrolls into view; section switch resets;
 landscape (844x390) fits all 13 and does not scroll; `?nogl` unchanged; no page
 errors. Confirm on a real iPhone anyway — momentum is a feel, not a number.
 
-### One thing left open, deliberately
+### The edge fade, and the wheel (closed)
 
-At rest on a 390px screen the row happens to end almost exactly at the right
-edge, so nothing peeks past it and there is no visual hint that it scrolls.
-Once you swipe, the cut-off icon on the left makes it obvious. Fixing the rest
-state means an edge treatment (a fade, or offsetting the row) and that is a
-design decision, not a bug — flagged, not decided.
+The rest-state problem above is fixed, and so is the desktop one that came
+with it — a mouse-only visitor in a narrow window had no sign the row scrolled
+and no way to move it short of shift+wheel, which nobody discovers.
+
+Two moves, no new controls:
+
+- **The row dissolves into the background at whichever end can still scroll.**
+  A mask on the canvas, ramped over the last `ROW_FADE` (32px) of travel, so it
+  grows in as you leave an end instead of snapping on. At rest only the right
+  fades; at the far end only the left; in between, both. It is a position
+  indicator as much as a "there is more" one, it works on touch and mouse
+  alike, and it adds nothing to the layout.
+- **A plain vertical wheel scrolls the row.** `html, body` are
+  `overflow: hidden` — the page is one viewport and a vertical wheel over the
+  menu did nothing at all before, so claiming it is free. The dominant axis
+  wins, so a trackpad's horizontal swipe and shift+wheel still work.
+
+Arrows were considered and rejected; the reasons are in the CLAUDE.md
+rejected-alternatives table so they do not get re-proposed. The wheel now also
+overscrolls and springs back like the finger does — it used to clamp dead,
+which was most obvious on a trackpad, whose momentum keeps sending deltas
+after your fingers lift.
 
 ## Three writers to this repo
 

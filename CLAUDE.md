@@ -140,6 +140,14 @@ understanding why it exists will reintroduce a solved bug.
   Note the name collision the code avoids: the *carousel* in this file has
   always been the image strip at the foot of the window (`#nl-car`,
   `--car-h`). The menu row is `ROW_` / `row`, never `car`.
+- **The faded edge IS the scroll affordance, and the wheel is the control.**
+  A scrollable menu row dissolves into the background at whichever end can
+  still move, ramped over the last `ROW_FADE` px so it also says roughly where
+  you are. Over that row a PLAIN vertical wheel scrolls it horizontally —
+  `html, body` are `overflow: hidden`, so a vertical wheel there did nothing
+  before and claiming it costs nothing. Together those give a mouse-only
+  visitor both the signal and the control with no added furniture, and the
+  phone gets the same thing.
 - **On a scrolling row a tap commits on RELEASE, not on press.** Below
   `ROW_TAP_SLOP` of travel it was a tap; above it, a swipe. Selecting on press
   fires a project every time a swipe starts on an icon — which is most of the
@@ -237,6 +245,8 @@ understanding why it exists will reintroduce a solved bug.
 | Fixed 50/50 grid split | The seam follows the menu |
 | Centering the window text | Every text column starts at a left margin (v71) |
 | A separate deliberately-broken build for testing | Use `?nogl` instead — one file, no confusable copies |
+| ◄ ► arrows on the menu row | Duplicate a capability the wheel already gives, in furniture the phone would never show — a device-conditional design paying for what the faded edge says for free on both |
+| Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---
 

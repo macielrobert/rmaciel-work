@@ -189,8 +189,35 @@
      can still be zoomed. Without this a horizontal drag on iOS is a
      back-navigation gesture and the row never moves. The class is present only
      while the row actually overflows — when every icon fits there is nothing
-     to scroll and the canvas keeps its default behaviour. */
-  #nl-gl.scroll-row { touch-action: pan-y pinch-zoom; }
+     to scroll and the canvas keeps its default behaviour.
+
+     THE FADED EDGE IS THE AFFORDANCE. A row that ends flush at the viewport
+     edge looks finished; one that dissolves into the background is visibly
+     cut off, and that is true on a phone and a desktop alike — one mechanism,
+     no device-conditional furniture, nothing added to the layout. The two
+     widths are written by applyScroll and RAMP with distance from each end,
+     so the mark is not just "there is more" but "there is more, and this is
+     roughly where you are". At rest only the right edge fades; at the far end
+     only the left.
+
+     It is a mask on an OPAQUE canvas, so what shows through the faded part is
+     the page behind it — the same --bg the canvas is painted with. The icons
+     dissolve into the background rather than into a grey band, which is the
+     same vocabulary the shader already speaks. */
+  #nl-gl.scroll-row {
+    touch-action: pan-y pinch-zoom;
+    --fade-l: 0px; --fade-r: 0px;
+    -webkit-mask-image: linear-gradient(90deg,
+      transparent 0, #000 var(--fade-l),
+      #000 calc(100% - var(--fade-r)), transparent 100%);
+            mask-image: linear-gradient(90deg,
+      transparent 0, #000 var(--fade-l),
+      #000 calc(100% - var(--fade-r)), transparent 100%);
+  }
+  /* the cursor confirms the drag WHILE it happens. Deliberately not `grab` at
+     rest: the icons are the navigation, and `pointer` says so. Saying `grab`
+     instead would trade a true signal for a hint. */
+  #nl-gl.scroll-row.dragging { cursor: grabbing; }
 
   /* ------------------------------------- keyboard / screen-reader grid layer
      The canvas is PIXELS: it cannot be tabbed into, and a screen reader meets
@@ -1193,6 +1220,12 @@
   // above critical (2 * sqrt(K) = 35.8), so it returns once and stops.
   const ROW_EDGE_K    = 320;    // spring rate back toward the end, /s^2
   const ROW_EDGE_DAMP = 36;     // damping on that spring, /s
+  const ROW_OVER_MAX  = 60;     // px — cap on wheel overscroll. A finger is
+                                // limited by the screen; a trackpad's momentum
+                                // stream is not, and would drag the row into
+                                // the middle of nowhere
+  const ROW_FADE      = 32;     // px — width of the dissolve at a scrollable
+                                // edge. Fixed, like every other size here
 
   // Baked content fill: source art occupies this fraction of its tile,
   // leaving a transparent ring for the warp to spill into.
@@ -1800,12 +1833,28 @@ void main() {
   // its spans stay at CONTENT coordinates, so placeKeys() and this never have
   // to agree about anything except the base position. It also means a scroll
   // frame writes one style property and reads no layout.
+  let fadeL = -1, fadeR = -1;            // last written, so a glide through the
+                                         // middle of the row writes nothing
   function applyScroll() {
     for (const ic of icons) {
       ic.pxCx = ic.baseCx - scrollX;
       ic.cx = ic.pxCx / canvasCssW * 2 - 1;
     }
-    if (gl) keysEl.style.transform = scrollX ? 'translateX(' + (-scrollX).toFixed(1) + 'px)' : '';
+    if (!gl) return;
+    keysEl.style.transform = scrollX ? 'translateX(' + (-scrollX).toFixed(1) + 'px)' : '';
+
+    // the dissolve at each end, ramped over the last ROW_FADE px of travel so
+    // it grows in as you leave an end rather than snapping on at the first
+    // pixel. Pinned at full width everywhere in between — which is why the
+    // guard below means most scroll frames touch no style at all.
+    const l = Math.max(0, Math.min(ROW_FADE, scrollX));
+    const r = Math.max(0, Math.min(ROW_FADE, scrollMax - scrollX));
+    if (Math.abs(l - fadeL) > 0.5 || (l === 0) !== (fadeL === 0)) {
+      canvas.style.setProperty('--fade-l', l.toFixed(1) + 'px'); fadeL = l;
+    }
+    if (Math.abs(r - fadeR) > 0.5 || (r === 0) !== (fadeR === 0)) {
+      canvas.style.setProperty('--fade-r', r.toFixed(1) + 'px'); fadeR = r;
+    }
   }
 
   const rowClamp = x => Math.max(0, Math.min(scrollMax, x));
@@ -2351,6 +2400,7 @@ void main() {
                                                 // catching a moving row is how
                                                 // a scroll is expected to work
     dragLastT = performance.now();
+    canvas.classList.add('dragging');
     try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}   // a finger
                                                 // that leaves the canvas keeps
                                                 // driving the row
@@ -2385,6 +2435,7 @@ void main() {
   function endDrag(ev, cancelled) {
     if (dragId === null || ev.pointerId !== dragId) return;
     dragId = null;
+    canvas.classList.remove('dragging');
     try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
     // a finger that stopped before lifting is placing the row, not throwing it
     if (performance.now() - dragLastT > ROW_STALE_MS) scrollV = 0;
@@ -2396,19 +2447,33 @@ void main() {
   canvas.addEventListener('pointerup',     (ev) => endDrag(ev, false));
   canvas.addEventListener('pointercancel', (ev) => endDrag(ev, true));
 
-  // Trackpad and horizontal wheel — the same row, driven by the pointing device
-  // a narrow desktop window actually has. Shift+wheel is the convention for
-  // horizontal scroll on a mouse with one wheel. Passive:false because the
-  // gesture is ours: left unprevented, a two-finger swipe is browser history
-  // navigation on macOS.
+  // WHEEL — EITHER AXIS. A plain vertical wheel scrolls the row, because over
+  // this canvas it has nothing else to do: html and body are overflow:hidden,
+  // the page is one viewport, and a vertical wheel here did literally nothing
+  // before. Claiming it is what gives a mouse-only visitor control of the row
+  // without a single added control: no shift to discover, no arrows to click,
+  // the same wheel they were already turning. The dominant axis wins, so a
+  // trackpad's horizontal swipe and shift+wheel both work unchanged — the
+  // browser puts shift+wheel on deltaX or deltaY depending on the platform,
+  // and this reads whichever moved.
+  //
+  // passive:false because the gesture is ours: left unprevented, a two-finger
+  // swipe is browser history navigation on macOS.
   canvas.addEventListener('wheel', (ev) => {
     if (!rowScrolls) return;
-    const raw = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : (ev.shiftKey ? ev.deltaY : 0);
+    const raw = Math.abs(ev.deltaX) >= Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
     if (!raw) return;
     ev.preventDefault();
     const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? canvasCssW : 1;   // lines / pages -> px
     rowTarget = null; scrollV = 0;
-    scrollX = rowClamp(scrollX + raw * unit);
+
+    // past an end the wheel goes soft and the edge spring takes it back, the
+    // same as the finger. Clamping here instead is what made a trackpad — whose
+    // momentum keeps sending deltas after your fingers lift — stop dead against
+    // an invisible wall while still moving at speed.
+    let t = scrollX + raw * unit;
+    if (t < 0 || t > scrollMax) t = scrollX + raw * unit * ROW_RUBBER;
+    scrollX = Math.max(-ROW_OVER_MAX, Math.min(scrollMax + ROW_OVER_MAX, t));
     applyScroll();
   }, { passive: false });
 
