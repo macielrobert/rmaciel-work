@@ -3773,7 +3773,24 @@ void main() {
         oy = -mv * ic.mvy * 2 / canvasCssH;    // clip space y points the other way
       }
 
-      const iconScale = mixv(SCALE_OFF, SCALE_ON, e);
+      // SCALE TRACKS THE WARP, NOT THE MIX. The shrink exists to open a
+      // transparent ring for the warp to spill into, so it has to rise and
+      // fall with the warp that fills it — and the warp is e AND still, on
+      // two clocks: `e * (1 - s)`, the same product uAmp is given below.
+      //
+      // Reading `e` alone was fine in the two symmetric cases and wrong in
+      // the two mixed ones. Selecting a CHURNING icon (switching projects
+      // directly) freezes it in ON_TIME 0.12s but eases its mix down over
+      // OFF_TIME 0.80s — so the warp vanished in a twelfth of a second and
+      // you then watched an already-still icon swell from 0.64 to full for
+      // another two thirds of a second. Deselecting one is the same fault
+      // mirrored: mix snaps up in 0.12s and the icon shrank away from a
+      // warp that `still` was holding off for 0.80s.
+      //
+      // With the product, the quad grows exactly as fast as the warp leaves
+      // it — which is what makes both reads the way rest -> active already
+      // read: no size change at all, only coherence.
+      const iconScale = mixv(SCALE_OFF, SCALE_ON, e * (1 - s));
       const qw = footW * iconScale, qh = footH * iconScale;
 
       gl.uniform1f(loc.uAmp, amp);
