@@ -142,8 +142,11 @@ understanding why it exists will reintroduce a solved bug.
   `--car-h`). The menu row is `ROW_` / `row`, never `car`.
 - **The faded edge IS the scroll affordance, and the wheel is the control.**
   A scrollable menu row dissolves into the background at whichever end can
-  still move, ramped over the last `ROW_FADE` px so it also says roughly where
-  you are. Over that row a PLAIN vertical wheel scrolls it horizontally —
+  still move, ramped over the last PITCH of travel so it also says roughly
+  where you are. One pitch is a floor, not a taste: a mask dissolves only ink
+  that is under it, and the ink-free run between two icons is 30.5px, so a
+  ramp shorter than a pitch can land in that void and do nothing. It did — at
+  334px wide the old 32px ramp erased exactly zero ink. Over that row a PLAIN vertical wheel scrolls it horizontally —
   `html, body` are `overflow: hidden`, so a vertical wheel there did nothing
   before and claiming it costs nothing. Together those give a mouse-only
   visitor both the signal and the control with no added furniture, and the

@@ -107,11 +107,20 @@ and no way to move it short of shift+wheel, which nobody discovers.
 Two moves, no new controls:
 
 - **The row dissolves into the background at whichever end can still scroll.**
-  A mask on the canvas, ramped over the last `ROW_FADE` (32px) of travel, so it
+  A mask on the canvas, ramped over the last PITCH (62.5px) of travel, so it
   grows in as you leave an end instead of snapping on. At rest only the right
   fades; at the far end only the left; in between, both. It is a position
   indicator as much as a "there is more" one, it works on touch and mouse
   alike, and it adds nothing to the layout.
+- **The ramp is one pitch wide because anything less can be invisible.** It
+  shipped at 32px and there were viewport widths where you could not see it at
+  all: a mask dissolves only ink that lies under it, and between the ink of one
+  icon and the next there is a gap plus both transparent margins — 30.5px of
+  nothing. Swept across widths 320-440, the 32px ramp erased ZERO ink at 334px
+  and 0.1px at 396px. One pitch cannot fall in that void, because the void is
+  shorter than a pitch; the same sweep never drops below 8px erased. If you
+  ever change `CELL_PX` or `GAP_RATIO`, the fade follows automatically — it is
+  read from the pitch in `relayout()`, not typed in.
 - **A plain vertical wheel scrolls the row.** `html, body` are
   `overflow: hidden` — the page is one viewport and a vertical wheel over the
   menu did nothing at all before, so claiming it is free. The dominant axis

@@ -1224,8 +1224,23 @@
                                 // limited by the screen; a trackpad's momentum
                                 // stream is not, and would drag the row into
                                 // the middle of nowhere
-  const ROW_FADE      = 32;     // px — width of the dissolve at a scrollable
-                                // edge. Fixed, like every other size here
+  // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
+  // guarantee, not a taste. A mask can only dissolve ink that is actually
+  // under it, and this row is mostly empty: between the ink of one icon and
+  // the ink of the next lies a gap plus both icons' transparent margins —
+  // 12.5 + 9 + 9 = 30.5px of nothing at CELL_PX 50. A 32px ramp, which is what
+  // this was, can therefore land almost entirely in that void: at a 396px
+  // viewport it covered 2px of one icon's trailing edge at 6% alpha and the
+  // fade was invisible. Whether the affordance appeared at all depended on
+  // where the window edge happened to fall.
+  //
+  // One pitch cannot land in the void, because the void is shorter than a
+  // pitch: any pitch-wide window contains one whole cell's worth of art. Worst
+  // case — the void sitting at the very edge — the nearest icon still ramps
+  // from 0 to about 50% across its own width, so it reads as dissolving rather
+  // than as ending. It is derived in relayout() from the pitch actually in use,
+  // so it follows the cells if GRID_MAX_FRAC ever shrinks them.
+  let rowFadePx = 0;            // px — set in relayout()
 
   // Baked content fill: source art occupies this fraction of its tile,
   // leaving a transparent ring for the warp to spill into.
@@ -1843,12 +1858,12 @@ void main() {
     if (!gl) return;
     keysEl.style.transform = scrollX ? 'translateX(' + (-scrollX).toFixed(1) + 'px)' : '';
 
-    // the dissolve at each end, ramped over the last ROW_FADE px of travel so
-    // it grows in as you leave an end rather than snapping on at the first
-    // pixel. Pinned at full width everywhere in between — which is why the
-    // guard below means most scroll frames touch no style at all.
-    const l = Math.max(0, Math.min(ROW_FADE, scrollX));
-    const r = Math.max(0, Math.min(ROW_FADE, scrollMax - scrollX));
+    // the dissolve at each end, ramped over the last pitch of travel so it
+    // grows in as you leave an end rather than snapping on at the first pixel.
+    // Pinned at full width everywhere in between — which is why the guard
+    // below means most scroll frames touch no style at all.
+    const l = Math.max(0, Math.min(rowFadePx, scrollX));
+    const r = Math.max(0, Math.min(rowFadePx, scrollMax - scrollX));
     if (Math.abs(l - fadeL) > 0.5 || (l === 0) !== (fadeL === 0)) {
       canvas.style.setProperty('--fade-l', l.toFixed(1) + 'px'); fadeL = l;
     }
@@ -1890,6 +1905,8 @@ void main() {
     const over = rowW + 2 * marginPxCss - canvasCssW;
     rowScrolls = over > 0.5;
     scrollMax = rowScrolls ? over : 0;
+    rowFadePx = pitch;                   // one pitch — see the note at its
+                                         // declaration for why not less
     if (!rowScrolls) { scrollX = 0; scrollV = 0; rowTarget = null; }
     else scrollX = rowClamp(scrollX);    // a resize can shorten the run
 
