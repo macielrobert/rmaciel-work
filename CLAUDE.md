@@ -132,6 +132,29 @@ understanding why it exists will reintroduce a solved bug.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
   the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
+- **The menu is ONE ROW at every width.** Overflow scrolls; it never wraps and
+  it never shrinks the icons. Narrow viewports used to gain rows (390px
+  portrait was 6 x 3), which spent a third of a phone on navigation and moved
+  the seam every time the icon count changed. The row is swipeable with
+  momentum when it overflows (`rowScrolls` in `index.html`, `ROW_*` knobs).
+  Note the name collision the code avoids: the *carousel* in this file has
+  always been the image strip at the foot of the window (`#nl-car`,
+  `--car-h`). The menu row is `ROW_` / `row`, never `car`.
+- **The faded edge IS the scroll affordance, and the wheel is the control.**
+  A scrollable menu row dissolves into the background at whichever end can
+  still move, ramped over the last PITCH of travel so it also says roughly
+  where you are. One pitch is a floor, not a taste: a mask dissolves only ink
+  that is under it, and the ink-free run between two icons is 30.5px, so a
+  ramp shorter than a pitch can land in that void and do nothing. It did — at
+  334px wide the old 32px ramp erased exactly zero ink. Over that row a PLAIN vertical wheel scrolls it horizontally —
+  `html, body` are `overflow: hidden`, so a vertical wheel there did nothing
+  before and claiming it costs nothing. Together those give a mouse-only
+  visitor both the signal and the control with no added furniture, and the
+  phone gets the same thing.
+- **On a scrolling row a tap commits on RELEASE, not on press.** Below
+  `ROW_TAP_SLOP` of travel it was a tap; above it, a swipe. Selecting on press
+  fires a project every time a swipe starts on an icon — which is most of the
+  time. When the row fits and nothing scrolls, press still selects, unchanged.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
   no-WebGL fallback obeys this too, measuring the wrapped title list.
@@ -225,6 +248,8 @@ understanding why it exists will reintroduce a solved bug.
 | Fixed 50/50 grid split | The seam follows the menu |
 | Centering the window text | Every text column starts at a left margin (v71) |
 | A separate deliberately-broken build for testing | Use `?nogl` instead — one file, no confusable copies |
+| ◄ ► arrows on the menu row | Duplicate a capability the wheel already gives, in furniture the phone would never show — a device-conditional design paying for what the faded edge says for free on both |
+| Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---
 

@@ -625,6 +625,42 @@ function serialise(obj) {
     .replace(/\u2029/g, '\\u2029');
 }
 
+/* THE <title> TAG, written from content/site.json at build time.
+
+   WHY IT IS GENERATED RATHER THAN TYPED. index.html already sets
+   document.title at runtime — updateDocTitle() builds it from
+   CONTENT.siteTitle on every route change. So the tag in the source is only
+   the PRE-BOOT value: the tab label during first paint, and what a crawler
+   with JS disabled reads. Typed by hand it was a second copy of the site
+   name that nothing kept in step, and it drifted — it still said
+   "SVG Noise Lab — v80" long after the site had a real name. One source,
+   content/site.json, now feeds both.
+
+   NO NEW MARKER COMMENT, unlike the CONTENT block. <title> is unique in a
+   valid document by definition, so the tag IS the marker and there is
+   nothing extra for a future editor to preserve by accident. A missing or
+   duplicated one is a broken template and FAILS rather than silently
+   skipping, matching how the CONTENT markers are handled below.
+
+   ESCAPED, because site_title comes from a CMS field a human types into.
+   "Maciel & Co" is a plausible thing to enter and a bare & in an HTML text
+   node is invalid; < would be worse. */
+const TITLE_RE = /<title>[\s\S]*?<\/title>/gi;
+
+function escapeHtmlText(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function injectTitle(html, siteTitle) {
+  const found = html.match(TITLE_RE);
+  if (!found)             fail('index.html: no <title> tag found. build.js writes the site name into it and cannot place it without one.');
+  if (found.length !== 1) fail(`index.html: ${found.length} <title> tags found, expected exactly 1.`);
+  return html.replace(TITLE_RE, `<title>${escapeHtmlText(siteTitle)}</title>`);
+}
+
 function inject(html, content) {
   const a = html.indexOf(START);
   const b = html.indexOf(END);
@@ -663,7 +699,8 @@ function main() {
   if (!fs.existsSync(SRC_HTML)) fail('index.html: not found at the repository root');
 
   const content = assemble();
-  const html = inject(fs.readFileSync(SRC_HTML, 'utf8'), content);
+  let html = inject(fs.readFileSync(SRC_HTML, 'utf8'), content);
+  html = injectTitle(html, content.siteTitle);
 
   // rebuilt from scratch every run: a stale file from a previous build that no
   // longer has a source would otherwise survive and ship
