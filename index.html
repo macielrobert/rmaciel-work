@@ -404,7 +404,7 @@
     cursor: pointer;
     user-select: none;
   }
-  #nl-back:focus { color: var(--ink); }
+  #nl-back:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-back:hover { color: var(--ink); } }
   #nl-exp-hd { color: rgba(143,143,153,0.9); }
   #nl-exp-stage {
@@ -670,7 +670,7 @@
   /* shown only when the copy actually overflows its clamp */
   #nl-window.l-grid #nl-more.on   { display: block; }
   #nl-window.l-grid.x #nl-more    { display: none; }
-  #nl-more:focus { color: var(--ink); }
+  #nl-more:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-more:hover { color: var(--ink); } }
 
   /* EXPANDED inside l-grid. The grid steps aside and the view becomes the
@@ -817,7 +817,7 @@
     pointer-events: auto; cursor: pointer;
     user-select: none;
   }
-  #nl-close:focus { color: var(--ink); }
+  #nl-close:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-close:hover { color: var(--ink); } }
 
   /* ------------------------------------------------ contact form (last icon) */
@@ -841,7 +841,7 @@
     display: inline-block; margin-top: 14px;
     color: rgba(143,143,153,0.9); cursor: pointer; letter-spacing: 0.15em;
   }
-  #nl-window .send:focus { color: var(--ink); }
+  #nl-window .send:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-window .send:hover { color: var(--ink); } }
 
   /* ------------------------------------------------ copyright (right margin)
@@ -912,7 +912,11 @@
     padding: 6px 8px;                          /* tap target AND the separation
                                                   that the commas used to give */
   }
-  #nl-fns [data-nav]:focus { color: var(--ink); }
+  /* :focus-visible, NOT :focus. A tabindex span KEEPS focus after a tap, so
+     with plain :focus the label you last clicked stayed ink alongside the
+     .on label — two coherent labels at once, which the footer is not
+     allowed to show. :focus-visible only paints the keyboard ring. */
+  #nl-fns [data-nav]:focus-visible { color: var(--ink); }
   @media (hover: hover) { #nl-fns [data-nav]:hover { color: var(--ink); } }
   /* the active section reads as the coherent one — ink against the grey row.
      (applied by JS once section switching is wired) */
