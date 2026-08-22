@@ -1249,7 +1249,12 @@
 
   // the one effect, parameterised. off = breathe, on = degrade.
   // amp is in UV units (fraction of an icon). these are the knobs to taste.
-  const AMP_OFF  = 0.018, AMP_ON  = 0.38;   // displacement magnitude
+  // AMP_OFF is 0: THE RESTING GRID DOES NOT MOVE. It used to breathe at 0.018,
+  // which read as a page that had not finished loading rather than as a page at
+  // rest. Only SPEED_OFF stays non-zero — amplitude 0 makes it invisible, but
+  // it keeps each icon's phase clock running, so churn starts from a spread of
+  // phases instead of every icon flinching in unison.
+  const AMP_OFF  = 0.0,   AMP_ON  = 0.38;   // displacement magnitude
   const FREQ_OFF = 1.6,   FREQ_ON = 5.5;    // noise frequency across the icon
   const SPEED_OFF= 0.18,  SPEED_ON= 0.95;   // noise evolution (per second)
 
@@ -2580,11 +2585,7 @@ void main() {
   // reduced-motion version of a motion piece is worse than its absence, so it
   // is withheld rather than degraded — the button simply is not there.
   function fieldAvailable() {
-    // BEHIND ?motion, same as the grid reorganisation. Both are experiments
-    // living on main now that grid-motion is merged, and the live portfolio
-    // must not grow a diamond in its footer by accident. ?motion turns the
-    // whole experiment on: the reorganisation AND its one control.
-    return GRID_MOTION && !!gl && !reduceMotion && shapeTex.length > 0 &&
+    return !!gl && !reduceMotion && shapeTex.length > 0 &&
            rootEl.getBoundingClientRect().width >= FIELD_MIN_W;
   }
   function updateFieldBtn() {
@@ -2891,6 +2892,11 @@ void main() {
   }
   function commitSection(n) {
     activeSection = n;
+    updateNav();                  // the ONE place activeSection changes, so the
+                                  // one place the footer is guaranteed correct.
+                                  // A deep link ('#build', no slug) lands here
+                                  // and then skips commit() — nothing else on
+                                  // that path re-reads the footer.
     icons = allIcons[n];
     // the new set ARRIVES fully churned and eases back to calm
     for (const ic of icons) { ic.mix = 1; ic.target = 0; ic.still = 0; ic.stillTarget = 0; }
@@ -3081,9 +3087,12 @@ void main() {
   function updateNav() {
     for (const el of navEls) {
       const n = el.getAttribute('data-nav');
+      // gSwapTo first: during a section swap that is the section the footer
+      // means, and activeSection does not catch up until commitSection().
+      const sn  = gSwapTo !== null ? gSwapTo : activeSection;
       const on = fixture !== null
         ? (fixture === n)
-        : (DATA.sections[activeSection] && DATA.sections[activeSection].id === n);
+        : (DATA.sections[sn] && DATA.sections[sn].id === n);
       el.classList.toggle('on', !!on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
