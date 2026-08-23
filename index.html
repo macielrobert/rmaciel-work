@@ -1106,8 +1106,8 @@
      BANDS it: that section stays ink, everything else eases to the accent
      grey. Position alone cannot say where a section ends when the row always
      shows all of them, so the colour says it. ALL is the fourth link and the
-     default — every icon ink — and the band falls back to it when you scroll
-     clear of the banded section. ABOUT and CONTACT are FIXTURES: footer
+     default — every icon ink — and the band falls back to it two ways: scroll
+     clear of the banded section, or pick something from outside it. ABOUT and CONTACT are FIXTURES: footer
      entries that take the window with no grid icon behind them. Window
      entries are one flat list ([...sections, ABOUT, form]) in the SAME order
      as the icons, so a flat icon index and a flat window index are one number.
@@ -2340,10 +2340,8 @@ void main() {
     for (let i = 0; i < keyEls.length; i++) {
       keyEls[i].setAttribute('aria-selected', i === sel ? 'true' : 'false');
       keyEls[i].tabIndex = (i === focusIdx) ? 0 : -1;
-      // the band, said in type — the fallback's version of the accent-grey art.
-      // The selected one is exempt for the same reason it is on the canvas, and
-      // is painted ink by the rule after this one either way.
-      keyEls[i].classList.toggle('dim', i !== sel && (i < lo || i >= hi));
+      // the band, said in type — the fallback's version of the accent-grey art
+      keyEls[i].classList.toggle('dim', i < lo || i >= hi);
     }
   }
 
@@ -2578,12 +2576,10 @@ void main() {
       // section you are in. An icon outside the band still churns like the
       // rest — it is demoted, not switched off.
       //
-      // THE OPEN PROJECT IS ALWAYS INK, band or no band. Ink is what is ACTIVE
-      // and accent is what is merely present, which is the rule the whole
-      // stylesheet already runs on; a chosen thing drawn in the resting colour
-      // would contradict it. Reachable in one move: band DESIGN, then tap an
-      // ART icon.
-      icons[i].dimTarget   = (i === selected && !fx) || (i >= lo && i < hi) ? 0 : 1;
+      // No exemption for the selected icon, and none needed: commit() clears
+      // the band before this runs if the selection landed outside it, so a
+      // chosen thing can never be drawn in the resting colour.
+      icons[i].dimTarget   = (i >= lo && i < hi) ? 0 : 1;
     }
   }
 
@@ -2623,6 +2619,20 @@ void main() {
   // apply whatever state was just set: grid noise, footer marks, and the
   // window (open from rest / switch entry / close), on the existing clocks.
   function commit(prevTarget) {
+    // PICKING FROM OUTSIDE THE BAND CLEARS IT. Reaching past the accent grey
+    // for something is a statement that the band is no longer what you are
+    // looking for, so the row lights back up whole and the footer returns to
+    // ALL. The alternative — keeping the band and exempting the one icon from
+    // it — left the footer naming a section that had nothing to do with what
+    // was open.
+    //
+    // HERE, not in setSelected(): commit() is the funnel every selection
+    // passes through, so the pointer, the keyboard and a deep link all get the
+    // same answer without three copies of it.
+    if (selected !== null && activeSection !== null) {
+      const b = bandRange();
+      if (selected < b[0] || selected >= b[1]) activeSection = null;
+    }
     applySelection();
     updateNav();
     updateKeys();
@@ -2645,11 +2655,10 @@ void main() {
     const prev = winTarget();
     selected = next;
     fixture  = null;              // a grid selection always leaves a fixture
-    // THE BAND IS NOT TOUCHED. Picking a project is not picking a category:
-    // choose one from the middle of ALL and the row stays fully ink around it,
-    // and choose one while DESIGN is banded and DESIGN stays banded. The URL
-    // still names the project's own section — routeString reads that off the
-    // selection, not off the band.
+    // The band is commit()'s to decide: picking INSIDE it leaves it alone,
+    // picking outside it clears it to ALL. Either way the URL names the
+    // project's own section, which routeString reads off the selection rather
+    // than off the band.
     commit(prev);
   }
 

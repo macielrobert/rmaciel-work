@@ -73,9 +73,11 @@ Mostly visual, but it produced a real bug, so it earns tests.
       fall back to ALL and the row return to ink, and the URL must change by
       REPLACE — check the back button still goes where it did.
 - [ ] ALL must not move the row. It lights everything where you are standing.
-- [ ] Band a section, then open a project from a DIFFERENT one: the open icon
-      is ink, its own section is not banded, and the footer still shows the
-      band you asked for.
+- [ ] Band a section, then tap an ACCENTED icon: the whole row returns to ink
+      and the footer to ALL, while that project opens. Tapping an ink one
+      inside the band leaves the band alone.
+- [ ] The same from the keyboard (arrow onto a dimmed icon, Enter) and from a
+      deep link — all three go through commit(), so all three must agree.
 - [ ] Deep-link `#design` and `#all`. Both must paint the band on the first
       frame — this is the path that skips commit().
 - [ ] `?nogl`: the same three levels in type — ink for the open one, accent for

@@ -137,15 +137,19 @@ understanding why it exists will reintroduce a solved bug.
   project, so a footer link does two things: it scrolls that section's first
   icon to the left margin AND draws that section in ink with everything else
   in accent grey. ALL — the fourth footer link, and the state the page loads
-  in — is every icon ink. Scrolling until none of the banded section is on
-  screen falls back to ALL, because the band is a place and not a mode.
-  Three rules keep it from tangling with the rest: **colour is not coherence**
-  (an out-of-band icon still churns; it is demoted, not switched off), **the
-  open project is always ink** whatever the band (ink = active, accent = merely
-  present, which is the rule the stylesheet already runs on), and **picking a
-  project never moves the band** — only the footer does. The consequence to
-  know: the band is not in the URL when a project is open, so reloading
-  `#design/bus-stop` lands in ALL rather than in DESIGN.
+  in — is every icon ink. **Two things fall back to ALL**: scrolling until none
+  of the banded section is on screen, and **picking an icon from outside the
+  band** — reaching past the accent grey for something says the band is not
+  what you were looking for. Both are the same idea, that the band is a place
+  and not a mode.
+  Two rules keep it from tangling with the rest: **colour is not coherence**
+  (an out-of-band icon still churns; it is demoted, not switched off), and a
+  chosen thing is never drawn in the resting colour — which needs no exemption
+  in the paint, because `commit()` has already cleared the band by the time
+  `applySelection()` runs. `commit()` is where that lives, not `setSelected()`:
+  it is the funnel the pointer, the keyboard and a deep link all pass through.
+  The consequence to know: the band is not in the URL when a project is open,
+  so reloading `#design/bus-stop` lands in ALL rather than in DESIGN.
 - **The row holds EVERY section, in section order, and it is a RING.** BUILD /
   DESIGN / ART are addresses along one endless row, not three menus that swap.
   Past the last ART icon comes the first BUILD icon again (`rowCycle` in
