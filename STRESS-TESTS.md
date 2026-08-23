@@ -73,6 +73,12 @@ Mostly visual, but it produced a real bug, so it earns tests.
       fall back to ALL and the row return to ink, and the URL must change by
       REPLACE — check the back button still goes where it did.
 - [ ] ALL must not move the row. It lights everything where you are standing.
+- [ ] ALL from ABOUT, from CONTACT, and from an open project: each must close
+      the window AND light the row, without the row moving. ABOUT was the case
+      that failed — with the band already clear there was nothing left for ALL
+      to do, so it did nothing.
+- [ ] ALL inside the field must do nothing at all. The footer is still live
+      there, and a commit() would repaint the field's cells as menu icons.
 - [ ] Band a section, then tap an ACCENTED icon: the whole row returns to ink
       and the footer to ALL, while that project opens. Tapping an ink one
       inside the band leaves the band alone.

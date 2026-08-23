@@ -2620,9 +2620,8 @@ void main() {
   }
 
   // Set the band without touching anything else — the row does not move and
-  // the window does not close. ALL is a way of LOOKING at the row, not a place
-  // in it, which is why the ALL link does not scroll: you keep your position
-  // and the whole row lights up around it.
+  // the window does not close. Used by the scroll-away fallback, which happens
+  // TO you rather than being asked for, and so must not disturb anything else.
   function setBand(n, replace) {
     if (activeSection === n) return;
     activeSection = n;
@@ -2630,6 +2629,27 @@ void main() {
     updateNav();
     updateKeys();
     syncRoute(!!replace);
+  }
+
+  // ALL: back to the state the page loads in — every icon ink, the window
+  // empty. It is the fourth footer link and it lands at rest like the other
+  // three, closing whatever the window holds, project or fixture alike.
+  // Leaving fixtures open was the bug: with ABOUT up, ALL did nothing at all,
+  // because the band was already null and clearing a null band is a no-op.
+  //
+  // THE ONE THING IT DOES NOT DO IS MOVE THE ROW. BUILD / DESIGN / ART are
+  // places in the row and jump to them; ALL is a way of LOOKING at the row, so
+  // you keep the position you had and the whole thing lights up around it.
+  //
+  // No contact-lock exemption, and deliberately: the lock exists so a STRAY
+  // tap cannot discard a half-written message, and a footer label is an aimed
+  // one. BUILD / DESIGN / ART have always dismissed the form the same way.
+  function showAll() {
+    if (field) return;            // the field has no band and no window
+    if (activeSection === null && selected === null && fixture === null) return;
+    const prev = winTarget();
+    selected = null; fixture = null; activeSection = null;
+    commit(prev);
   }
 
   // where the window should be pointing, as a FLAT winEntries index (or null
@@ -3335,7 +3355,7 @@ void main() {
     const n = el.getAttribute('data-nav');
     const fn = () => {
       if (n === 'about' || n === 'contact') { openFixture(n); return; }
-      if (n === 'all') { setBand(null); return; }
+      if (n === 'all') { showAll(); return; }
       const si = DATA.sections.findIndex(sec => sec.id === n);
       if (si >= 0) switchSection(si);
     };

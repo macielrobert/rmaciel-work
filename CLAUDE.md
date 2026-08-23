@@ -138,7 +138,10 @@ understanding why it exists will reintroduce a solved bug.
   icon to the left margin — plus `ROW_SNAP_INSET`, which keeps it out of the
   edge dissolve — AND draws that section in ink with everything else
   in accent grey. ALL — the fourth footer link, and the state the page loads
-  in — is every icon ink. **Two things fall back to ALL**: scrolling until none
+  in — is every icon ink. Like the other three it lands at REST, closing
+  whatever the window holds, project or fixture; unlike them it does NOT move
+  the row, because it is a way of looking at the row rather than a place in
+  it. **Two things fall back to ALL**: scrolling until none
   of the banded section is on screen, and **picking an icon from outside the
   band** — reaching past the accent grey for something says the band is not
   what you were looking for. Both are the same idea, that the band is a place
