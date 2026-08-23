@@ -64,6 +64,23 @@ Mostly visual, but it produced a real bug, so it earns tests.
 
 ---
 
+## The menu row is a ring
+
+- [ ] Swipe (or wheel) past the last ART icon — BUILD follows on, with an even
+      gap, and it keeps going. There must be no end, no bounce, and no seam
+      where the row joins itself.
+- [ ] On a screen WIDER than the whole row, confirm the row fills the width and
+      repeats, and that BUILD / DESIGN / ART each still land their first icon at
+      the left margin. This is the case the ring exists for.
+- [ ] On that same wide screen, open a project whose icon is visible TWICE —
+      both copies must freeze together, and tapping either must open it.
+- [ ] A footer link from the far side of the row must take the SHORT way round.
+- [ ] Load a deep link (`#art`, and `#build/vca`). The row must already be in
+      place on the first frame — no travel, no bounce.
+- [ ] Rotate the phone mid-flick and mid-jump; nothing should fight itself.
+- [ ] Enter the field and wheel over it — the field is a grid, not a ring, and
+      must not scroll.
+
 ## Vertical copyright (v73)
 
 - [ ] A deliberately **long copyright string** on a short landscape phone —
@@ -112,9 +129,9 @@ The one that most needs stressing.
 - [ ] Swipe through several images while expanded, then press back **once** —
       should close the image, not step back through every image.
 - [ ] Footer section link, then back. The link scrolls the row rather than
-      swapping it; `#build` / `#design` / `#art` must still land on that
-      section's first icon, at the left margin, or at the end of the row if
-      the row is not long enough to put it there.
+      swapping it; `#build` / `#design` / `#art` must land that section's first
+      icon at the left margin **at every width**, including one wider than the
+      whole row, and must take the short way round from wherever you are.
 - [ ] **Reload on a deep link** returns to the same place.
 - [ ] iOS Safari **edge-swipe back gesture**, not just the button.
 - [ ] Confirm URL never changes on a bare load (no `#build` appearing

@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "dist", "runtimeExecutable": "node", "runtimeArgs": ["serve-dist.js"], "port": 4321 }
+  ]
+}

@@ -1311,9 +1311,9 @@
   // -2.0), so this is a little freer than the platform the phone came with.
   // It started at 4.6 and that read as drag, not as a bearing — a flick died
   // in under a second. At 1.6 a firm flick coasts ~1250px, which on a phone is
-  // the whole row plus slack, so most flicks now arrive at an end. That is the
-  // point, and it is why the ends bounce (ROW_EDGE_* below) instead of
-  // stopping dead — a bearing that hits a hard stop reads as a broken one.
+  // the whole row plus slack. The row is a RING now, so a flick that long no
+  // longer arrives anywhere: it runs on through the next section, which is the
+  // point of making it endless.
   const ROW_FRICTION = 1.6;     // glide decay: velocity e-folds this often /s
   const ROW_STOP_V   = 14;      // px/s — below this the glide is over. Low, so
                                 // the coast ends by running out rather than by
@@ -1322,19 +1322,15 @@
   const ROW_TAP_SLOP = 8;       // px of travel still counted as a TAP, not a drag
   const ROW_STALE_MS = 90;      // finger held still this long before lifting
                                 // means place, not throw: no momentum
-  const ROW_RUBBER   = 0.35;    // resistance while dragging past either end
-  const ROW_SPRING   = 12;      // settle rate /s for scroll-into-view (focus,
-                                // routing) — a move the row makes on its own
-  // Past either end the row meets a spring, not a wall: it carries a little
-  // way out, is pulled back, and settles without ringing. Overshoot is
-  // v0 / (sqrt(K) * e) — about 40px arriving at 2500px/s. Damping sits just
-  // above critical (2 * sqrt(K) = 35.8), so it returns once and stops.
-  const ROW_EDGE_K    = 320;    // spring rate back toward the end, /s^2
-  const ROW_EDGE_DAMP = 36;     // damping on that spring, /s
-  const ROW_OVER_MAX  = 60;     // px — cap on wheel overscroll. A finger is
-                                // limited by the screen; a trackpad's momentum
-                                // stream is not, and would drag the row into
-                                // the middle of nowhere
+  // THE END-OF-SCROLL BOUNCE, REASSIGNED. This spring used to catch the row at
+  // the two ends of the run. An endless row has no ends, so the same spring —
+  // same rate, same damping — now carries every move the row makes ON ITS OWN:
+  // a footer category jump, and scroll-into-view for focus and deep links. It
+  // is what the jump FEELS like, and it is the reason the jump is a jump and
+  // not a cut. Damping sits just above critical (2 * sqrt(K) = 35.8), so it
+  // arrives once and stops rather than ringing.
+  const ROW_SNAP_K    = 320;    // spring rate toward the target, /s^2
+  const ROW_SNAP_DAMP = 36;     // damping on that spring, /s
   // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
   // guarantee, not a taste. A mask can only dissolve ink that is actually
   // under it, and this row is mostly empty: between the ink of one icon and
@@ -1987,52 +1983,73 @@ void main() {
   gridEl.style.paddingBottom = FOOTER_RESERVE + 'px';   // single source: the JS knob
 
   // ------------------------------------------------------ menu row (state)
-  // The menu is one row; when that row is wider than the canvas it SCROLLS.
+  // THE ROW IS A RING. It has no first icon and no last one: past the end of
+  // ART comes BUILD again, and the wrap is the only thing that makes a footer
+  // link honest on a WIDE screen — where the row is shorter than the viewport,
+  // there is otherwise no scroll position that puts DESIGN at the left margin.
+  // The taskbar rule is untouched: cells are the same fixed size and only the
+  // count on screen changes. What went is the "it fits, so centre it and stop
+  // scrolling" case — an endless row has nothing to fit inside.
   //   scrollX   offset in CSS px — 0 puts the first icon against the left margin
-  //   scrollMax the far end (content width minus viewport width)
+  //   rowCycle  one full turn: every cell plus the gap that separates the last
+  //             from the first. Positions are taken modulo this; 0 disables the
+  //             ring (the field, which lays its own cells out)
   //   scrollV   glide velocity, px/s, decaying after a flick
-  //   rowTarget a settle destination (edge spring-back, or scroll-into-view)
+  //   rowTarget a settle destination (a category jump, or scroll-into-view)
   // scrollV and rowTarget are never both live: a target cancels the glide.
   let rowScrolls = false;
-  let scrollX = 0, scrollMax = 0, scrollV = 0, rowTarget = null;
+  let scrollX = 0, rowCycle = 0, scrollV = 0, rowTarget = null;
+  let bootRoute = false;                 // the first route application: what it
+                                         // moves is a starting position, not a
+                                         // transition. NO BOUNCE ON LOAD.
 
   // Push the current scroll into the two things that read icon positions: the
-  // icons' own centers (pointer hit-test AND shader), and the DOM twin. The
-  // twin moves as ONE transform on the container rather than N left writes —
-  // its spans stay at CONTENT coordinates, so placeKeys() and this never have
-  // to agree about anything except the base position. It also means a scroll
-  // frame writes one style property and reads no layout.
-  let fadeL = -1, fadeR = -1;            // last written, so a glide through the
-                                         // middle of the row writes nothing
+  // icons' own centres (pointer hit-test AND shader) and the DOM twin.
+  //
+  // wrapCx is the position within one turn, in [0, rowCycle) — the draw and the
+  // hit test both walk out from it in whole turns, so on a viewport wider than
+  // a turn the same icon is genuinely on screen twice and BOTH copies are the
+  // same icon to a tap. pxCx is the single copy nearest the viewport, which is
+  // what the DOM twin follows.
+  //
+  // The twin used to ride ONE transform on its container, which the ring makes
+  // impossible: each span wraps at a different moment. It is a transform per
+  // span now — same count as the icons, still no layout read, and still nothing
+  // for placeKeys() and this to agree about beyond baseCx.
   function applyScroll() {
+    const cyc = rowCycle;
     for (const ic of icons) {
-      ic.pxCx = ic.baseCx - scrollX;
+      let x = ic.baseCx - scrollX;
+      if (cyc) {
+        x -= Math.floor(x / cyc) * cyc;                // into [0, cyc)
+        ic.wrapCx = x;
+        // off the right edge by more than it would be off the left: take the
+        // copy one turn back instead
+        ic.pxCx = (x - canvasCssW > cyc - x) ? x - cyc : x;
+      } else {
+        ic.wrapCx = ic.pxCx = x;
+      }
       ic.cx = ic.pxCx / canvasCssW * 2 - 1;
     }
     if (!gl) return;
-    keysEl.style.transform = scrollX ? 'translateX(' + (-scrollX).toFixed(1) + 'px)' : '';
-
-    // the dissolve at each end, ramped over the last pitch of travel so it
-    // grows in as you leave an end rather than snapping on at the first pixel.
-    // Pinned at full width everywhere in between — which is why the guard
-    // below means most scroll frames touch no style at all.
-    const l = Math.max(0, Math.min(rowFadePx, scrollX));
-    const r = Math.max(0, Math.min(rowFadePx, scrollMax - scrollX));
-    if (Math.abs(l - fadeL) > 0.5 || (l === 0) !== (fadeL === 0)) {
-      canvas.style.setProperty('--fade-l', l.toFixed(1) + 'px'); fadeL = l;
-    }
-    if (Math.abs(r - fadeR) > 0.5 || (r === 0) !== (fadeR === 0)) {
-      canvas.style.setProperty('--fade-r', r.toFixed(1) + 'px'); fadeR = r;
+    for (let i = 0; i < keyEls.length && i < icons.length; i++) {
+      keyEls[i].style.transform =
+        'translateX(' + (icons[i].pxCx - icons[i].baseCx).toFixed(1) + 'px)';
     }
   }
 
-  const rowClamp = x => Math.max(0, Math.min(scrollMax, x));
+  // Keep scrollX inside one turn while the row is idle. Positions are taken
+  // modulo the cycle regardless, so this changes nothing you can see — it just
+  // stops the number climbing for as long as the page stays open.
+  function normaliseScroll() {
+    if (!rowCycle || rowTarget !== null) return;
+    scrollX -= Math.floor(scrollX / rowCycle) * rowCycle;
+  }
 
-  // Place every icon: ONE row, square cells, uniform gaps, FIXED pitch.
-  // Fits the canvas -> the row centers and nothing scrolls (desktop, as
-  // before). Does not fit -> the row starts at the left margin and the rest is
-  // reached by swipe. The pitch is the same number either way; that is the
-  // whole point (see the taskbar rule at CELL_PX).
+  // Place every icon: ONE ENDLESS row, square cells, uniform gaps, FIXED pitch.
+  // The row always starts at the left margin and always scrolls — there is no
+  // "it fits" case any more, because a ring is never finished. The pitch is
+  // untouched by any of it (see the taskbar rule at CELL_PX).
   function relayout() {
     const N = icons.length;
     if (!N || !canvasCssW || !canvasCssH) return;
@@ -2052,32 +2069,30 @@ void main() {
     footW = 2 * cellPx / canvasCssW;     // CSS px -> clip-space quad size
     footH = 2 * cellPx / canvasCssH;
 
-    // Does the row fit? resize() has already sized the canvas from the same
-    // two numbers, so this cannot disagree with it. The half-pixel slack keeps
-    // rounding from arming a scroll of nothing.
-    const rowW = N * cellPx + (N - 1) * gapPx;
-    const over = rowW + 2 * marginPxCss - canvasCssW;
-    rowScrolls = over > 0.5;
-    scrollMax = rowScrolls ? over : 0;
+    // ONE TURN of the ring: every cell plus the gap that separates the last
+    // icon from the first. Including that trailing gap is what keeps the seam
+    // invisible — leave it out and the wrap butts WEST OF THE SIERRAS straight
+    // against THE MET with no space between them, which is the one place in the
+    // row you would see the join.
+    rowCycle = N * (cellPx + gapPx);
+    rowScrolls = N > 1;
     rowFadePx = pitch;                   // one pitch — see the note at its
                                          // declaration for why not less
-    if (!rowScrolls) { scrollX = 0; scrollV = 0; rowTarget = null; }
-    else {
-      scrollX = rowClamp(scrollX);       // a resize can shorten the run
-      // ...and a settle target aimed at the OLD run has to come with it. Left
-      // alone it drives the row past the new end, where the edge spring throws
-      // it back, and the two fight for a second or more. Reachable now that the
-      // row holds every section and a rotation can halve its scrollable length.
-      if (rowTarget !== null) rowTarget = rowClamp(rowTarget);
-    }
+
+    // BOTH EDGES DISSOLVE, ALWAYS, at full width. The fade used to say "this
+    // much travel is left this way" and ramp out as you reached an end. On a
+    // ring that reading is simply true in both directions at every moment, so
+    // it stops being a per-frame calculation and becomes a fact of the layout.
+    canvas.style.setProperty('--fade-l', rowFadePx.toFixed(1) + 'px');
+    canvas.style.setProperty('--fade-r', rowFadePx.toFixed(1) + 'px');
+    keysEl.style.transform = '';         // the twin rides per-span transforms
+                                         // now; clear the old container one
 
     // vertical: the single row, centered in the canvas
     const cy = canvasCssH / 2;
     gridTopCss = cy - cellPx / 2;        // top cell edge — the window margins
                                          // against THIS
-    // horizontal: centered while it fits, left-aligned once it scrolls
-    const cx0 = rowScrolls ? marginPxCss + cellPx / 2
-                           : (canvasCssW - rowW) / 2 + cellPx / 2;
+    const cx0 = marginPxCss + cellPx / 2;   // always left-aligned
 
     for (let i = 0; i < N; i++) {
       const ic = icons[i];
@@ -2085,7 +2100,9 @@ void main() {
       ic.pxCy = cy;
       ic.cy = 1 - cy / canvasCssH * 2;
     }
-    applyScroll();                       // fills pxCx / cx from baseCx
+    normaliseScroll();                   // a resize changes the cycle; keep the
+                                         // offset inside one turn of the new one
+    applyScroll();                       // fills wrapCx / pxCx / cx from baseCx
     canvas.classList.toggle('scroll-row', rowScrolls);
     keysEl.classList.toggle('scroll-row', rowScrolls && !!gl);
   }
@@ -2097,68 +2114,69 @@ void main() {
   function ensureVisible(i, instant) {
     if (!rowScrolls || i === null || i === undefined || !icons[i]) return;
     const half = cellPxCss / 2, pad = marginPxCss;
-    const l = icons[i].baseCx - half - pad;
-    const r = icons[i].baseCx + half + pad;
-    let t = scrollX;
-    if (l < t) t = l;
-    else if (r > t + canvasCssW) t = r - canvasCssW;
-    rowScrollTo(rowClamp(t), instant);
+    const x = icons[i].pxCx;             // where that icon is on screen NOW —
+                                         // the nearest copy, so the row always
+                                         // takes the short way round
+    let d = 0;
+    if (x - half - pad < 0)               d = x - half - pad;
+    else if (x + half + pad > canvasCssW) d = x + half + pad - canvasCssW;
+    if (!d) return;
+    rowScrollTo(scrollX + d, instant);
   }
 
-  // Move the row to an already-clamped position, easing unless told otherwise.
+  // Move the row to a target, on the snap spring unless told to be instant.
+  // Targets are ABSOLUTE and unwrapped: the spring needs somewhere to travel
+  // to, so the wrapping is left to applyScroll and normaliseScroll.
   function rowScrollTo(t, instant) {
     if (Math.abs(t - scrollX) < 0.5) return;
     scrollV = 0;
-    if (instant) { rowTarget = null; scrollX = t; applyScroll(); }
-    else rowTarget = t;                  // eases in stepRowScroll
+    if (instant || bootRoute) { rowTarget = null; scrollX = t; normaliseScroll(); applyScroll(); }
+    else rowTarget = t;                  // springs in stepRowScroll
   }
 
-  // A FOOTER SECTION IS AN ADDRESS IN THE ROW, not a set to swap in: snap the
-  // row so that section's FIRST icon sits against the left margin — the same
-  // place the row parks at scrollX 0, applied anywhere along the run. Clamped,
-  // so the last section stops at the end of the row rather than scrolling into
-  // empty space, and on a row that fits entirely this does nothing at all.
+  // A FOOTER SECTION IS AN ADDRESS ON THE RING: put that section's first icon
+  // against the left margin. On a ring there are infinitely many scroll values
+  // that do it, one per turn, so the jump is measured FROM WHERE YOU ARE and
+  // takes the nearest — never more than half a turn, forward or back, whichever
+  // is shorter. That is also what makes this work on a screen WIDER than the
+  // row, where the old clamped version could only ever reach the last section.
   function scrollToSection(n, instant) {
-    const i = SECTION_OFFSET[n], ic = icons[i];
-    if (!rowScrolls || !ic) return;
-    rowScrollTo(rowClamp(ic.baseCx - cellPxCss / 2 - marginPxCss), instant);
+    const ic = icons[SECTION_OFFSET[n]];
+    if (!rowScrolls || !ic || !rowCycle) return;
+    const want = ic.baseCx - cellPxCss / 2 - marginPxCss;
+    let d = want - scrollX;
+    d -= Math.round(d / rowCycle) * rowCycle;   // into [-cycle/2, +cycle/2]
+    rowScrollTo(scrollX + d, instant);
   }
 
   // The glide, integrated once per frame from frame(). It rides the rAF loop
   // the icons already run on — a scroll animation with its own loop would be a
   // second clock, and the two would drift.
   function stepRowScroll(dt) {
-    if (!rowScrolls || dragId !== null) return;   // the finger owns the position
+    if (field || !rowScrolls || dragId !== null) return;   // the field lays out
+                                         // its own cells; a finger owns the row
     if (rowTarget !== null) {
-      const k = 1 - Math.exp(-ROW_SPRING * dt);
-      scrollX += (rowTarget - scrollX) * k;
-      if (Math.abs(rowTarget - scrollX) < 0.5) { scrollX = rowTarget; rowTarget = null; }
+      // THE JUMP, ON THE REASSIGNED BOUNCE. Same spring that used to catch the
+      // row at the ends, now driving the only moves the row makes by itself: a
+      // footer category jump, and scroll-into-view. Just above critical, so it
+      // arrives once and stops.
+      scrollV += (rowTarget - scrollX) * ROW_SNAP_K * dt;
+      scrollV *= Math.exp(-ROW_SNAP_DAMP * dt);
+      scrollX += scrollV * dt;
+      if (Math.abs(rowTarget - scrollX) < 0.5 && Math.abs(scrollV) < ROW_STOP_V) {
+        scrollX = rowTarget; rowTarget = null; scrollV = 0; normaliseScroll();
+      }
       applyScroll();
       return;
     }
-    const bound = rowClamp(scrollX);
-    const off   = scrollX - bound;
-    if (scrollV === 0 && off === 0) return;
-
-    if (off !== 0) {
-      // PAST AN END. A spring pulls back and swallows whatever speed is left,
-      // whether the row arrived here on a glide or the finger let go mid-
-      // overscroll. Clamping instead — which is what this did — stops a moving
-      // row dead against an invisible wall, and at this friction most flicks
-      // reach an end, so that stop is the thing you would feel most.
-      scrollV += -off * ROW_EDGE_K * dt;
-      scrollV *= Math.exp(-ROW_EDGE_DAMP * dt);
-      scrollX += scrollV * dt;
-      if (Math.abs(scrollX - bound) < 0.5 && Math.abs(scrollV) < ROW_STOP_V) {
-        scrollX = bound; scrollV = 0;
-      }
-    } else {
-      scrollX += scrollV * dt;
-      scrollV *= Math.exp(-ROW_FRICTION * dt);  // exponential, not linear: a
+    if (scrollV === 0) return;
+    // THE COAST RUNS ON FOREVER — there is no end to be caught at, so the only
+    // thing that stops it is friction.
+    scrollX += scrollV * dt;
+    scrollV *= Math.exp(-ROW_FRICTION * dt);    // exponential, not linear: a
                                                 // hard flick runs long and a
                                                 // nudge stops soon
-      if (Math.abs(scrollV) < ROW_STOP_V) scrollV = 0;
-    }
+    if (Math.abs(scrollV) < ROW_STOP_V) { scrollV = 0; normaliseScroll(); }
     applyScroll();
   }
 
@@ -2368,24 +2386,20 @@ void main() {
     const N = icons.length || 1;
     COLS = N;                            // one row — the keyboard's Up/Down step
 
-    // ONE ROW at a FIXED pitch. The whole row wants basePitch * (N - g + 2m).
-    // When that fits, the canvas hugs it (margins = pitch * MARGIN_RATIO
-    // inside) and centers in the half, exactly as it always did. When it does
-    // not, the canvas takes the FULL width and becomes the VIEWPORT onto a row
-    // that runs past both edges — the row is not made smaller and it is not
-    // wrapped. relayout() re-derives that same verdict from these two numbers,
-    // so the canvas and the layout cannot disagree about whether it scrolls.
-    const fullW = basePitch * (N - g + 2 * m);
-    let cw = Math.min(fullW, availW);
+    // ONE ENDLESS ROW at a FIXED pitch. The canvas is always the FULL width and
+    // is always a VIEWPORT onto a row that runs past both edges. It used to hug
+    // the row and centre it whenever the row happened to fit, and that case is
+    // gone with the ring: a row that continues past the right edge cannot stop
+    // short of it, or the space beyond would be a gap in something endless.
+    let cw = availW;
     let ch = basePitch * (1 - g + 2 * m);
 
     // cap the grid half at GRID_MAX_FRAC of the page so the contact half
-    // always keeps working room; when the cap bites, shrink uniformly.
-    // One row needs a viewport under ~210px tall before this bites at all, and
-    // the width half of it is skipped while scrolling: there the width is the
-    // VIEWPORT, and narrowing a viewport does not buy back any height.
+    // always keeps working room. One row needs a viewport under ~210px tall
+    // before this bites at all. Height only: the width is the viewport now, and
+    // narrowing a viewport does not buy back any height.
     const maxCh = nlRect.height * GRID_MAX_FRAC - FOOTER_RESERVE;
-    if (maxCh > 0 && ch > maxCh) { if (cw >= fullW) cw *= maxCh / ch; ch = maxCh; }
+    if (maxCh > 0 && ch > maxCh) ch = maxCh;
 
     // the SEAM follows the grid: half height = canvas + footer reserve
     gridEl.style.height = (ch + FOOTER_RESERVE).toFixed(1) + 'px';
@@ -2743,6 +2757,9 @@ void main() {
   // construction and both counts come from the screen.
   function fieldRelayout() {
     if (!field || !fieldCells.length || !canvasCssW || !canvasCssH) return;
+    rowCycle = 0;                 // the field is a grid, not a ring — this is
+                                  // what puts the draw loop and the hit test
+                                  // back on the single position each cell has
     const met = fieldMetrics();
     const cellPx = met.pitch * (1 - GAP_RATIO), gapPx = met.pitch * GAP_RATIO;
     cellPxCss = cellPx;
@@ -2928,14 +2945,24 @@ void main() {
   }
 
   // pointer -> icon index, or null for gap / margin. Tested in CSS px against
-  // each icon's RESTING cell box (scale 1.0). Works in either layout.
+  // each icon's RESTING cell box (scale 1.0). Walks the ring exactly as the
+  // draw loop does: EVERY on-screen copy of an icon is that icon to a tap, so
+  // on a wide screen both of the two visible copies open the same project.
   function iconAtPointer(ev) {
     const r = canvas.getBoundingClientRect();
     const mx = (ev.clientX - r.left) / r.width  * canvasCssW;
     const my = (ev.clientY - r.top)  / r.height * canvasCssH;
     const half = cellPxCss / 2;
     for (let i = 0; i < icons.length; i++) {
-      if (Math.abs(mx - icons[i].pxCx) <= half && Math.abs(my - icons[i].pxCy) <= half) return i;
+      const ic = icons[i];
+      if (Math.abs(my - ic.pxCy) > half) continue;
+      if (!rowCycle) {
+        if (Math.abs(mx - ic.pxCx) <= half) return i;
+        continue;
+      }
+      for (let x = ic.wrapCx - rowCycle; x - half < canvasCssW; x += rowCycle) {
+        if (Math.abs(mx - x) <= half) return i;
+      }
     }
     return null;
   }
@@ -2997,13 +3024,9 @@ void main() {
     const dx = ev.clientX - dragX0;
     dragMoved = Math.max(dragMoved, Math.abs(dx), Math.abs(ev.clientY - dragY0));
 
-    // The row follows the finger 1:1 in range, and at ROW_RUBBER past either
-    // end — that resistance is what tells a thumb it has reached the end.
-    // pointerup springs the overshoot back.
-    let t = dragScroll0 - dx;
-    if (t < 0) t *= ROW_RUBBER;
-    else if (t > scrollMax) t = scrollMax + (t - scrollMax) * ROW_RUBBER;
-    scrollX = t;
+    // The row follows the finger 1:1, with no resistance anywhere: there is no
+    // end for a thumb to be told about.
+    scrollX = dragScroll0 - dx;
 
     // Velocity from the LAST move only, lightly low-passed. Averaging the whole
     // gesture instead would make a slow drag that ends in a flick barely move,
@@ -3026,8 +3049,6 @@ void main() {
     // a finger that stopped before lifting is placing the row, not throwing it
     if (performance.now() - dragLastT > ROW_STALE_MS) scrollV = 0;
     scrollV = Math.max(-ROW_MAX_V, Math.min(ROW_MAX_V, scrollV));
-    // letting go while overscrolled needs no special case: stepRowScroll sees
-    // the row is past an end and the same spring brings it back
     if (!cancelled && dragMoved <= ROW_TAP_SLOP) { scrollV = 0; selectAt(iconAtPointer(ev)); }
   }
   canvas.addEventListener('pointerup',     (ev) => endDrag(ev, false));
@@ -3046,20 +3067,15 @@ void main() {
   // passive:false because the gesture is ours: left unprevented, a two-finger
   // swipe is browser history navigation on macOS.
   canvas.addEventListener('wheel', (ev) => {
-    if (!rowScrolls) return;
+    if (field || !rowScrolls) return;   // the field has no row to scroll
     const raw = Math.abs(ev.deltaX) >= Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
     if (!raw) return;
     ev.preventDefault();
     const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? canvasCssW : 1;   // lines / pages -> px
     rowTarget = null; scrollV = 0;
-
-    // past an end the wheel goes soft and the edge spring takes it back, the
-    // same as the finger. Clamping here instead is what made a trackpad — whose
-    // momentum keeps sending deltas after your fingers lift — stop dead against
-    // an invisible wall while still moving at speed.
-    let t = scrollX + raw * unit;
-    if (t < 0 || t > scrollMax) t = scrollX + raw * unit * ROW_RUBBER;
-    scrollX = Math.max(-ROW_OVER_MAX, Math.min(scrollMax + ROW_OVER_MAX, t));
+    // nothing to clamp against: a trackpad's momentum stream can run as long as
+    // it likes and the row just keeps turning
+    scrollX += raw * unit;
     applyScroll();
   }, { passive: false });
 
@@ -3628,6 +3644,12 @@ void main() {
   // absent hash means "leave the default alone" rather than "go to rest".
   function applyRoute(parts, initial) {
     routing = true;
+    bootRoute = !!initial;                     // NO BOUNCE ON PAGE LOAD: the
+                                               // first route sets a starting
+                                               // position, so every row move it
+                                               // causes is instant, including
+                                               // the one commit() makes to bring
+                                               // a deep-linked project on screen
     try {
       if (!parts || !parts.length) {           // bare '#' or empty
         if (!initial && (selected !== null || fixture !== null)) {
@@ -3680,6 +3702,7 @@ void main() {
       }
     } finally {
       routing = false;
+      bootRoute = false;
       updateDocTitle();
     }
   }
@@ -3811,11 +3834,26 @@ void main() {
       gl.uniform1f(loc.uFreq, freq);
       gl.uniform1f(loc.uPhase, ic.phase);
       gl.uniform2f(loc.uScale, qw, qh);
-      gl.uniform2f(loc.uTranslate, ic.cx + ox - qw * 0.5, ic.cy + oy - qh * 0.5);
       gl.uniform2f(loc.uSeed, ic.sx, ic.sy);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, ic.tex);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // ONE DRAW PER ON-SCREEN COPY. The row is a ring, so on a viewport wider
+      // than one turn the same icon really is in two places at once, and near
+      // either edge one copy is half off. Everything that makes an icon what it
+      // is — texture, seed, phase, churn — is already bound, so a copy costs a
+      // uniform2f and a drawArrays. A cell of slack on each side keeps a
+      // half-visible icon from being culled by its own centre.
+      const skirt = cellPxCss;
+      if (!rowCycle) {
+        gl.uniform2f(loc.uTranslate, ic.cx + ox - qw * 0.5, ic.cy + oy - qh * 0.5);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      } else for (let px = ic.wrapCx - rowCycle; px - skirt < canvasCssW; px += rowCycle) {
+        if (px + skirt <= 0) continue;
+        gl.uniform2f(loc.uTranslate, px / canvasCssW * 2 - 1 + ox - qw * 0.5,
+                                     ic.cy + oy - qh * 0.5);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
     }
 
     // The input lock lifts when the LAST icon has settled — not when the

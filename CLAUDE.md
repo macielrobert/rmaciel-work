@@ -132,26 +132,35 @@ understanding why it exists will reintroduce a solved bug.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
   the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
-- **The row holds EVERY section, in section order.** BUILD / DESIGN / ART are
-  addresses along one row, not three menus that swap: a footer link scrolls
-  the row so that section's first icon sits at the left margin (clamped, so a
-  late section stops at the end of the row), and scrolling straight on from
-  one section into the next is the ordinary case. The churn-over that used to
-  exchange icon sets is gone — it was the awkward part — and with it
-  `activeSection` stopped being a mode you switch into: it is now read off
-  whatever is selected, and only lights the footer.
-- **The menu is ONE ROW at every width.** Overflow scrolls; it never wraps and
-  it never shrinks the icons. Narrow viewports used to gain rows (390px
-  portrait was 6 x 3), which spent a third of a phone on navigation and moved
-  the seam every time the icon count changed. The row is swipeable with
-  momentum when it overflows (`rowScrolls` in `index.html`, `ROW_*` knobs).
+- **The row holds EVERY section, in section order, and it is a RING.** BUILD /
+  DESIGN / ART are addresses along one endless row, not three menus that swap.
+  Past the last ART icon comes the first BUILD icon again (`rowCycle` in
+  `index.html`), which is the only thing that makes a footer link honest on a
+  WIDE screen: where the row is shorter than the viewport there is otherwise
+  no scroll position that puts DESIGN at the left margin, and clamping could
+  only ever reach the last section. A footer link therefore jumps to the
+  NEAREST turn — never more than half a cycle, forward or back, measured from
+  where you are. On a screen wider than one turn the same icon is genuinely on
+  screen twice; the draw loop and the hit test walk the same turns, so every
+  copy is that one icon to a tap and to the selection.
+  The churn-over that used to exchange icon sets is gone — it was the awkward
+  part — and with it `activeSection` stopped being a mode you switch into: it
+  is read off whatever is selected, and only lights the footer.
+- **The menu is ONE ROW at every width.** It never gains a second row and it
+  never shrinks the icons. Narrow viewports used to gain rows (390px portrait
+  was 6 x 3), which spent a third of a phone on navigation and moved the seam
+  every time the icon count changed. It is swipeable with momentum, and the
+  canvas is always the full available width — a row that continues past the
+  right edge cannot stop short of it (`ROW_*` knobs in `index.html`).
   Note the name collision the code avoids: the *carousel* in this file has
   always been the image strip at the foot of the window (`#nl-car`,
   `--car-h`). The menu row is `ROW_` / `row`, never `car`.
 - **The faded edge IS the scroll affordance, and the wheel is the control.**
-  A scrollable menu row dissolves into the background at whichever end can
-  still move, ramped over the last PITCH of travel so it also says roughly
-  where you are. One pitch is a floor, not a taste: a mask dissolves only ink
+  The menu row dissolves into the background at BOTH edges, always, one PITCH
+  wide. It used to say "this much travel is left this way" and ramp out as you
+  reached an end; on a ring that reading is simply true in both directions at
+  every moment, so it stopped being a per-frame calculation and became a fact
+  of the layout. One pitch is a floor, not a taste: a mask dissolves only ink
   that is under it, and the ink-free run between two icons is 30.5px, so a
   ramp shorter than a pitch can land in that void and do nothing. It did — at
   334px wide the old 32px ramp erased exactly zero ink. Over that row a PLAIN vertical wheel scrolls it horizontally —
@@ -159,10 +168,17 @@ understanding why it exists will reintroduce a solved bug.
   before and claiming it costs nothing. Together those give a mouse-only
   visitor both the signal and the control with no added furniture, and the
   phone gets the same thing.
-- **On a scrolling row a tap commits on RELEASE, not on press.** Below
-  `ROW_TAP_SLOP` of travel it was a tap; above it, a swipe. Selecting on press
-  fires a project every time a swipe starts on an icon — which is most of the
-  time. When the row fits and nothing scrolls, press still selects, unchanged.
+- **A tap commits on RELEASE, not on press.** Below `ROW_TAP_SLOP` of travel
+  it was a tap; above it, a swipe. Selecting on press fires a project every
+  time a swipe starts on an icon — which is most of the time. The row always
+  scrolls now, so this is the only path.
+- **The end-of-scroll bounce became the category jump.** The spring that used
+  to catch the row at the two ends of the run (`ROW_SNAP_K` / `ROW_SNAP_DAMP`,
+  just above critical) now carries every move the row makes on its own: a
+  footer jump, and scroll-into-view for focus and deep links. A ring has no
+  end to bounce off, and a jump with no spring is a cut. **Never on load** —
+  `bootRoute` makes the first route instant, because a page arriving already
+  in motion reads as a glitch.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
   no-WebGL fallback obeys this too, measuring the wrapped title list.
