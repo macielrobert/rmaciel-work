@@ -1371,19 +1371,31 @@
 
   const ROW_SNAP_K    = 320;    // spring rate toward the target, /s^2
   const ROW_SNAP_DAMP = 36;     // damping on that spring, /s
-  // A category jump parks its first icon this much FURTHER in than the margin,
-  // to get it out of the dissolve. The margin was the right landing when the
-  // edge was a hard one; the edge is a one-pitch ramp now, and an icon parked
-  // at the margin sits inside it — at CELL_PX 50 and BAKE_FILL 0.64 the art
-  // spans 21.5-53.5px into a ramp that does not reach full ink until 62.5, so
-  // the thing the jump exists to show you arrives between a third and
-  // seven-eighths dissolved.
+  // HOW FAR IN FROM THE MARGIN THE ROW PARKS AN ICON. Every move the row makes
+  // on its own uses it — the footer category jump and scroll-into-view alike,
+  // and at both edges — because they are one problem: an icon the row has
+  // deliberately brought to an edge must be legible when it gets there.
   //
-  // 20 is a NUDGE, not a clearance: it lifts the worst point from 34% to 66%.
-  // Clearing the ramp outright takes 41 (art left 62.5), which parks the icon
-  // most of a cell in from the margin and reads as an indent rather than as a
-  // left edge. One number, tune it by eye.
-  const ROW_SNAP_INSET = 20;    // px
+  // The margin alone was the right landing when the edge was a hard one. The
+  // edge is a one-pitch dissolve now and the margin lands inside it. The
+  // arithmetic, at CELL_PX 50 / BAKE_FILL 0.64 / pitch 62.5: the art sits 9px
+  // in from its cell, the mask reaches full ink at one pitch, so the leading
+  // glyph's alpha is (margin + inset + 9) / 62.5 —
+  //
+  //     inset  0   art at 21.5px   34%
+  //     inset 20   art at 41.5px   66%
+  //     inset 30   art at 51.5px   82%     <- here
+  //     inset 41   art at 62.5px  100%     <- the first value that guarantees it
+  //
+  // Below 41 this is a nudge, not a clearance. 41 is the guarantee, and it
+  // costs the reading of a left edge: the icon parks most of a cell in and
+  // starts to look like an indent. One number, tune it by eye.
+  //
+  // NOT DERIVED FROM THE PITCH, deliberately. It could be — the clearance is
+  // exactly pitch - margin - the art's own inset — but that makes the landing
+  // move when the pitch shrinks on a short viewport, and this is a number
+  // chosen by looking at it, not one computed from the layout.
+  const ROW_SNAP_INSET = 30;    // px
   // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
   // guarantee, not a taste. A mask can only dissolve ink that is actually
   // under it, and this row is mostly empty: between the ink of one icon and
@@ -2200,10 +2212,13 @@ void main() {
   // take the row with it.
   function ensureVisible(i, instant) {
     if (!rowScrolls || i === null || i === undefined || !icons[i]) return;
-    const half = cellPxCss / 2, pad = marginPxCss;
+    const half = cellPxCss / 2, pad = marginPxCss + ROW_SNAP_INSET;
     const x = icons[i].pxCx;             // where that icon is on screen NOW —
                                          // the nearest copy, so the row always
                                          // takes the short way round
+    // ...and clear of the dissolve at whichever edge it is coming in from, the
+    // same distance the category jump parks at. An icon brought on screen to be
+    // looked at is no more use half dissolved than one jumped to.
     let d = 0;
     if (x - half - pad < 0)               d = x - half - pad;
     else if (x + half + pad > canvasCssW) d = x + half + pad - canvasCssW;

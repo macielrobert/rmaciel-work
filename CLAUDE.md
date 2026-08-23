@@ -191,6 +191,17 @@ understanding why it exists will reintroduce a solved bug.
   it was a tap; above it, a swipe. Selecting on press fires a project every
   time a swipe starts on an icon — which is most of the time. The row always
   scrolls now, so this is the only path.
+- **`ROW_SNAP_INSET` is where the row parks an icon, and it is ONE number for
+  every move the row makes on its own** — the footer category jump and
+  scroll-into-view, at both edges. They are one problem: an icon the row has
+  deliberately brought to an edge has to be legible when it gets there, and the
+  margin alone lands it inside the one-pitch dissolve. At the default pitch the
+  leading glyph's alpha is `(margin + inset + 9) / 62.5`, so 0 gives 34%, 30
+  gives 82%, and **41 is the first value that guarantees full ink** — at the
+  cost of parking most of a cell in, which starts to read as an indent rather
+  than a left edge. Deliberately not derived from the pitch: it is chosen by
+  looking at it, and a derived one would move the landing every time a short
+  viewport shrank the pitch.
 - **The end-of-scroll bounce became the category jump.** The spring that used
   to catch the row at the two ends of the run (`ROW_SNAP_K` / `ROW_SNAP_DAMP`,
   just above critical) now carries every move the row makes on its own: a

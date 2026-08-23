@@ -98,7 +98,11 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] A footer link from the far side of the row must take the SHORT way round.
 - [ ] The icon a footer link lands on must arrive at FULL ink, not part-way
       through the edge dissolve (`ROW_SNAP_INSET`). Check it at several widths
-      — the ramp is one pitch wide wherever the pitch ends up.
+      — the ramp is one pitch wide wherever the pitch ends up. **At the current
+      inset of 30 this is not yet true: the leading glyph sits at about 82%.**
+- [ ] The same for scroll-into-view, which uses the same inset: deep-link a
+      project, and arrow across the row until icons are pulled in from the
+      right. Both edges, same clearance.
 - [ ] Load a deep link (`#art`, and `#build/vca`). The row must already be in
       place on the first frame — no travel, no bounce.
 - [ ] Rotate the phone mid-flick and mid-jump; nothing should fight itself.
