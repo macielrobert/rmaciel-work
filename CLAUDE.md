@@ -99,8 +99,9 @@ still obey the length rules — a sentence, not a section.
 2. **WebGL icon grid.** Icons baked to textures, warped by a shared simplex
    noise shader. Selection = coherence: the chosen icon freezes, all others
    churn.
-3. **Footer navigation.** ALL, three sections (BUILD / DESIGN / ART), and two
-   fixtures (ABOUT / CONTACT). Primary nav, not decoration.
+3. **Footer navigation.** ALL and the three sections (BUILD / DESIGN / ART)
+   are a vertical three-slot wheel; ABOUT and CONTACT stay flat links beside
+   it. Primary nav, not decoration.
 4. **Window.** Per-entry text and imagery, swapped through a character-churn
    transition, arranged by a named layout (`standard` / `grid` / `text` /
    `form`).
@@ -137,8 +138,8 @@ understanding why it exists will reintroduce a solved bug.
   project, so a footer link does two things: it scrolls that section's first
   icon to the left margin — plus `ROW_SNAP_INSET`, which keeps it out of the
   edge dissolve — AND draws that section in ink with everything else
-  in accent grey. ALL — the fourth footer link, and the state the page loads
-  in — is every icon ink. Like the other three it lands at REST, closing
+  in accent grey. ALL — the fourth slot in the wheel, and the state the page
+  loads in — is every icon ink. Like the other three it lands at REST, closing
   whatever the window holds, project or fixture; unlike them it does NOT move
   the row, because it is a way of looking at the row rather than a place in
   it. **Two things fall back to ALL**: scrolling until none
@@ -154,6 +155,24 @@ understanding why it exists will reintroduce a solved bug.
   it is the funnel the pointer, the keyboard and a deep link all pass through.
   The consequence to know: the band is not in the URL when a project is open,
   so reloading `#design/bus-stop` lands in ALL rather than in DESIGN.
+- **The band is chosen on a WHEEL, and the wheel's centre IS the band.**
+  ALL / BUILD / DESIGN / ART are stacked three-at-a-time to the left of
+  CONTACT: centre slot at full ink, the two neighbours at half. It is the menu
+  row's grammar turned 90 degrees — endless, momentum-scrolled, and committing
+  on REST rather than on the way past. **The mask is the state**: everything in
+  the wheel is `--ink` and the CSS mask alone lights the middle one, so there
+  is no `.on` class that can drift out of step with the scroll position.
+  **No caret and no arrows**, for the reason the row has none, only stronger:
+  the half-lit neighbours name the sections you would land on, so they say
+  which way as well as that. Three things it must keep doing: only a scroll the
+  VISITOR started commits (the wheel also moves itself whenever the band
+  changes elsewhere, and that must not come back round as a request); a fixture
+  outranks it, dropping the whole wheel to grey, because ABOUT and two ink
+  labels cannot both be true; and the re-centring onto the middle copy happens
+  at REST only — moving `scrollTop` under a live iOS fling kills the fling.
+  The price is the seam: `FOOTER_RESERVE` went 52 -> 72 to hold three lines
+  where one used to fit.
+
 - **The row holds EVERY section, in section order, and it is a RING.** BUILD /
   DESIGN / ART are addresses along one endless row, not three menus that swap.
   Past the last ART icon comes the first BUILD icon again (`rowCycle` in
@@ -320,6 +339,7 @@ understanding why it exists will reintroduce a solved bug.
 | Centering the window text | Every text column starts at a left margin (v71) |
 | A separate deliberately-broken build for testing | Use `?nogl` instead — one file, no confusable copies |
 | ◄ ► arrows on the menu row | Duplicate a capability the wheel already gives, in furniture the phone would never show — a device-conditional design paying for what the faded edge says for free on both |
+| Caret or arrow indicators on the section wheel | Same answer the menu row gave, and for more reason: the half-lit neighbours already name what is above and below |
 | Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---

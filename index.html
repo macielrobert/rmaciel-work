@@ -968,12 +968,21 @@
     bottom: 20px;
     bottom: max(20px, env(safe-area-inset-bottom));
     text-align: center;
+    /* a row of three things now — the section wheel, the two fixtures, the
+       field mark — and the wheel is three lines tall while they are one, so
+       they are CENTRED against each other rather than sharing a baseline */
+    display: flex; align-items: center; justify-content: center;
+    --sec-h: 16px;                             /* one wheel slot. THE knob:
+                                                  the height, the snap step and
+                                                  the mask stops are all this,
+                                                  and JS reads the same number
+                                                  as SEC_H */
     font-size: 11px; letter-spacing: 0.15em;
     color: var(--accent-dim);              /* project accent — legible on both fields */
     pointer-events: none;                      /* only the words are live */
     user-select: none;
   }
-  #nl-fns [data-nav] {
+  #nl-fns > [data-nav] {
     color: inherit;
     pointer-events: auto; cursor: pointer;
     padding: 6px 8px;                          /* tap target AND the separation
@@ -983,8 +992,8 @@
      with plain :focus the label you last clicked stayed ink alongside the
      .on label — two coherent labels at once, which the footer is not
      allowed to show. :focus-visible only paints the keyboard ring. */
-  #nl-fns [data-nav]:focus-visible { color: var(--ink); }
-  @media (hover: hover) { #nl-fns [data-nav]:hover { color: var(--ink); } }
+  #nl-fns > [data-nav]:focus-visible { color: var(--ink); }
+  @media (hover: hover) { #nl-fns > [data-nav]:hover { color: var(--ink); } }
   /* NARROW PHONES. Six labels at the full tracking overflow a 360px viewport.
      The tracking is the thing that gives, not the type size and not the tap
      target: the words stay the same size and stay the same distance apart, and
@@ -992,8 +1001,69 @@
      page is at its ideal either. */
   @media (max-width: 400px) {
     #nl-fns { letter-spacing: 0.06em; }
-    #nl-fns [data-nav] { padding-left: 6px; padding-right: 6px; }
+    #nl-fns > [data-nav] { padding-left: 6px; padding-right: 6px; }
   }
+
+  /* --------------------------------------------- the section wheel (the band)
+     ALL / BUILD / DESIGN / ART left the footer LINE and became a vertical
+     three-slot wheel sitting to the left of CONTACT. The centre slot is the
+     band; the two neighbours are half-lit.
+
+     NO CARET AND NO ARROWS — the same answer the menu row already gave. A
+     control that duplicates what the fade already says is furniture the phone
+     would never show, and here the fade says more than an arrow could: the
+     half-lit neighbours name the sections you would land on, so they say
+     WHICH WAY as well as THAT. The mask is the same vocabulary the row's
+     faded edge speaks, turned 90 degrees.
+
+     THE MASK IS ALSO THE COHERENCE. Everything in the wheel is --ink; the
+     mask alone is what makes exactly one of them fully lit. So there is no
+     .on class to keep in step with the scroll position — the geometry is the
+     state, and it cannot drift out of agreement with itself.
+
+     NATIVE SCROLL, not a second physics engine. The row's momentum lives in
+     canvas space and could not be borrowed; a scroll container with snap
+     gives fling, snap, wheel and drag for free, and gets iOS's own
+     deceleration rather than an imitation of it. Endless is the one thing it
+     does not give, and JS adds that — see SEC_CYCLES. */
+  #nl-sec {
+    pointer-events: auto;
+    height: calc(var(--sec-h) * 3);
+    overflow-y: scroll; overflow-x: hidden;
+    scroll-snap-type: y mandatory;
+    overscroll-behavior: contain;              /* the page must not move behind it */
+    touch-action: pan-y;
+    color: var(--ink);
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to bottom,
+      rgba(0,0,0,0.5) 0 var(--sec-h),
+      #000 var(--sec-h) calc(var(--sec-h) * 2),
+      rgba(0,0,0,0.5) calc(var(--sec-h) * 2) 100%);
+            mask-image: linear-gradient(to bottom,
+      rgba(0,0,0,0.5) 0 var(--sec-h),
+      #000 var(--sec-h) calc(var(--sec-h) * 2),
+      rgba(0,0,0,0.5) calc(var(--sec-h) * 2) 100%);
+  }
+  #nl-sec::-webkit-scrollbar { display: none; }
+  /* HALF-SLOT SPACERS, top and bottom. Without them the first and last labels
+     have no scroll position that centres them — the container's own middle is
+     1.5 slots down, which is off the front of the content. One empty slot at
+     each end makes `scrollTop = index * --sec-h` exactly true for every item,
+     which is what lets the wrap arithmetic be arithmetic. */
+  #nl-sec::before, #nl-sec::after { content: ''; display: block; height: var(--sec-h); }
+  #nl-sec [data-nav] {
+    display: block;
+    height: var(--sec-h); line-height: var(--sec-h);
+    scroll-snap-align: center;
+    padding: 0 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  /* A FIXTURE OUTRANKS THE BAND. With ABOUT or CONTACT open the ink label is
+     that fixture, and two ink labels is the one thing the footer is not
+     allowed to show — so the whole wheel drops to the resting grey and keeps
+     only its relative shape. */
+  #nl-sec.off { color: var(--accent-dim); }
 
   /* --------------------------------------------------- the field's one control
      Hidden by default and shown only where the mode can actually be had: a
@@ -1008,7 +1078,7 @@
   @media (hover: hover) { #nl-field:hover { color: var(--ink); } }
   /* in the field the section links are gone — they are not what this mode is
      for — and the one control left is the way out, lit so it can be found */
-  #noiselab.field #nl-fns [data-nav] { display: none; }
+  #noiselab.field #nl-fns > [data-nav], #noiselab.field #nl-sec { display: none; }
   #noiselab.field #nl-field { color: var(--ink); }
   /* the window half has nothing in it here, and must not take pointer events
      from a field that now covers the screen */
@@ -1021,7 +1091,7 @@
   }
   /* the active section reads as the coherent one — ink against the grey row.
      (applied by JS once section switching is wired) */
-  #nl-fns [data-nav].on { color: var(--ink); }
+  #nl-fns > [data-nav].on { color: var(--ink); }
 
 </style>
 </head>
@@ -1088,7 +1158,7 @@
        scroll it; CONTACT / ABOUT open the window without a grid selection.
        Absolutely positioned, so it is a SIBLING of the window while sitting
        geometrically inside the grid half — see the below-the-seam exit. -->
-  <div id="nl-fns"><span role="button" tabindex="0" data-nav="all">ALL</span><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
+  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections --></div><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -1322,9 +1392,13 @@
   // real estate never does.
   const CELL_PX = 50;
 
-  // Strip reserved below the grid for the single-line footer (FN slots now,
-  // copyright later). The canvas sits flush on top of it.
-  const FOOTER_RESERVE = 52;      // px
+  // Strip reserved below the grid for the footer. The canvas sits flush on
+  // top of it. It was 52 for a single line of 11px type; the section wheel is
+  // three of those slots (3 * --sec-h = 48) plus the 20px the strip already
+  // stood off the bottom, so 72 with the same few px of slack it always had.
+  // THE SEAM MOVES WITH IT — the grid half is canvas + this — which is the
+  // price of the wheel, paid once, in the one place the number lives.
+  const FOOTER_RESERVE = 72;      // px
 
   // LAST-RESORT cap: the grid half (canvas + footer reserve) may take at most
   // this fraction of the page, so the contact half always keeps working room.
@@ -3281,14 +3355,15 @@ void main() {
   //
   // Four things opt out, each because it already answers for itself: the
   // canvas (an icon selects, a gap exits — its own handler, on RELEASE), the
-  // key spans that are the menu without a shader, the footer links, and the
-  // field button.
+  // key spans that are the menu without a shader, the footer links (the
+  // section wheel included, dead space and all — a wheel you missed is not a
+  // request to close the work), and the field button.
   rootEl.addEventListener('click', (ev) => {
     if (field) return;                          // the field is its own level
     if (fixture === 'contact') return;          // CONTACT LOCK: the × only, so a
                                                 // stray tap cannot discard a draft
     if (selected === null && fixture === null) return;      // nothing open
-    if (ev.target.closest('#nl-gl, [data-key], [data-nav], #nl-field')) return;
+    if (ev.target.closest('#nl-gl, [data-key], [data-nav], #nl-sec, #nl-field')) return;
     if (ev.clientY < gridEl.getBoundingClientRect().top) return;   // above the seam
     setSelected(null);                          // the same global eject as the ×
   });
@@ -3334,22 +3409,138 @@ void main() {
 
   // ------------------------------------------------------- footer site nav
   // Kept as spans, not anchors: no href, nothing for a webview to intercept.
-  const navEls = Array.from(document.querySelectorAll('#nl-fns [data-nav]'));
+  const navEls = Array.from(document.querySelectorAll('#nl-fns > [data-nav]'));
   // the vertical copyright in the right margin — set once, never touched again
   const copyEl = document.querySelector('#nl-copy span');
   if (copyEl) copyEl.textContent = CONTENT.copyright || '';
+  // ------------------------------------------------------- the section wheel
+  // ALL / BUILD / DESIGN / ART, stacked three-at-a-time to the left of
+  // CONTACT. The CSS mask does the lighting and the browser does the
+  // scrolling; this is only the two things neither of them can do — make it
+  // endless, and turn a landing into a commit.
+  const secEl = document.getElementById('nl-sec');
+  const SEC_H = 16;                  // px per slot — mirrors --sec-h in the CSS
+  // COPIES, NOT MODULO. The list is repeated and the scroll position is
+  // returned to the middle copy once the scroll goes quiet, which cannot be
+  // seen because every copy is the same four words. ODD, so there is a true
+  // middle. Nine is enough that a hard fling from the middle cannot reach an
+  // end — four turns each way — and the re-centring only ever happens at
+  // REST, because moving scrollTop under a live iOS fling kills the fling.
+  const SEC_CYCLES = 9;
+  const SEC_MID = (SEC_CYCLES - 1) / 2;
+  // ALL is slot 0 because it is the state the page loads in. The rest come
+  // from DATA, so a fourth section is a build.js edit and nothing here — the
+  // four hand-written spans this replaced were the reason it used to be two.
+  const secIds  = ['all'].concat(DATA.sections.map(s => s.id));
+  const secText = ['ALL'].concat(DATA.sections.map(s => s.label));
+  const SEC_N   = secIds.length;
+
+  for (let c = 0; c < SEC_CYCLES; c++) {
+    for (let k = 0; k < SEC_N; k++) {
+      const el = document.createElement('span');
+      el.setAttribute('data-nav', secIds[k]);
+      el.textContent = secText[k];
+      // ONE copy carries the semantics. A screen reader must hear four
+      // sections, not thirty-six, so the other eight copies are the same
+      // words again with nothing said about them.
+      if (c === SEC_MID) el.setAttribute('role', 'option');
+      else el.setAttribute('aria-hidden', 'true');
+      secEl.appendChild(el);
+    }
+  }
+
+  // scrollTop = index * SEC_H exactly, which the half-slot spacers in the CSS
+  // are what make true. Everything below is arithmetic on that one fact.
+  const secAt   = () => Math.round(secEl.scrollTop / SEC_H);
+  const secIdAt = (i) => secIds[((i % SEC_N) + SEC_N) % SEC_N];
+  const bandId  = () => activeSection === null ? 'all' : DATA.sections[activeSection].id;
+
+  // Move the wheel to an id, taking the NEARER turn — the same rule the
+  // footer jump already uses on the row, for the same reason: a ring has no
+  // far side worth travelling to.
+  function secTo(id, smooth) {
+    const k = secIds.indexOf(id);
+    if (k < 0) return;
+    const cur = secAt();
+    let d = (((k - cur) % SEC_N) + SEC_N) % SEC_N;
+    if (d > SEC_N / 2) d -= SEC_N;
+    let want = cur + d;
+    if (want < 0) want += SEC_N;
+    if (want >= SEC_CYCLES * SEC_N) want -= SEC_N;
+    const top = want * SEC_H;
+    if (top === secEl.scrollTop) return;
+    if (smooth && !reduceMotion) secEl.scrollTo({ top: top, behavior: 'smooth' });
+    else secEl.scrollTop = top;
+  }
+
+  // COMMIT ON REST — the row's tap rule said about a wheel. What you land on
+  // is what you asked for; what you turned past is not.
+  //
+  // Only a scroll the VISITOR started commits. The wheel also moves itself
+  // whenever the band changes somewhere else — a deep link, an icon picked
+  // from outside the band, the scroll-away fallback — and that must not come
+  // back round as a fresh request.
+  let secUser = false, secIdle = 0;
+  function secSettle() {
+    const i = secAt(), id = secIdAt(i);
+    const home = SEC_MID * SEC_N + (((i % SEC_N) + SEC_N) % SEC_N);
+    if (home !== i) secEl.scrollTop = home * SEC_H;      // back to the middle copy
+    for (const el of secEl.children) {
+      if (el.getAttribute('role') !== 'option') continue;
+      el.setAttribute('aria-selected', el.getAttribute('data-nav') === id ? 'true' : 'false');
+    }
+    if (!secUser) return;
+    secUser = false;
+    // landed where it started: a nudge that came back is not a request. This
+    // is also what keeps an open PROJECT open — its band is already centred,
+    // so turning the wheel back to it does not close the work.
+    if (id === (fixture !== null ? fixture : bandId())) return;
+    if (id === 'all') showAll();
+    else switchSection(secIds.indexOf(id) - 1);          // ALL occupies slot 0
+  }
+  // scrollend is not on older Safari, and this needs no more precision than
+  // "the scroll stopped" — one timer, reset by every scroll event.
+  secEl.addEventListener('scroll', () => {
+    clearTimeout(secIdle);
+    secIdle = setTimeout(secSettle, 120);
+  }, { passive: true });
+  const secClaim = () => { secUser = true; };
+  secEl.addEventListener('pointerdown', secClaim);
+  secEl.addEventListener('wheel', secClaim, { passive: true });
+  // a half-lit neighbour is a TARGET, not only a signal
+  secEl.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-nav]');
+    if (!el) return;
+    secUser = true;
+    secTo(el.getAttribute('data-nav'), true);
+  });
+  // ONE tab stop with arrow keys, not four tab stops — which is what a
+  // listbox is, and what the four separate spans never were.
+  secEl.addEventListener('keydown', (ev) => {
+    const d = ev.key === 'ArrowDown' ? 1 : ev.key === 'ArrowUp' ? -1 : 0;
+    if (!d) return;
+    ev.preventDefault();
+    secUser = true;
+    secEl.scrollTo({ top: (secAt() + d) * SEC_H,
+                     behavior: reduceMotion ? 'auto' : 'smooth' });
+  });
+  secEl.scrollTop = SEC_MID * SEC_N * SEC_H;   // open on the middle copy, at ALL
+  secSettle();                                 // and mark that slot selected
+
   // exactly ONE label is ink at a time — the fixture if one is open, else the
-  // active section. The footer carries the coherence when the grid cannot.
+  // wheel's centre slot. The footer carries the coherence when the grid
+  // cannot. navEls is CONTACT and ABOUT now; the sections are the wheel, and
+  // its mask is what lights them, so there is no .on to keep in step there.
   function updateNav() {
     for (const el of navEls) {
-      const n = el.getAttribute('data-nav');
-      const sec = activeSection === null ? null : DATA.sections[activeSection];
-      const on = fixture !== null
-        ? (fixture === n)
-        : (n === 'all' ? sec === null : !!sec && sec.id === n);
-      el.classList.toggle('on', !!on);
+      const on = fixture === el.getAttribute('data-nav');
+      el.classList.toggle('on', on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
+    secEl.classList.toggle('off', fixture !== null);
+    // NO GLIDE ON LOAD, for the reason the row does not bounce on load: a page
+    // that arrives already in motion reads as a glitch.
+    secTo(bandId(), !bootRoute);
   }
   navEls.forEach(el => {
     const n = el.getAttribute('data-nav');

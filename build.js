@@ -63,10 +63,11 @@ const END   = '/* CONTENT:END */';
 /* THE SECTIONS ARE DEFINED HERE, NOT IN THE CMS.
    A project picks its section from a fixed list (the `section` select in
    keystatic.config.tsx). The list itself is not editable content, because adding a
-   fourth section is not a content change — the footer buttons in index.html
-   are hand-written markup (`data-nav="build"` and friends) and would need a
-   matching entry. Keeping the list here means the two places that must agree
-   are both in the repo, not one in the repo and one in a CMS form.
+   fourth section is not a content change. Keeping the list here means the two
+   places that must agree are both in the repo, not one in the repo and one in
+   a CMS form. index.html is no longer one of them: the section wheel builds
+   its slots from DATA.sections, so a fourth section is this entry plus the
+   keystatic select and nothing else.
    `id` must match the footer's data-nav value; `label` is what it reads. */
 const SECTIONS = [
   { id: 'build',  label: 'BUILD'  },
