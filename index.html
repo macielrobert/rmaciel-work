@@ -167,7 +167,16 @@
     overflow: hidden;
     position: relative;                       /* anchors #nl-window */
   }
+  /* TWO CLASSES, ONE PER THEME, and .dark is not redundant with the bare
+     #noiselab defaults. The media query below is the PRE-BOOT state, and a
+     media query carries no specificity of its own — so on a light device the
+     only thing that can say "dark" louder than it is a class on the same id.
+     Without .dark, JS could turn the theme light but never back, which is
+     invisible while JS only ever agrees with the device and breaks the moment
+     it does not (?dark on a light phone: DOM half white, canvas half black).
+     setTheme() writes both, so the JS is the single authority once it runs. */
   #noiselab.light { --bg: #fff; --ink: #000; }
+  #noiselab.dark  { --bg: #000; --ink: #fff; }
   /* pre-boot correctness on light-scheme devices (JS re-applies at boot).
      Must come AFTER the base #noiselab rule or the dark defaults win. */
   @media (prefers-color-scheme: light) {
@@ -1941,6 +1950,27 @@
   // to move, because everything above and below them assumes a resolved theme.
   const mqLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
 
+  // TESTING ONLY: ?light / ?dark pin the theme. The theme still FOLLOWS THE
+  // DEVICE — that decision is untouched — but some browsers will not hand you
+  // both halves of it to test against. Chrome on mobile in an Incognito window
+  // reports dark whatever the phone is set to, which makes every light-mode
+  // path unreachable on the one device this site is built for first. Same
+  // answer as ?nogl: one file with a flag, rather than a second copy that can
+  // be opened by accident. While one is set the live listener is not attached,
+  // so a pinned theme stays pinned if the device flips underneath it.
+  //
+  // location.search ONLY, never the hash — the ?wheel rule: a project slugged
+  // `light` would otherwise turn it on from its own URL.
+  const FORCE_THEME = /[?&]dark\b/.test(location.search)  ? 'dark'
+                    : /[?&]light\b/.test(location.search) ? 'light'
+                    : null;
+  // The one thing a pin cannot reach is the address-bar tint: the theme-color
+  // metas are media-scoped in the head and the browser picks between them
+  // itself. Under ?light / ?dark that strip keeps following the device. It is
+  // browser chrome, not the page, and this flag is for testing the page.
+  if (FORCE_THEME) console.warn('[noiselab] ?' + FORCE_THEME +
+    ' flag set — theme pinned deliberately, the device setting is ignored.');
+
   // RESOLVE THE THEME BEFORE THE FIRST CLEAR — this call is the fix for a real
   // bug, not tidiness. The three values above used to be hard-coded DARK and
   // corrected by setTheme() ~1500 lines later. On a dark device that cost
@@ -1950,7 +1980,7 @@
   // load showed a black rectangle for the whole bake: 300x150, the browser's
   // DEFAULT canvas size, centred above the footer, aligned to nothing in this
   // layout because it was not this layout's geometry at all.
-  setTheme(mqLight && mqLight.matches ? 'light' : 'dark');
+  setTheme(FORCE_THEME || (mqLight && mqLight.matches ? 'light' : 'dark'));
 
   // Paint the theme background immediately. The icon bake is async (images
   // decode before the first frame()), so without this the canvas can show an
@@ -3427,6 +3457,7 @@ void main() {
   function setTheme(t) {
     const light = t === 'light';
     rootEl.classList.toggle('light', light);
+    rootEl.classList.toggle('dark', !light);   // see the two-class note in the CSS
     BG  = light ? [1, 1, 1] : [0, 0, 0];
     INK = light ? [0, 0, 0] : [1, 1, 1];
     // THE ACCENT COMES FROM THE CSS TOKEN, so --accent-rgb stays the ONE place
@@ -3450,8 +3481,10 @@ void main() {
   }
   // mqLight and the FIRST setTheme() call live up at the theme-state block, next
   // to the GL clear that needs the theme already resolved. Only the live change
-  // listener is here, where the rest of the theme machinery is.
-  if (mqLight && mqLight.addEventListener) mqLight.addEventListener('change',
+  // listener is here, where the rest of the theme machinery is — and it is not
+  // attached at all under ?light / ?dark, or the device would overrule the pin
+  // the moment it changed.
+  if (!FORCE_THEME && mqLight && mqLight.addEventListener) mqLight.addEventListener('change',
     (e) => setTheme(e.matches ? 'light' : 'dark'));
 
   // ------------------------------------------------------- footer site nav

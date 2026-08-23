@@ -289,6 +289,12 @@ understanding why it exists will reintroduce a solved bug.
   stack, which resolves each independently, so the two halves of one control
   came from different fonts. It is now two borders on a rotated box: one shape,
   180 degrees apart, mirrors by construction.
+- **The theme is TWO classes, `.light` and `.dark`, and the second is not
+  redundant.** A media query carries no specificity, so on a light device the
+  only thing that can outrank the pre-boot `@media (prefers-color-scheme:
+  light)` block is a class on the same id. With `.light` alone, JS could turn
+  the theme light and never back — invisible while JS only ever agrees with the
+  device, and a split page the moment it does not.
 - **Controls never churn.** `×`, `←`, the caret, thumbs, footer,
   copyright, focus marks. They appear and disappear with their views but stay
   resolved. Content churns; controls do not.
@@ -364,6 +370,14 @@ understanding why it exists will reintroduce a solved bug.
   make a non-obvious choice, write down what you didn't do and why. Do not
   strip or condense existing comments.
 - **`?nogl`** on the URL forces the no-WebGL fallback for testing.
+- **`?light`** / **`?dark`** pin the theme, for testing on a browser that will
+  not give you the other one — Chrome mobile in an Incognito window reports
+  dark whatever the phone is set to, which puts every light-mode path out of
+  reach on the device this site is built for first. The theme still follows the
+  device otherwise; while a pin is set the live listener is not attached. The
+  address-bar tint keeps following the device either way — the theme-color
+  metas are media-scoped and the browser picks between them itself.
+  `location.search` only, same rule as `?wheel`.
 - **`?wheel`** on the URL swaps the flat section labels for the vertical
   wheel. `location.search` only, never the hash — a project slugged `wheel`
   would otherwise turn it on.
