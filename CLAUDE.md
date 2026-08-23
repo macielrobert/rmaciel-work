@@ -132,6 +132,14 @@ understanding why it exists will reintroduce a solved bug.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
   the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
+- **The row holds EVERY section, in section order.** BUILD / DESIGN / ART are
+  addresses along one row, not three menus that swap: a footer link scrolls
+  the row so that section's first icon sits at the left margin (clamped, so a
+  late section stops at the end of the row), and scrolling straight on from
+  one section into the next is the ordinary case. The churn-over that used to
+  exchange icon sets is gone — it was the awkward part — and with it
+  `activeSection` stopped being a mode you switch into: it is now read off
+  whatever is selected, and only lights the footer.
 - **The menu is ONE ROW at every width.** Overflow scrolls; it never wraps and
   it never shrinks the icons. Narrow viewports used to gain rows (390px
   portrait was 6 x 3), which spent a third of a phone on navigation and moved

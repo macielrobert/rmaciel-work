@@ -1,7 +1,11 @@
 # Design note — animated grid reorganization
 
-**Branch:** `grid-motion` · **Status:** mechanism built (steps 1–3) and
-**switched OFF by default** — add `?motion` to enable. The arrangement itself
+**Branch:** `grid-motion` · **Status:** mechanism built (steps 1–3),
+**switched OFF by default** (`?motion`), and **now unhooked**: the section
+swap it animated no longer exists — every section lives in one row and the
+footer scrolls to it, so nothing calls `armGridMotion()`. The code is still in
+`index.html`. Either give it a new moment to animate or delete it; leaving it
+uncalled indefinitely is the one thing not to do. The arrangement itself
 (step 4) is still undesigned, and until it exists the motion makes the site
 worse. See the last status-log entry.
 

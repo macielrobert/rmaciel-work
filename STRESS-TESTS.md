@@ -52,10 +52,10 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] Tab in, arrow around, Tab out to the footer. Must **never trap focus**.
 - [ ] Arrow **past the first and last item** — should clamp, not wrap.
 - [ ] Enter on an already-open project **closes** it.
-- [ ] Enter **during a section switch** and **while the contact form is open**
-      must do nothing (matches the pointer locks).
-- [ ] Switch sections while focused in the grid — the layer rebuilds; focus
-      must not land on a removed element.
+- [ ] Enter **while the contact form is open** must do nothing (matches the
+      pointer locks).
+- [ ] Use a footer section link while focused in the grid — focus must survive
+      (the layer no longer rebuilds; one row holds every section).
 - [ ] Rotate the device with the grid focused; focus targets must follow the
       new geometry.
 - [ ] **VoiceOver:** 13 options, correct titles, selected state announced.
@@ -111,7 +111,10 @@ The one that most needs stressing.
 - [ ] Forward button re-enters the state it left.
 - [ ] Swipe through several images while expanded, then press back **once** —
       should close the image, not step back through every image.
-- [ ] Section switch via footer, then back.
+- [ ] Footer section link, then back. The link scrolls the row rather than
+      swapping it; `#build` / `#design` / `#art` must still land on that
+      section's first icon, at the left margin, or at the end of the row if
+      the row is not long enough to put it there.
 - [ ] **Reload on a deep link** returns to the same place.
 - [ ] iOS Safari **edge-swipe back gesture**, not just the button.
 - [ ] Confirm URL never changes on a bare load (no `#build` appearing

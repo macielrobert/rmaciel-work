@@ -1070,14 +1070,17 @@
      ADAPTER (buildData) turns that authoring shape into the internal shape the
      rest of the code runs on. That adapter is the seam a CMS plugs into: same
      authoring shape in, no change to anything downstream.
-   - SECTIONS: the work is three lists — BUILD / DESIGN / ART — each with its
-     own icon set. The footer switches between them; switching churns the whole
-     grid over and exchanges the set at the midpoint, so all sections are baked
-     up front. ABOUT and CONTACT are FIXTURES: footer entries that take the
-     window with no grid icon behind them. Window entries are one flat list
-     ([...sections, ABOUT, form]) so switching is always a display swap.
-   - STATE is three values: activeSection (which icon set), selected (which
-     project is frozen), fixture (ABOUT/CONTACT holding the window). They feed
+   - SECTIONS: the work is three lists — BUILD / DESIGN / ART — held in ONE
+     ROW, in section order. The footer does not swap icon sets any more; it
+     scrolls the row so the section's first icon sits at the left margin, and
+     you can keep scrolling straight on into the next section. ABOUT and
+     CONTACT are FIXTURES: footer entries that take the window with no grid
+     icon behind them. Window entries are one flat list ([...sections, ABOUT,
+     form]) in the SAME order as the icons, so a flat icon index and a flat
+     window index are one number.
+   - STATE is three values: activeSection (which footer label is lit — derived
+     from the selection, not switched into), selected (which project is frozen,
+     as a flat index), fixture (ABOUT/CONTACT holding the window). They feed
      one winTarget() so grid taps and footer taps share the same machinery.
      Exactly one thing is coherent at any moment — with a fixture open that
      thing is the footer label, and the whole grid churns.
@@ -1968,8 +1971,9 @@ void main() {
 
   // ------------------------------------------------------- layout (state)
   // Set by resize()/relayout(); read by frame() and iconAtPointer().
-  let icons = [];       // the ACTIVE section's icons (what frame() draws)
-  let allIcons = [];    // every section's icons, baked once at boot
+  let icons = [];       // what frame() draws: the menu row, or the field's cells
+  let allIcons = [];    // the menu set — every section, one flat row. `icons`
+                        // points at it, except in the field (see savedIcons)
   let footW = 0, footH = 0;       // per-icon quad size, clip units
   let cellPxCss = 0;              // icon cell size, CSS px (hit-test)
   let canvasCssW = 0, canvasCssH = 0;
@@ -2058,7 +2062,14 @@ void main() {
     rowFadePx = pitch;                   // one pitch — see the note at its
                                          // declaration for why not less
     if (!rowScrolls) { scrollX = 0; scrollV = 0; rowTarget = null; }
-    else scrollX = rowClamp(scrollX);    // a resize can shorten the run
+    else {
+      scrollX = rowClamp(scrollX);       // a resize can shorten the run
+      // ...and a settle target aimed at the OLD run has to come with it. Left
+      // alone it drives the row past the new end, where the edge spring throws
+      // it back, and the two fight for a second or more. Reachable now that the
+      // row holds every section and a rotation can halve its scrollable length.
+      if (rowTarget !== null) rowTarget = rowClamp(rowTarget);
+    }
 
     // vertical: the single row, centered in the canvas
     const cy = canvasCssH / 2;
@@ -2091,11 +2102,26 @@ void main() {
     let t = scrollX;
     if (l < t) t = l;
     else if (r > t + canvasCssW) t = r - canvasCssW;
-    t = rowClamp(t);
+    rowScrollTo(rowClamp(t), instant);
+  }
+
+  // Move the row to an already-clamped position, easing unless told otherwise.
+  function rowScrollTo(t, instant) {
     if (Math.abs(t - scrollX) < 0.5) return;
     scrollV = 0;
     if (instant) { rowTarget = null; scrollX = t; applyScroll(); }
     else rowTarget = t;                  // eases in stepRowScroll
+  }
+
+  // A FOOTER SECTION IS AN ADDRESS IN THE ROW, not a set to swap in: snap the
+  // row so that section's FIRST icon sits against the left margin — the same
+  // place the row parks at scrollX 0, applied anywhere along the run. Clamped,
+  // so the last section stops at the end of the row rather than scrolling into
+  // empty space, and on a row that fits entirely this does nothing at all.
+  function scrollToSection(n, instant) {
+    const i = SECTION_OFFSET[n], ic = icons[i];
+    if (!rowScrolls || !ic) return;
+    rowScrollTo(rowClamp(ic.baseCx - cellPxCss / 2 - marginPxCss), instant);
   }
 
   // The glide, integrated once per frame from frame(). It rides the rAF loop
@@ -2153,10 +2179,13 @@ void main() {
   let keyEls = [];
   let focusIdx = 0;
 
-  // rebuild the layer for the ACTIVE section (titles and count both change)
+  // build the layer — every project, once. It is rebuilt only on the way out
+  // of the field, which is the one thing that empties it.
   function buildKeys() {
     keysEl.textContent = '';
-    const ents = (DATA.sections[activeSection] || {}).entries || [];
+    // EVERY section, in section order — the same flat list the icons are, so
+    // span i is icon i is LIST[i]. Built once now; nothing rebuilds it.
+    const ents = DATA.sections.reduce((a, s) => a.concat(s.entries), []);
     focusIdx = 0;
     keyEls = ents.map((en, i) => {
       const s = document.createElement('span');
@@ -2425,8 +2454,10 @@ void main() {
   // Hit-testing tests each icon's RESTING cell box (pxCx/pxCy), which the warp
   // never moves, so targets stay pinned even while the art churns.
   // THREE state values now, composing cleanly:
-  //   activeSection  which icon set the grid holds (footer BUILD/DESIGN/ART)
-  //   selected       which project in that section is frozen, or null
+  //   activeSection  which footer label is lit (BUILD/DESIGN/ART) — derived
+  //                  from the selection; the grid holds every section at once
+  //   selected       which project is frozen, as a FLAT index across all
+  //                  sections, or null
   //   fixture        'about' | 'contact' | null — a footer entry holding the
   //                  window with NO grid icon behind it
   // The coherence grammar is unchanged, just extended: exactly one thing is
@@ -2450,8 +2481,18 @@ void main() {
   function winTarget() {
     if (fixture === 'about')   return ABOUT_INDEX;
     if (fixture === 'contact') return FORM_INDEX;
-    if (selected !== null)     return SECTION_OFFSET[activeSection] + selected;
+    if (selected !== null)     return selected;   // the flat icon index IS the
+                                                  // flat window index
     return null;
+  }
+
+  // flat icon index -> the section it belongs to. `selected` is flat now, so
+  // activeSection is DERIVED from it rather than being a mode you switch into;
+  // the footer, the URL, and the title all read it through here.
+  function sectionOf(flat) {
+    let s = 0;
+    for (let i = 1; i < SECTION_OFFSET.length; i++) if (flat >= SECTION_OFFSET[i]) s = i;
+    return s;
   }
 
   // apply whatever state was just set: grid noise, footer marks, and the
@@ -2479,6 +2520,9 @@ void main() {
     const prev = winTarget();
     selected = next;
     fixture  = null;              // a grid selection always leaves a fixture
+    if (next !== null) activeSection = sectionOf(next);   // the footer lights the
+                                  // section the picked icon belongs to — one row,
+                                  // so it is read off the choice, never switched to
     commit(prev);
   }
 
@@ -2491,26 +2535,17 @@ void main() {
     commit(prev);
   }
 
-  // ---- section switching (footer BUILD / DESIGN / ART)
-  // The grid churns OVER: every icon drives to full noise on the fast clock,
-  // the icon set is exchanged at the midpoint — noise to noise, so the cut is
-  // invisible, exactly as the window's text swap works — and the new set
-  // resolves back to calm on the slow clock. The window leaves with the old
-  // section; a switch always lands at rest.
-  let gSwapTo = null, gMix = 0;
-
   // ---- grid reorganisation (position). See NOTES-GRID-MOTION.md.
-  // moveActive is true from the moment a switch is armed until the LAST icon
-  // has settled — which is a much longer window than gSwapTo, and that gap is
-  // the whole point (see gridInert below).
+  // moveActive is true from the moment a move is armed until the LAST icon has
+  // settled, which is what gridInert below reads.
   let moveActive = false;
 
-  // Zero the displacement on EVERY set, not just the active one. An icon set
-  // that was switched away from mid-flight keeps whatever move value it had;
-  // if the next thing to happen is a path that does not re-arm it, it would
-  // draw permanently off its cell. Clearing all sets makes that unreachable.
+  // Zero the displacement on every menu icon. Cheap and total: an icon left
+  // part-way through a move by a path that does not re-arm it would draw
+  // permanently off its cell, and clearing the whole set makes that
+  // unreachable rather than merely unlikely.
   function cancelGridMotion() {
-    for (const set of allIcons) for (const ic of set) { ic.move = 0; ic.moveTarget = 0; ic.moveDelay = 0; }
+    for (const ic of allIcons) { ic.move = 0; ic.moveTarget = 0; ic.moveDelay = 0; }
     moveActive = false;
   }
 
@@ -2528,6 +2563,12 @@ void main() {
   // placeholder chosen so the mechanism is legible while being watched — the
   // set opens apart and converges, rather than jittering in place. Step 4 in
   // the note is the actual design problem and is deliberately still open.
+  //
+  // NOTHING ARMS THIS ANY MORE. Its one caller was the section swap, and the
+  // menu no longer swaps sets — every section is in one row and the footer
+  // scrolls to it. Kept rather than deleted because NOTES-GRID-MOTION.md is an
+  // open design branch and this is its steps 1-3; delete both together if that
+  // branch is abandoned.
   function armGridMotion(incoming) {
     // OFF BY DEFAULT (see GRID_MOTION). NO SHADER: no icon is drawn at all —
     // #nl-keys IS the menu — so there is nothing to move. REDUCED MOTION:
@@ -2546,21 +2587,18 @@ void main() {
     }
   }
 
-  // THE GRID IS INERT WHILE IT IS MOVING — not merely while the icon set is
-  // being exchanged. gSwapTo covers only the 0.12s churn-out; the icons keep
-  // travelling through the 0.80s re-form after it, while the hit test and
-  // #nl-keys still read relayout()'s RESTING boxes. A tap in that window would
-  // land on the project that will END UP there, not the one under the finger.
+  // THE GRID IS INERT WHILE IT IS MOVING. While icons travel, the hit test and
+  // #nl-keys still read relayout()'s RESTING boxes, so a tap would land on the
+  // project that will END UP there, not the one under the finger.
   //
   // This is the deliberate answer to hazard 1 in the note. The alternative —
   // a hit target that chases the drawn position — makes the pointer path and
   // the DOM twin disagree about where an icon is, which is the one thing the
   // twin exists to prevent. Locking is honest and nothing can disagree.
   //
-  // The FOOTER is not covered by this: switchSection keeps its own gSwapTo
-  // guard, so a second section tap during the re-form still lands. Only the
-  // icons — the things actually moving — stop accepting input.
-  function gridInert() { return gSwapTo !== null || moveActive; }
+  // Nothing arms the motion today (see armGridMotion), so this is false in
+  // practice; the footer was never covered by it either way.
+  function gridInert() { return moveActive; }
 
   // ============================================================== the field
   // A MODE, not a state of the menu. While it is up there is no menu, no
@@ -2626,7 +2664,7 @@ void main() {
 
   function buildField(keepNeedleAt) {
     const met = fieldMetrics(), N = met.cols * met.rows;
-    const src = allIcons.reduce((a, b) => a.concat(b), []);
+    const src = allIcons;                // one flat menu set to derive from
     fieldCols = met.cols; fieldRows = met.rows;
     fieldOrder = [];
     fieldCells = [];
@@ -2764,7 +2802,6 @@ void main() {
 
   function enterField() {
     if (field || fieldSwap !== null || !fieldAvailable()) return;
-    if (gSwapTo !== null) return;                 // not mid-section-swap
     if (selected !== null || fixture !== null) return;   // INACTIVE STATE only:
                                   // every menu option visible, window empty
     savedIcons = icons;
@@ -2791,7 +2828,7 @@ void main() {
     field = false; fieldSwap = null;
     rootEl.classList.remove('field');
     fieldTransition();
-    icons = savedIcons || allIcons[activeSection];
+    icons = savedIcons || allIcons;
     for (const ic of icons) { ic.mix = 1; ic.target = 0; ic.still = 0; ic.stillTarget = 0; }
     buildKeys();                  // the menu comes back
     resize(true);                 // forced: the canvas must re-derive from the
@@ -2871,46 +2908,23 @@ void main() {
     }
   }
 
+  // ---- footer BUILD / DESIGN / ART
+  // NOT a set exchange any more. Every section is already in the row, in
+  // section order, so the footer link is a JUMP: land at rest and snap that
+  // section's first icon to the left margin. The churn-over it used to do was
+  // the whole cost of the old arrangement — three menus that had to be
+  // dissolved into one another — and there is nothing left to dissolve.
+  // Scrolling straight on from the end of one section into the next is now the
+  // ordinary case, so the sections are addresses in one row, not pages.
   function switchSection(n) {
     if (field) return;            // there is no section nav in the field
-    if (gSwapTo !== null || !allIcons[n]) return;
-    // tapping the section you are ALREADY in is not a no-op when a fixture
-    // holds the window: it means "back to the work". Dismiss and stop —
-    // there is no icon set to churn over.
-    if (n === activeSection) {
-      if (fixture !== null) { const p0 = winTarget(); fixture = null; selected = null; commit(p0); }
-      return;
-    }
+    if (!DATA.sections[n]) return;
     const prev = winTarget();
-    selected = null; fixture = null;
-    if (prev !== null) contactSet(false);        // close the window with the section
-    for (const ic of icons) { ic.target = 1; ic.stillTarget = 0; }   // everything churns out
-    armGridMotion(false);         // ...and travels while it does
-    gSwapTo = n;
-    updateNav();
-    updateKeys();                 // the outgoing set holds no selection either
-  }
-  function commitSection(n) {
+    selected = null; fixture = null;   // the link names the SECTION, not a
+                                       // project in it: it always lands at rest
     activeSection = n;
-    updateNav();                  // the ONE place activeSection changes, so the
-                                  // one place the footer is guaranteed correct.
-                                  // A deep link ('#build', no slug) lands here
-                                  // and then skips commit() — nothing else on
-                                  // that path re-reads the footer.
-    icons = allIcons[n];
-    // the new set ARRIVES fully churned and eases back to calm
-    for (const ic of icons) { ic.mix = 1; ic.target = 0; ic.still = 0; ic.stillTarget = 0; }
-    scrollX = 0; scrollV = 0; rowTarget = null;   // a new section starts at its
-                                                  // first icon, not wherever
-                                                  // the last one was left
-    buildKeys();                  // new titles, new count — rebuilt, then placed
-    resize(true);                 // the icon COUNT changed -> new row width,
-                                  // canvas, and scroll range.
-                                  // forced: this set has never been positioned
-    armGridMotion(true);          // AFTER resize: the direction is radial from
-                                  // the grid centre, so it needs the new set's
-                                  // resting positions to exist first
-    syncRoute(false);             // suppressed when a route drove us here
+    commit(prev);                 // footer, keys, window close, URL — one path
+    scrollToSection(n);
   }
 
   // pointer -> icon index, or null for gap / margin. Tested in CSS px against
@@ -2962,7 +2976,6 @@ void main() {
       if (c !== null) resolveCell(c);
       return;
     }
-    if (gSwapTo !== null) return;               // inert while the grid swaps over
     if (fixture === 'contact') return;          // CONTACT LOCK: only the x exits
     if (!rowScrolls) { selectAt(iconAtPointer(ev)); return; }   // nothing to scroll
     dragId = ev.pointerId;
@@ -3087,12 +3100,9 @@ void main() {
   function updateNav() {
     for (const el of navEls) {
       const n = el.getAttribute('data-nav');
-      // gSwapTo first: during a section swap that is the section the footer
-      // means, and activeSection does not catch up until commitSection().
-      const sn  = gSwapTo !== null ? gSwapTo : activeSection;
       const on = fixture !== null
         ? (fixture === n)
-        : (DATA.sections[sn] && DATA.sections[sn].id === n);
+        : (DATA.sections[activeSection] && DATA.sections[activeSection].id === n);
       el.classList.toggle('on', !!on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
@@ -3514,7 +3524,7 @@ void main() {
        #about   #contact            the fixtures
 
      THE RULE: the URL MIRRORS state, it is never a second way of setting it.
-     applyRoute() drives the SAME setSelected / commit / commitSection /
+     applyRoute() drives the SAME setSelected / commit / scrollToSection /
      expandTo the pointer and keyboard drive, so every transition still churns
      exactly as it always did and there is one code path per state change, not
      two. `routing` suppresses the write-back while a route is being applied,
@@ -3570,7 +3580,7 @@ void main() {
     const sec = DATA.sections[activeSection];
     if (!sec) return '';
     if (selected === null) return sec.id;
-    const en = sec.entries[selected];
+    const en = sec.entries[selected - SECTION_OFFSET[activeSection]];
     if (!en) return sec.id;
     let s = sec.id + '/' + en.slug;
     if (xTarget === 1) s += '/' + (expIdx + 1);
@@ -3600,7 +3610,8 @@ void main() {
     else if (fixture === 'contact') t = 'Contact \u2014 ' + base;
     else {
       const sec = DATA.sections[activeSection];
-      const en  = (sec && selected !== null) ? sec.entries[selected] : null;
+      const en  = (sec && selected !== null)
+                ? sec.entries[selected - SECTION_OFFSET[activeSection]] : null;
       if (en)       t = en.hd + ' \u2014 ' + base;
       else if (sec) t = sec.label + ' \u2014 ' + base;
     }
@@ -3642,15 +3653,18 @@ void main() {
       // renamed or deleted project still lands somewhere sensible
       const idx = slug ? sec.entries.findIndex(e => e.slug === slug) : -1;
 
-      if (si !== activeSection) commitSection(si);   // hard cut; see note above
-
-      const want = idx >= 0 ? idx : null;
+      const want = idx >= 0 ? SECTION_OFFSET[si] + idx : null;
+      activeSection = si;                      // the footer follows the URL
       if (selected !== want || fixture !== null) {
         const p = winTarget(); selected = want; fixture = null; commit(p);
-      }
+      } else updateNav();
+      // a bare '#art' names a SECTION, so it lands exactly where the footer
+      // link does. With a slug, commit()'s ensureVisible has already brought
+      // the open project onto the row.
+      if (want === null) scrollToSection(si, !!initial);
 
       // ---- image level
-      const flat = want !== null ? SECTION_OFFSET[si] + want : -1;
+      const flat = want !== null ? want : -1;
       const en   = flat >= 0 ? winEntries[flat] : null;
       const imgs = en && en.images;
       if (en && imgs && imgs.length && en.expand !== false && parts[2] !== undefined) {
@@ -3816,15 +3830,6 @@ void main() {
     }
     }   // end if (gl) — drawing only
 
-    // SECTION SWAP: runs on the fast clock alongside the icons' own churn-out,
-    // so they arrive together. At the top the icon set is exchanged — noise to
-    // noise, the same invisible cut the window text uses — and the new set
-    // eases back down to calm.
-    if (gSwapTo !== null) {
-      gMix += dt / ON_TIME;
-      if (gMix >= 1) { commitSection(gSwapTo); gSwapTo = null; gMix = 0; }
-    }
-
     // A cell on its way back into the churn swaps its texture the moment the
     // noise is dense enough to hide the change — the same midpoint cut used
     // everywhere else, just measured on the cell's own mix rather than on a
@@ -3951,10 +3956,13 @@ void main() {
     }
     if (!made) made = flatIcons.map(() => iconState(null));
 
-    // deal the flat bake back out into one array per section
-    let cut = 0;
-    allIcons = SECTION_ICONS.map(list => made.slice(cut, cut += list.length));
-    icons = allIcons[activeSection];
+    // ONE ROW, EVERY SECTION, IN SECTION ORDER. The bake is already flat and
+    // already in that order, so there is nothing to deal back out — the menu IS
+    // that flat list. LIST is concatenated from the same sections in the same
+    // order, so a flat ICON index and a flat WINDOW index are the same number
+    // and SECTION_OFFSET indexes both.
+    allIcons = made;
+    icons = allIcons;
 
     buildKeys();                      // the DOM twin of the starting icon set
     resize();
