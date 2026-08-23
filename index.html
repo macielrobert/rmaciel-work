@@ -1102,7 +1102,8 @@
      authoring shape in, no change to anything downstream.
    - SECTIONS: the work is three lists — BUILD / DESIGN / ART — held in ONE
      ENDLESS ROW, in section order. The footer does not swap icon sets; it
-     scrolls the row so the section's first icon sits at the left margin AND
+     scrolls the row so the section's first icon sits just in from the left
+     margin — clear of the dissolve, see ROW_SNAP_INSET — AND
      BANDS it: that section stays ink, everything else eases to the accent
      grey. Position alone cannot say where a section ends when the row always
      shows all of them, so the colour says it. ALL is the fourth link and the
@@ -1370,6 +1371,19 @@
 
   const ROW_SNAP_K    = 320;    // spring rate toward the target, /s^2
   const ROW_SNAP_DAMP = 36;     // damping on that spring, /s
+  // A category jump parks its first icon this much FURTHER in than the margin,
+  // to get it out of the dissolve. The margin was the right landing when the
+  // edge was a hard one; the edge is a one-pitch ramp now, and an icon parked
+  // at the margin sits inside it — at CELL_PX 50 and BAKE_FILL 0.64 the art
+  // spans 21.5-53.5px into a ramp that does not reach full ink until 62.5, so
+  // the thing the jump exists to show you arrives between a third and
+  // seven-eighths dissolved.
+  //
+  // 20 is a NUDGE, not a clearance: it lifts the worst point from 34% to 66%.
+  // Clearing the ramp outright takes 41 (art left 62.5), which parks the icon
+  // most of a cell in from the margin and reads as an indent rather than as a
+  // left edge. One number, tune it by eye.
+  const ROW_SNAP_INSET = 20;    // px
   // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
   // guarantee, not a taste. A mask can only dissolve ink that is actually
   // under it, and this row is mostly empty: between the ink of one icon and
@@ -2208,15 +2222,15 @@ void main() {
   }
 
   // A FOOTER SECTION IS AN ADDRESS ON THE RING: put that section's first icon
-  // against the left margin. On a ring there are infinitely many scroll values
-  // that do it, one per turn, so the jump is measured FROM WHERE YOU ARE and
+  // against the left margin plus ROW_SNAP_INSET, which is what gets it out of
+  // the dissolve. On a ring there are infinitely many scroll values that do it, one per turn, so the jump is measured FROM WHERE YOU ARE and
   // takes the nearest — never more than half a turn, forward or back, whichever
   // is shorter. That is also what makes this work on a screen WIDER than the
   // row, where the old clamped version could only ever reach the last section.
   function scrollToSection(n, instant) {
     const ic = icons[SECTION_OFFSET[n]];
     if (!rowScrolls || !ic || !rowCycle) return;
-    const want = ic.baseCx - cellPxCss / 2 - marginPxCss;
+    const want = ic.baseCx - cellPxCss / 2 - marginPxCss - ROW_SNAP_INSET;
     let d = want - scrollX;
     d -= Math.round(d / rowCycle) * rowCycle;   // into [-cycle/2, +cycle/2]
     rowScrollTo(scrollX + d, instant);
@@ -3051,7 +3065,8 @@ void main() {
   // ---- footer BUILD / DESIGN / ART
   // NOT a set exchange any more. Every section is already in the row, in
   // section order, so the footer link is a JUMP: land at rest and snap that
-  // section's first icon to the left margin. The churn-over it used to do was
+  // section's first icon in from the left margin. The churn-over it used to be
+  // was
   // the whole cost of the old arrangement — three menus that had to be
   // dissolved into one another — and there is nothing left to dissolve.
   // Scrolling straight on from the end of one section into the next is now the

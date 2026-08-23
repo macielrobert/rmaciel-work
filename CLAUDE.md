@@ -135,7 +135,8 @@ understanding why it exists will reintroduce a solved bug.
   becomes space, never a bigger element.
 - **The band is what says where a section ends.** The row always shows every
   project, so a footer link does two things: it scrolls that section's first
-  icon to the left margin AND draws that section in ink with everything else
+  icon to the left margin — plus `ROW_SNAP_INSET`, which keeps it out of the
+  edge dissolve — AND draws that section in ink with everything else
   in accent grey. ALL — the fourth footer link, and the state the page loads
   in — is every icon ink. **Two things fall back to ALL**: scrolling until none
   of the banded section is on screen, and **picking an icon from outside the

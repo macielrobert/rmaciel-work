@@ -96,6 +96,9 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] On that same wide screen, open a project whose icon is visible TWICE —
       both copies must freeze together, and tapping either must open it.
 - [ ] A footer link from the far side of the row must take the SHORT way round.
+- [ ] The icon a footer link lands on must arrive at FULL ink, not part-way
+      through the edge dissolve (`ROW_SNAP_INSET`). Check it at several widths
+      — the ramp is one pitch wide wherever the pitch ends up.
 - [ ] Load a deep link (`#art`, and `#build/vca`). The row must already be in
       place on the first frame — no travel, no bounce.
 - [ ] Rotate the phone mid-flick and mid-jump; nothing should fight itself.
