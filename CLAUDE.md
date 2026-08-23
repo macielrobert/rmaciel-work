@@ -100,8 +100,9 @@ still obey the length rules — a sentence, not a section.
    noise shader. Selection = coherence: the chosen icon freezes, all others
    churn.
 3. **Footer navigation.** ALL and the three sections (BUILD / DESIGN / ART)
-   are a vertical three-slot wheel; ABOUT and CONTACT stay flat links beside
-   it. Primary nav, not decoration.
+   against the left margin, ABOUT / CONTACT against the right. Primary nav,
+   not decoration. The sections have two renderings — a flat row of labels
+   (the default) and a vertical three-slot wheel (`?wheel`).
 4. **Window.** Per-entry text and imagery, swapped through a character-churn
    transition, arranged by a named layout (`standard` / `grid` / `text` /
    `form`).
@@ -155,9 +156,23 @@ understanding why it exists will reintroduce a solved bug.
   it is the funnel the pointer, the keyboard and a deep link all pass through.
   The consequence to know: the band is not in the URL when a project is open,
   so reloading `#design/bus-stop` lands in ALL rather than in DESIGN.
-- **The band is chosen on a WHEEL, and the wheel's centre IS the band.**
-  ALL / BUILD / DESIGN / ART are stacked three-at-a-time to the left of
-  CONTACT: centre slot at full ink, the two neighbours at half. It is the menu
+- **The footer has TWO ENDS, not a centred clump.** The sections sit against
+  the left margin — the same one every text column in the site starts at — and
+  CONTACT / ABOUT / the field mark are pushed to the right by a single
+  `margin-left: auto` on CONTACT. No wrapper elements. The strip's padding is
+  `--nl-m` minus 8, because every label carries 8px of its own for the tap
+  target: the INK lands on the margin and the target overhangs it, at both
+  ends. True in both renderings below.
+- **The band has two renderings, and `?wheel` picks the other one.**
+  DEFAULT IS THE FLAT ROW — it is also the DOM's resting state, so a visitor
+  without the flag never sees a swap, and the flag is read at parse time
+  rather than in `boot()` so `?wheel` does not flash the flat row first.
+  Both are in the file and `updateNav` marks both; only one is painted.
+  `FOOTER_RESERVE` follows: 52 for one line of labels, 72 for three.
+  The rest of this entry is the wheel.
+- **The wheel's centre IS the band.**
+  ALL / BUILD / DESIGN / ART stacked three-at-a-time at the left margin:
+  centre slot at full ink, the two neighbours at half. It is the menu
   row's grammar turned 90 degrees — endless, momentum-scrolled, and committing
   on REST rather than on the way past. **The mask is the state**: everything in
   the wheel is `--ink` and the CSS mask alone lights the middle one, so there
@@ -170,8 +185,6 @@ understanding why it exists will reintroduce a solved bug.
   outranks it, dropping the whole wheel to grey, because ABOUT and two ink
   labels cannot both be true; and the re-centring onto the middle copy happens
   at REST only — moving `scrollTop` under a live iOS fling kills the fling.
-  The price is the seam: `FOOTER_RESERVE` went 52 -> 72 to hold three lines
-  where one used to fit.
 
 - **The row holds EVERY section, in section order, and it is a RING.** BUILD /
   DESIGN / ART are addresses along one endless row, not three menus that swap.
@@ -351,6 +364,9 @@ understanding why it exists will reintroduce a solved bug.
   make a non-obvious choice, write down what you didn't do and why. Do not
   strip or condense existing comments.
 - **`?nogl`** on the URL forces the no-WebGL fallback for testing.
+- **`?wheel`** on the URL swaps the flat section labels for the vertical
+  wheel. `location.search` only, never the hash — a project slugged `wheel`
+  would otherwise turn it on.
 - **Verify before presenting.** At minimum: JS syntax check, CSS brace
   balance, and a grep that every new function is actually wired in. Several
   real bugs were caught this way.

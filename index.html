@@ -967,11 +967,16 @@
     position: absolute; left: 0; right: 0;
     bottom: 20px;
     bottom: max(20px, env(safe-area-inset-bottom));
-    text-align: center;
-    /* a row of three things now — the section wheel, the two fixtures, the
-       field mark — and the wheel is three lines tall while they are one, so
-       they are CENTRED against each other rather than sharing a baseline */
-    display: flex; align-items: center; justify-content: center;
+    /* TWO ENDS, NOT A CENTRED CLUMP. The sections sit against the LEFT
+       margin — the same left margin every text column in the site starts at —
+       and the fixtures are pushed to the RIGHT one by the auto margin below.
+       The 8px comes back off the padding because every label carries 8px of
+       its own for the tap target: the INK lands on the margin, the target
+       overhangs it. Same trick at both ends. */
+    padding: 0 calc(var(--nl-m, 24px) - 8px);
+    /* the wheel is three lines tall while the fixtures are one, so they are
+       CENTRED against each other rather than sharing a baseline */
+    display: flex; align-items: center;
     --sec-h: 16px;                             /* one wheel slot. THE knob:
                                                   the height, the snap step and
                                                   the mask stops are all this,
@@ -982,6 +987,9 @@
     pointer-events: none;                      /* only the words are live */
     user-select: none;
   }
+  /* everything from CONTACT rightward goes to the far end — one auto margin
+     instead of a wrapper element around each group */
+  #nl-fns > [data-nav="contact"] { margin-left: auto; }
   #nl-fns > [data-nav] {
     color: inherit;
     pointer-events: auto; cursor: pointer;
@@ -1026,6 +1034,12 @@
      gives fling, snap, wheel and drag for free, and gets iOS's own
      deceleration rather than an imitation of it. Endless is the one thing it
      does not give, and JS adds that — see SEC_CYCLES. */
+  /* WHICH ONE IS SHOWING. The flat row is the default and the DOM's resting
+     state, so a visitor without the flag never sees a swap; ?wheel hides it
+     and shows the wheel instead. Both are in the file, one is painted. */
+  #nl-sec { display: none; }
+  #noiselab.wheel #nl-sec { display: block; }
+  #noiselab.wheel #nl-fns > .sec { display: none; }
   #nl-sec {
     pointer-events: auto;
     height: calc(var(--sec-h) * 3);
@@ -1158,7 +1172,7 @@
        scroll it; CONTACT / ABOUT open the window without a grid selection.
        Absolutely positioned, so it is a SIBLING of the window while sitting
        geometrically inside the grid half — see the below-the-seam exit. -->
-  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections --></div><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
+  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections, under ?wheel only --></div><span class="sec" role="button" tabindex="0" data-nav="all">ALL</span><span class="sec" role="button" tabindex="0" data-nav="build">BUILD</span><span class="sec" role="button" tabindex="0" data-nav="design">DESIGN</span><span class="sec" role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -1392,13 +1406,28 @@
   // real estate never does.
   const CELL_PX = 50;
 
+  // TWO SECTION NAVS, ONE FILE. ?wheel gives the vertical three-slot wheel;
+  // without it the sections are the flat row of labels they were before it.
+  // Same testing idiom as ?nogl and ?motion — one file, no confusable copies,
+  // and a phone switches between them by editing the URL.
+  //
+  // THE FLAT ROW IS THE DEFAULT, and it is also the DOM's resting state, so a
+  // visitor without the flag never sees a swap. Read here at parse time
+  // rather than in boot(), which runs two frames later: the class has to be on
+  // the element before the first paint or ?wheel flashes the flat row first.
+  //
+  // location.search only, not the hash: a project slug called "wheel" would
+  // otherwise turn it on.
+  const SEC_WHEEL = /[?&]wheel\b/.test(location.search);
+  document.getElementById('noiselab').classList.toggle('wheel', SEC_WHEEL);
+
   // Strip reserved below the grid for the footer. The canvas sits flush on
-  // top of it. It was 52 for a single line of 11px type; the section wheel is
-  // three of those slots (3 * --sec-h = 48) plus the 20px the strip already
-  // stood off the bottom, so 72 with the same few px of slack it always had.
-  // THE SEAM MOVES WITH IT — the grid half is canvas + this — which is the
-  // price of the wheel, paid once, in the one place the number lives.
-  const FOOTER_RESERVE = 72;      // px
+  // top of it. 52 holds a single line of 11px type; the wheel is three slots
+  // (3 * --sec-h = 48) plus the 20px the strip already stood off the bottom,
+  // so 72 with the same few px of slack. THE SEAM MOVES WITH IT — the grid
+  // half is canvas + this — which is the price of the wheel, and the reason
+  // the flat row does not pay it.
+  const FOOTER_RESERVE = SEC_WHEEL ? 72 : 52;      // px
 
   // LAST-RESORT cap: the grid half (canvas + footer reserve) may take at most
   // this fraction of the page, so the contact half always keeps working room.
@@ -3435,7 +3464,7 @@ void main() {
   const secText = ['ALL'].concat(DATA.sections.map(s => s.label));
   const SEC_N   = secIds.length;
 
-  for (let c = 0; c < SEC_CYCLES; c++) {
+  if (SEC_WHEEL) for (let c = 0; c < SEC_CYCLES; c++) {
     for (let k = 0; k < SEC_N; k++) {
       const el = document.createElement('span');
       el.setAttribute('data-nav', secIds[k]);
@@ -3524,19 +3553,26 @@ void main() {
     secEl.scrollTo({ top: (secAt() + d) * SEC_H,
                      behavior: reduceMotion ? 'auto' : 'smooth' });
   });
-  secEl.scrollTop = SEC_MID * SEC_N * SEC_H;   // open on the middle copy, at ALL
-  secSettle();                                 // and mark that slot selected
+  if (SEC_WHEEL) {
+    secEl.scrollTop = SEC_MID * SEC_N * SEC_H; // open on the middle copy, at ALL
+    secSettle();                               // and mark that slot selected
+  }
 
   // exactly ONE label is ink at a time — the fixture if one is open, else the
-  // wheel's centre slot. The footer carries the coherence when the grid
-  // cannot. navEls is CONTACT and ABOUT now; the sections are the wheel, and
-  // its mask is what lights them, so there is no .on to keep in step there.
+  // band. The footer carries the coherence when the grid cannot.
+  //
+  // BOTH NAVS ARE MARKED, always. navEls holds the flat row AND the two
+  // fixtures; under ?wheel the four section labels are display:none, so
+  // marking them is free and there is no second code path to keep honest.
+  // The wheel needs no .on of its own — its mask lights whatever is centred.
   function updateNav() {
     for (const el of navEls) {
-      const on = fixture === el.getAttribute('data-nav');
+      const n = el.getAttribute('data-nav');
+      const on = fixture !== null ? fixture === n : n === bandId();
       el.classList.toggle('on', on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
+    if (!SEC_WHEEL) return;
     secEl.classList.toggle('off', fixture !== null);
     // NO GLIDE ON LOAD, for the reason the row does not bounce on load: a page
     // that arrives already in motion reads as a glitch.
