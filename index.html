@@ -1084,9 +1084,10 @@
     <div id="nl-car"></div>
   </div>
 
-  <!-- primary navigation. BUILD / DESIGN / ART switch the grid's icon set;
-       CONTACT / ABOUT open the window without a grid selection. Behaviour is
-       NOT wired yet — see the stub handlers in the script. -->
+  <!-- primary navigation. ALL / BUILD / DESIGN / ART band the one row and
+       scroll it; CONTACT / ABOUT open the window without a grid selection.
+       Absolutely positioned, so it is a SIBLING of the window while sitting
+       geometrically inside the grid half — see the below-the-seam exit. -->
   <div id="nl-fns"><span role="button" tabindex="0" data-nav="all">ALL</span><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
@@ -3240,10 +3241,41 @@ void main() {
     bandCheck();
   }, { passive: false });
 
-  // NOTE: the contact half / window margins are deliberately NOT an exit —
-  // stray taps around the window (especially near the ← back mark) were
-  // ejecting the whole state. Exits are the ×, the frozen icon, grid gaps,
-  // and Escape.
+  // BELOW THE SEAM IS AN EXIT — the whole half, not just the gaps between
+  // icons. That half IS the menu, so a tap on it that lands on nothing means
+  // "put this down and show me the menu", which is exactly what a gap between
+  // two icons already meant. This extends the same reading to the rest of it:
+  // the margins around the row, the footer strip's empty space, the band the
+  // footer reserve leaves below the canvas.
+  //
+  // ABOVE THE SEAM IS STILL NOT AN EXIT. The window and its margins were tried
+  // as one and it was wrong: stray taps around the window, especially near the
+  // ← back mark, were ejecting the whole state. The rule that replaced it is
+  // the one being extended here, not overturned — an exit is somewhere you
+  // aimed at, and below the seam you have aimed away from the work.
+  //
+  // GEOMETRY, NOT THE DOM. #nl-fns and #nl-copy are absolutely positioned
+  // siblings of the window, so "below the seam" is not a question the tree can
+  // answer. It is the pointer's y against the seam's own rect — the same line
+  // the eye is reading.
+  //
+  // Four things opt out, each because it already answers for itself: the
+  // canvas (an icon selects, a gap exits — its own handler, on RELEASE), the
+  // key spans that are the menu without a shader, the footer links, and the
+  // field button.
+  rootEl.addEventListener('click', (ev) => {
+    if (field) return;                          // the field is its own level
+    if (fixture === 'contact') return;          // CONTACT LOCK: the × only, so a
+                                                // stray tap cannot discard a draft
+    if (selected === null && fixture === null) return;      // nothing open
+    if (ev.target.closest('#nl-gl, [data-key], [data-nav], #nl-field')) return;
+    if (ev.clientY < gridEl.getBoundingClientRect().top) return;   // above the seam
+    setSelected(null);                          // the same global eject as the ×
+  });
+
+  // Exits, in full: the ×, the frozen icon, anywhere below the seam, and
+  // Escape. Escape and the ← pop ONE level from an expanded image; the rest
+  // eject.
 
   // ------------------------------------------------------------ system theme
   // The theme follows the DEVICE display setting (prefers-color-scheme) —

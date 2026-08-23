@@ -85,6 +85,20 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] The footer at 320px wide. Six labels now; confirm the row still clears
       the viewport and the tighter tracking is still readable.
 
+## Below-the-seam exit
+
+- [ ] With a project open, tap the empty footer strip, the band under the icon
+      row, and the margins either side of it — each closes the project.
+- [ ] Tap just ABOVE the seam (window, its margins, near the `←` mark): must
+      NOT close. This is the misclick protection the rule was built around.
+- [ ] Tap a footer LINK: it navigates, it does not merely exit.
+- [ ] **Contact form up: tapping below the seam must do nothing.** The `×` is
+      the only exit from a half-written message.
+- [ ] Swipe the row and release over the footer — the project must survive. The
+      click that follows a drag belongs to the canvas.
+- [ ] With an image expanded, a below-seam tap ejects the whole thing (like the
+      `×`), while Escape and `←` still pop one level.
+
 ## The menu row is a ring
 
 - [ ] Swipe (or wheel) past the last ART icon — BUILD follows on, with an even

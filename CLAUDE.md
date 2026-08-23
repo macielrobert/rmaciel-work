@@ -212,6 +212,17 @@ understanding why it exists will reintroduce a solved bug.
   end to bounce off, and a jump with no spring is a cut. **Never on load** —
   `bootRoute` makes the first route instant, because a page arriving already
   in motion reads as a glitch.
+- **Below the seam is an exit; above it is not.** The bottom half IS the menu,
+  so a tap there that lands on nothing means "put the work down" — which the
+  gaps between icons already meant, now extended to the rest of that half
+  (the margins around the row, the footer strip's empty space). The window and
+  its margins were tried as an exit and it was wrong: stray taps around the
+  window, especially near the `←` mark, ejected the whole state. Tested by
+  GEOMETRY, not DOM containment — `#nl-fns` is an absolutely positioned sibling
+  of the window that sits inside the grid half. Four things opt out because
+  they answer for themselves: the canvas, the key spans, the footer links, the
+  field button. The **contact lock still wins** — with the form up, the `×` is
+  the only exit.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
   no-WebGL fallback obeys this too, measuring the wrapped title list.
