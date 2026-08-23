@@ -1384,18 +1384,24 @@
   //
   //     inset  0   art at 21.5px   34%
   //     inset 20   art at 41.5px   66%
-  //     inset 30   art at 51.5px   82%     <- here
+  //     inset 30   art at 51.5px   82%
   //     inset 41   art at 62.5px  100%     <- the first value that guarantees it
+  //     inset 50   art at 71.5px  100%     <- here
   //
-  // Below 41 this is a nudge, not a clearance. 41 is the guarantee, and it
-  // costs the reading of a left edge: the icon parks most of a cell in and
-  // starts to look like an indent. One number, tune it by eye.
+  // THE INDENT IS THE POINT, not the price. Past 41 the snapped icon is fully
+  // resolved and the extra travel buys something: at 50 the icon BEFORE it sits
+  // in the ramp at roughly 14% to 66% across its width — half-there, plainly
+  // continuing off the edge. So the landing reads as a heading with the
+  // previous section trailing away behind it, rather than as a row that
+  // happens to start here. It is the same thing the faded edge already says,
+  // said about one specific icon.
   //
-  // NOT DERIVED FROM THE PITCH, deliberately. It could be — the clearance is
-  // exactly pitch - margin - the art's own inset — but that makes the landing
-  // move when the pitch shrinks on a short viewport, and this is a number
-  // chosen by looking at it, not one computed from the layout.
-  const ROW_SNAP_INSET = 30;    // px
+  // NOT DERIVED FROM THE PITCH, deliberately — though at the default pitch it
+  // lands on exactly one cell. It could be computed (the clearance is
+  // pitch - margin - the art's own inset) but that moves the landing every time
+  // a short viewport shrinks the pitch, and this is a number chosen by looking
+  // at it. A shrunken pitch only ever indents further and stays fully inked.
+  const ROW_SNAP_INSET = 50;    // px
   // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
   // guarantee, not a taste. A mask can only dissolve ink that is actually
   // under it, and this row is mostly empty: between the ink of one icon and

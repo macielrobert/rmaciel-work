@@ -197,11 +197,14 @@ understanding why it exists will reintroduce a solved bug.
   deliberately brought to an edge has to be legible when it gets there, and the
   margin alone lands it inside the one-pitch dissolve. At the default pitch the
   leading glyph's alpha is `(margin + inset + 9) / 62.5`, so 0 gives 34%, 30
-  gives 82%, and **41 is the first value that guarantees full ink** — at the
-  cost of parking most of a cell in, which starts to read as an indent rather
-  than a left edge. Deliberately not derived from the pitch: it is chosen by
-  looking at it, and a derived one would move the landing every time a short
-  viewport shrank the pitch.
+  gives 82%, and **41 is the first value that guarantees full ink**. It sits at
+  **50**, past that guarantee, because **the indent is the point**: the extra
+  travel pulls the icon BEFORE the landing into the ramp at roughly 14–66%
+  across its width, so the snapped icon reads as a heading with the previous
+  section trailing away behind it rather than as a row that happens to start
+  here. Deliberately not derived from the pitch: it is chosen by looking at it,
+  and a derived one would move the landing every time a short viewport shrank
+  the pitch (a shrunken pitch only indents further and stays fully inked).
 - **The end-of-scroll bounce became the category jump.** The spring that used
   to catch the row at the two ends of the run (`ROW_SNAP_K` / `ROW_SNAP_DAMP`,
   just above critical) now carries every move the row makes on its own: a
