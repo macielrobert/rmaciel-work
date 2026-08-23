@@ -311,6 +311,11 @@
     cursor: pointer;
   }
   /* the coherent one, in text */
+  /* OUTSIDE THE BAND. The shader draws this as accent-grey art; here it is the
+     same demotion said in type. Three levels, which is what the row needs now
+     that it always shows every project: ink = the open one, accent = the
+     section the footer is pointing at, accent-dim = the rest. */
+  #noiselab.nogl #nl-keys [data-key].dim { color: var(--accent-dim); }
   #noiselab.nogl #nl-keys [data-key][aria-selected="true"] { color: var(--ink); }
   @media (hover: hover) {
     #noiselab.nogl #nl-keys [data-key]:hover { color: var(--ink); }
@@ -954,7 +959,10 @@
      here OUT of the icon grid, so the grid holds work and nothing else.
      Separators are spacing, not commas: five labels at the old 0.25em with
      commas measured 358px and overflowed narrow phones. At 0.15em with 8px
-     side padding the row is 295px — it clears a 320px viewport. */
+     side padding five labels were 295px, which cleared a 320px viewport. ALL
+     is a sixth, so the row no longer does — see the narrow-screen rule below,
+     which buys the width back from the letter-spacing rather than from the
+     labels. */
   #nl-fns {
     position: absolute; left: 0; right: 0;
     bottom: 20px;
@@ -977,6 +985,15 @@
      allowed to show. :focus-visible only paints the keyboard ring. */
   #nl-fns [data-nav]:focus-visible { color: var(--ink); }
   @media (hover: hover) { #nl-fns [data-nav]:hover { color: var(--ink); } }
+  /* NARROW PHONES. Six labels at the full tracking overflow a 360px viewport.
+     The tracking is the thing that gives, not the type size and not the tap
+     target: the words stay the same size and stay the same distance apart, and
+     only the air inside them closes up. Below this width nothing else in the
+     page is at its ideal either. */
+  @media (max-width: 400px) {
+    #nl-fns { letter-spacing: 0.06em; }
+    #nl-fns [data-nav] { padding-left: 6px; padding-right: 6px; }
+  }
 
   /* --------------------------------------------------- the field's one control
      Hidden by default and shown only where the mode can actually be had: a
@@ -1070,7 +1087,7 @@
   <!-- primary navigation. BUILD / DESIGN / ART switch the grid's icon set;
        CONTACT / ABOUT open the window without a grid selection. Behaviour is
        NOT wired yet — see the stub handlers in the script. -->
-  <div id="nl-fns"><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
+  <div id="nl-fns"><span role="button" tabindex="0" data-nav="all">ALL</span><span role="button" tabindex="0" data-nav="build">BUILD</span><span role="button" tabindex="0" data-nav="design">DESIGN</span><span role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -1084,19 +1101,24 @@
      rest of the code runs on. That adapter is the seam a CMS plugs into: same
      authoring shape in, no change to anything downstream.
    - SECTIONS: the work is three lists — BUILD / DESIGN / ART — held in ONE
-     ROW, in section order. The footer does not swap icon sets any more; it
-     scrolls the row so the section's first icon sits at the left margin, and
-     you can keep scrolling straight on into the next section. ABOUT and
-     CONTACT are FIXTURES: footer entries that take the window with no grid
-     icon behind them. Window entries are one flat list ([...sections, ABOUT,
-     form]) in the SAME order as the icons, so a flat icon index and a flat
-     window index are one number.
-   - STATE is three values: activeSection (which footer label is lit — derived
-     from the selection, not switched into), selected (which project is frozen,
-     as a flat index), fixture (ABOUT/CONTACT holding the window). They feed
-     one winTarget() so grid taps and footer taps share the same machinery.
-     Exactly one thing is coherent at any moment — with a fixture open that
-     thing is the footer label, and the whole grid churns.
+     ENDLESS ROW, in section order. The footer does not swap icon sets; it
+     scrolls the row so the section's first icon sits at the left margin AND
+     BANDS it: that section stays ink, everything else eases to the accent
+     grey. Position alone cannot say where a section ends when the row always
+     shows all of them, so the colour says it. ALL is the fourth link and the
+     default — every icon ink — and the band falls back to it when you scroll
+     clear of the banded section. ABOUT and CONTACT are FIXTURES: footer
+     entries that take the window with no grid icon behind them. Window
+     entries are one flat list ([...sections, ABOUT, form]) in the SAME order
+     as the icons, so a flat icon index and a flat window index are one number.
+   - STATE is three values: activeSection (the BAND — which section is ink and
+     which footer label is lit; null is ALL), selected (which project is
+     frozen, as a flat index), fixture (ABOUT/CONTACT holding the window). They
+     feed one winTarget() so grid taps and footer taps share the same
+     machinery. Exactly one thing is coherent at any moment — with a fixture
+     open that thing is the footer label, and the whole grid churns. Coherence
+     is CHURN; the band is COLOUR; the two compose and neither reads the
+     other.
    - WebGL grid: entry icons baked to textures; simplex-warp shader; selection
      = coherence (selected icon freezes, all others churn). Icon size is FIXED
      in CSS px (the taskbar rule: CELL_PX) and the menu is ONE ROW at every
@@ -1342,6 +1364,10 @@
   // is what the jump FEELS like, and it is the reason the jump is a jump and
   // not a cut. Damping sits just above critical (2 * sqrt(K) = 35.8), so it
   // arrives once and stops rather than ringing.
+  // --accent's alpha, mirrored from the stylesheet. The canvas cannot use a
+  // CSS colour directly, so this one number is duplicated; the COLOUR is not.
+  const ACCENT_ALPHA = 0.9;
+
   const ROW_SNAP_K    = 320;    // spring rate toward the target, /s^2
   const ROW_SNAP_DAMP = 36;     // damping on that spring, /s
   // The dissolve at a scrollable edge is ONE PITCH wide, and that is a
@@ -1622,7 +1648,13 @@
   // eval on mobile — it would delay first paint.
   // WHICH SECTION the grid is showing (index into CONTENT.sections). The
   // footer will drive this once switching is wired; until then it stays 0.
-  let activeSection = 0;
+  // THE BAND: which section is drawn in ink, everything else in accent grey.
+  // null is ALL — every icon ink — and it is where the page loads, what the
+  // ALL link returns to, and what scrolling clear of a section falls back to.
+  // The row shows every project at every moment now, so position alone cannot
+  // say where one section ends and the next begins; this is what says it.
+  // It doubles as the footer's lit label and, at rest, as the URL.
+  let activeSection = null;
 
   // copy may be one string or a list of paragraphs — normalise to a list
   const paras = v => Array.isArray(v) ? v : [v];
@@ -1763,7 +1795,9 @@
   // GL-side theme state. DARK is the load default (the black-at-load chain
   // stays intact); setTheme() flips these plus the CSS vars and metas.
   let BG  = [0, 0, 0];    // clear color
-  let INK = [1, 1, 1];    // icon color (uInk)
+  let INK = [1, 1, 1];    // icon color (uInk) for a BANDED icon
+  let DIM = [0.5, 0.5, 0.5];   // ...and for one outside the band: the accent
+                               // grey already resolved over BG. See setTheme.
 
   // Paint the theme background immediately. The icon bake is async (images
   // decode before the first frame()), so without this the canvas can show an
@@ -2051,6 +2085,32 @@ void main() {
     }
   }
 
+  // Is any copy of this icon on screen? pxCx is already the copy nearest the
+  // viewport, so if that one is off, they all are.
+  function onScreen(ic) {
+    const half = cellPxCss / 2;
+    return !!ic && ic.pxCx + half > 0 && ic.pxCx - half < canvasCssW;
+  }
+
+  // SCROLLING CLEAR OF A SECTION RETURNS TO ALL. The band is a place, not a
+  // mode: once none of its icons is on screen the row has stopped showing that
+  // section, and saying otherwise in the footer would be a lie. Falls back to
+  // the state the page loads in, everything ink.
+  //
+  // Only at REST, and only under a HAND. With a project or a fixture holding
+  // the window the band is that thing's address and is not the scroll's to
+  // take; and a footer jump travels through the rest of the row on its way, so
+  // the check would fire in the middle of the very move that set the band —
+  // which is why it is called from the drag, the wheel and the coast, and
+  // never from the settle.
+  function bandCheck() {
+    if (activeSection === null || selected !== null || fixture !== null) return;
+    const r = bandRange();
+    for (let i = r[0]; i < r[1]; i++) if (onScreen(icons[i])) return;
+    setBand(null, true);          // REPLACE: a scroll is not a click and has no
+                                  // business pushing a history entry
+  }
+
   // Keep scrollX inside one turn while the row is idle. Positions are taken
   // modulo the cycle regardless, so this changes nothing you can see — it just
   // stops the number climbing for as long as the page stays open.
@@ -2191,6 +2251,7 @@ void main() {
                                                 // nudge stops soon
     if (Math.abs(scrollV) < ROW_STOP_V) { scrollV = 0; normaliseScroll(); }
     applyScroll();
+    bandCheck();
   }
 
   // ------------------------------------------- keyboard / screen-reader grid
@@ -2275,9 +2336,14 @@ void main() {
   function updateKeys() {
     const sel = (fixture === null) ? selected : null;
     if (sel !== null) focusIdx = sel;
+    const r = bandRange(), lo = r[0], hi = r[1];
     for (let i = 0; i < keyEls.length; i++) {
       keyEls[i].setAttribute('aria-selected', i === sel ? 'true' : 'false');
       keyEls[i].tabIndex = (i === focusIdx) ? 0 : -1;
+      // the band, said in type — the fallback's version of the accent-grey art.
+      // The selected one is exempt for the same reason it is on the canvas, and
+      // is painted ink by the rule after this one either way.
+      keyEls[i].classList.toggle('dim', i !== sel && (i < lo || i >= hi));
     }
   }
 
@@ -2494,12 +2560,44 @@ void main() {
   let selected = null;
   let fixture  = null;
 
+  // [lo, hi) of the banded section — the whole row when the band is ALL.
+  function bandRange() {
+    const sec = activeSection === null ? null : DATA.sections[activeSection];
+    if (!sec) return [0, icons.length];
+    const lo = SECTION_OFFSET[activeSection];
+    return [lo, lo + sec.entries.length];
+  }
+
   function applySelection() {
     const fx = fixture !== null;
+    const r = bandRange(), lo = r[0], hi = r[1];
     for (let i = 0; i < icons.length; i++) {
       icons[i].target      = fx ? 1 : (selected === null ? 0 : (i === selected ? 0 : 1));
       icons[i].stillTarget = (!fx && selected !== null && i === selected) ? 1 : 0;
+      // COLOUR IS THE THIRD AXIS: churn says what is chosen, colour says what
+      // section you are in. An icon outside the band still churns like the
+      // rest — it is demoted, not switched off.
+      //
+      // THE OPEN PROJECT IS ALWAYS INK, band or no band. Ink is what is ACTIVE
+      // and accent is what is merely present, which is the rule the whole
+      // stylesheet already runs on; a chosen thing drawn in the resting colour
+      // would contradict it. Reachable in one move: band DESIGN, then tap an
+      // ART icon.
+      icons[i].dimTarget   = (i === selected && !fx) || (i >= lo && i < hi) ? 0 : 1;
     }
+  }
+
+  // Set the band without touching anything else — the row does not move and
+  // the window does not close. ALL is a way of LOOKING at the row, not a place
+  // in it, which is why the ALL link does not scroll: you keep your position
+  // and the whole row lights up around it.
+  function setBand(n, replace) {
+    if (activeSection === n) return;
+    activeSection = n;
+    applySelection();
+    updateNav();
+    updateKeys();
+    syncRoute(!!replace);
   }
 
   // where the window should be pointing, as a FLAT winEntries index (or null
@@ -2547,9 +2645,11 @@ void main() {
     const prev = winTarget();
     selected = next;
     fixture  = null;              // a grid selection always leaves a fixture
-    if (next !== null) activeSection = sectionOf(next);   // the footer lights the
-                                  // section the picked icon belongs to — one row,
-                                  // so it is read off the choice, never switched to
+    // THE BAND IS NOT TOUCHED. Picking a project is not picking a category:
+    // choose one from the middle of ALL and the row stays fully ink around it,
+    // and choose one while DESIGN is banded and DESIGN stays banded. The URL
+    // still names the project's own section — routeString reads that off the
+    // selection, not off the band.
     commit(prev);
   }
 
@@ -2712,6 +2812,7 @@ void main() {
         phase: Math.random() * 100,
         cx: 0, cy: 0, pxCx: 0, pxCy: 0,
         move: 0, moveTarget: 0, moveDelay: 0, mvx: 0, mvy: 0,
+        dim: 0, dimTarget: 0,           // the field has no band; always ink
         resolved: false, unswap: false,
         calm: 0,                // 1 on the needle — churns quieter than the rest
         permanent: false,       // exempt from the budget once found
@@ -3052,6 +3153,7 @@ void main() {
       dragLastX = ev.clientX; dragLastT = now;
     }
     applyScroll();
+    bandCheck();
   });
 
   function endDrag(ev, cancelled) {
@@ -3090,6 +3192,7 @@ void main() {
     // it likes and the row just keeps turning
     scrollX += raw * unit;
     applyScroll();
+    bandCheck();
   }, { passive: false });
 
   // NOTE: the contact half / window margins are deliberately NOT an exit —
@@ -3108,6 +3211,20 @@ void main() {
     rootEl.classList.toggle('light', light);
     BG  = light ? [1, 1, 1] : [0, 0, 0];
     INK = light ? [0, 0, 0] : [1, 1, 1];
+    // THE ACCENT COMES FROM THE CSS TOKEN, so --accent-rgb stays the ONE place
+    // the colour is written and the canvas reads the same number the
+    // stylesheet does instead of keeping a second copy.
+    //
+    // RESOLVED OVER THE BACKGROUND, not carried as a colour plus an alpha: the
+    // canvas ground is exactly --bg, so accent * 0.9 + bg * 0.1 drawn at full
+    // alpha is pixel-identical to the DOM's rgba(accent, 0.9) on the same
+    // ground — and the shader stays a one-colour multiply, with nothing added
+    // to it and no second blend to get wrong.
+    const a = (getComputedStyle(rootEl).getPropertyValue('--accent-rgb') || '')
+                .split(',').map(x => parseFloat(x) / 255);
+    const ok = a.length === 3 && a.every(x => x >= 0 && x <= 1);
+    const acc = ok ? a : [0.56, 0.56, 0.6];
+    DIM = [0, 1, 2].map(i => acc[i] * ACCENT_ALPHA + BG[i] * (1 - ACCENT_ALPHA));
     document.documentElement.style.background = light ? '#fff' : '#000';
     document.body.style.background            = light ? '#fff' : '#000';
     // (theme-color metas are media-scoped in the head — the browser picks
@@ -3129,9 +3246,10 @@ void main() {
   function updateNav() {
     for (const el of navEls) {
       const n = el.getAttribute('data-nav');
+      const sec = activeSection === null ? null : DATA.sections[activeSection];
       const on = fixture !== null
         ? (fixture === n)
-        : (DATA.sections[activeSection] && DATA.sections[activeSection].id === n);
+        : (n === 'all' ? sec === null : !!sec && sec.id === n);
       el.classList.toggle('on', !!on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
@@ -3140,6 +3258,7 @@ void main() {
     const n = el.getAttribute('data-nav');
     const fn = () => {
       if (n === 'about' || n === 'contact') { openFixture(n); return; }
+      if (n === 'all') { setBand(null); return; }
       const si = DATA.sections.findIndex(sec => sec.id === n);
       if (si >= 0) switchSection(si);
     };
@@ -3606,14 +3725,21 @@ void main() {
   // current state -> the hash that describes it
   function routeString() {
     if (fixture) return fixture;
+    // A PROJECT'S ADDRESS IS ITS OWN SECTION, read off the selection rather
+    // than off the band — the two agree today, and the URL must not be the
+    // thing that finds out if they ever stop.
+    if (selected !== null) {
+      const si = sectionOf(selected), sec = DATA.sections[si];
+      if (!sec) return '';
+      const en = sec.entries[selected - SECTION_OFFSET[si]];
+      if (!en) return sec.id;
+      let s = sec.id + '/' + en.slug;
+      if (xTarget === 1) s += '/' + (expIdx + 1);
+      return s;
+    }
+    if (activeSection === null) return 'all';   // the default, with an address
     const sec = DATA.sections[activeSection];
-    if (!sec) return '';
-    if (selected === null) return sec.id;
-    const en = sec.entries[selected - SECTION_OFFSET[activeSection]];
-    if (!en) return sec.id;
-    let s = sec.id + '/' + en.slug;
-    if (xTarget === 1) s += '/' + (expIdx + 1);
-    return s;
+    return sec ? sec.id : '';
   }
 
   function writeHash(h, replace) {
@@ -3638,11 +3764,13 @@ void main() {
     if (fixture === 'about')        t = 'About \u2014 ' + base;
     else if (fixture === 'contact') t = 'Contact \u2014 ' + base;
     else {
-      const sec = DATA.sections[activeSection];
+      const si  = selected !== null ? sectionOf(selected) : activeSection;
+      const sec = si === null ? null : DATA.sections[si];
       const en  = (sec && selected !== null)
-                ? sec.entries[selected - SECTION_OFFSET[activeSection]] : null;
+                ? sec.entries[selected - SECTION_OFFSET[si]] : null;
       if (en)       t = en.hd + ' \u2014 ' + base;
-      else if (sec) t = sec.label + ' \u2014 ' + base;
+      else if (sec) t = sec.label + ' \u2014 ' + base;   // ALL keeps the bare
+                                                        // site title
     }
     document.title = t;
   }
@@ -3665,12 +3793,21 @@ void main() {
                                                // a deep-linked project on screen
     try {
       if (!parts || !parts.length) {           // bare '#' or empty
-        if (!initial && (selected !== null || fixture !== null)) {
-          const p = winTarget(); selected = null; fixture = null; commit(p);
+        if (!initial) {
+          const p = winTarget();
+          selected = null; fixture = null; activeSection = null; commit(p);
         }
         return;
       }
       const head = String(parts[0]).toLowerCase();
+
+      // '#all' is the same rest state as a bare hash, but written down: the
+      // whole row in ink, nothing selected, the row where you left it.
+      if (head === 'all') {
+        const p = winTarget();
+        selected = null; fixture = null; activeSection = null; commit(p);
+        return;
+      }
 
       if (head === 'about' || head === 'contact') {
         if (fixture !== head) {
@@ -3689,10 +3826,19 @@ void main() {
       const idx = slug ? sec.entries.findIndex(e => e.slug === slug) : -1;
 
       const want = idx >= 0 ? SECTION_OFFSET[si] + idx : null;
-      activeSection = si;                      // the footer follows the URL
+      // A SLUG DOES NOT BAND. '#design' is a category link and bands DESIGN;
+      // '#design/bus-stop' is one project's address and leaves the band where
+      // it is, which is what makes the URL a mirror of the tap that wrote it.
+      if (want === null) activeSection = si;
       if (selected !== want || fixture !== null) {
         const p = winTarget(); selected = want; fixture = null; commit(p);
-      } else updateNav();
+      } else {
+        // the selection did not move, but the BAND may have. commit() is what
+        // normally paints it; on this branch there is nothing to commit, so the
+        // three things it would have called are called directly. Leaving it at
+        // updateNav() lit the footer for a section the icons knew nothing about.
+        applySelection(); updateNav(); updateKeys();
+      }
       // a bare '#art' names a SECTION, so it lands exactly where the footer
       // link does. With a slug, commit()'s ensureVisible has already brought
       // the open project onto the row.
@@ -3774,13 +3920,24 @@ void main() {
     gl.useProgram(prog);
     gl.bindVertexArray(vao);
     gl.uniform1i(loc.uTex, 0);
-    gl.uniform3f(loc.uInk, INK[0], INK[1], INK[2]);   // same ink for every icon
+    // uInk is per ICON now (the band) — set inside the loop, below.
 
     for (const ic of icons) {
       // each icon eases its OWN mix toward its OWN target (same on/off feel)
       if (ic.mix < ic.target) ic.mix = Math.min(ic.target, ic.mix + dt / ON_TIME);
       else if (ic.mix > ic.target) ic.mix = Math.max(ic.target, ic.mix - dt / OFF_TIME);
       const e = smooth(ic.mix);
+
+      // COLOUR eases on that clock too — fast to the accent grey, slow back to
+      // ink, the same asymmetry as everything else. It is set per icon rather
+      // than once per frame, which is the whole cost of the band: one extra
+      // uniform3f each, and no shader change at all.
+      if (ic.dim < ic.dimTarget)      ic.dim = Math.min(ic.dimTarget, ic.dim + dt / ON_TIME);
+      else if (ic.dim > ic.dimTarget) ic.dim = Math.max(ic.dimTarget, ic.dim - dt / OFF_TIME);
+      const dv = smooth(ic.dim);
+      gl.uniform3f(loc.uInk, INK[0] + (DIM[0] - INK[0]) * dv,
+                             INK[1] + (DIM[1] - INK[1]) * dv,
+                             INK[2] + (DIM[2] - INK[2]) * dv);
 
       // stillness eases on the SAME asymmetric clock (snap frozen, ease back
       // to breathing). s = 1 kills displacement AND stops the phase clock, so
@@ -3966,6 +4123,9 @@ void main() {
       // relayout() stays the single source of where an icon IS.
       move: 0, moveTarget: 0, moveDelay: 0,
       mvx: 0, mvy: 0,
+      // 0 = ink (inside the band), 1 = accent grey (outside it). Eases on the
+      // same asymmetric clock as everything else: fast to dim, slow back.
+      dim: 0, dimTarget: 0,
     });
 
     // the field's resolve targets. Placeholder geometry for now — real

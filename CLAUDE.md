@@ -99,7 +99,7 @@ still obey the length rules — a sentence, not a section.
 2. **WebGL icon grid.** Icons baked to textures, warped by a shared simplex
    noise shader. Selection = coherence: the chosen icon freezes, all others
    churn.
-3. **Footer navigation.** Three sections (BUILD / DESIGN / ART) plus two
+3. **Footer navigation.** ALL, three sections (BUILD / DESIGN / ART), and two
    fixtures (ABOUT / CONTACT). Primary nav, not decoration.
 4. **Window.** Per-entry text and imagery, swapped through a character-churn
    transition, arranged by a named layout (`standard` / `grid` / `text` /
@@ -107,7 +107,8 @@ still obey the length rules — a sentence, not a section.
 5. **Image expand.** In-flow view swap inside the window; swipe to navigate;
    two-scope exits (`←` local, `×` global).
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
-   shader uniform recolor everything.
+   shader uniform recolor everything. A third, `--accent-rgb`, is the grey that
+   is neither — not theme-swapped, and the one place that colour is written.
 7. **Routing.** `#section/slug/image` mirrors state. The URL never becomes a
    second way of setting state.
 
@@ -132,6 +133,19 @@ understanding why it exists will reintroduce a solved bug.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
   the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
   becomes space, never a bigger element.
+- **The band is what says where a section ends.** The row always shows every
+  project, so a footer link does two things: it scrolls that section's first
+  icon to the left margin AND draws that section in ink with everything else
+  in accent grey. ALL — the fourth footer link, and the state the page loads
+  in — is every icon ink. Scrolling until none of the banded section is on
+  screen falls back to ALL, because the band is a place and not a mode.
+  Three rules keep it from tangling with the rest: **colour is not coherence**
+  (an out-of-band icon still churns; it is demoted, not switched off), **the
+  open project is always ink** whatever the band (ink = active, accent = merely
+  present, which is the rule the stylesheet already runs on), and **picking a
+  project never moves the band** — only the footer does. The consequence to
+  know: the band is not in the URL when a project is open, so reloading
+  `#design/bus-stop` lands in ALL rather than in DESIGN.
 - **The row holds EVERY section, in section order, and it is a RING.** BUILD /
   DESIGN / ART are addresses along one endless row, not three menus that swap.
   Past the last ART icon comes the first BUILD icon again (`rowCycle` in

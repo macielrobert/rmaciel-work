@@ -64,6 +64,25 @@ Mostly visual, but it produced a real bug, so it earns tests.
 
 ---
 
+## The band (ALL / BUILD / DESIGN / ART as ink)
+
+- [ ] Load the site cold: ALL is lit and every icon is ink.
+- [ ] Tap a section, then scroll to its far edge — the change from ink to
+      accent grey must land exactly on the section boundary, in BOTH themes.
+- [ ] Keep scrolling until none of that section is on screen: the footer must
+      fall back to ALL and the row return to ink, and the URL must change by
+      REPLACE — check the back button still goes where it did.
+- [ ] ALL must not move the row. It lights everything where you are standing.
+- [ ] Band a section, then open a project from a DIFFERENT one: the open icon
+      is ink, its own section is not banded, and the footer still shows the
+      band you asked for.
+- [ ] Deep-link `#design` and `#all`. Both must paint the band on the first
+      frame — this is the path that skips commit().
+- [ ] `?nogl`: the same three levels in type — ink for the open one, accent for
+      the band, accent-dim for the rest.
+- [ ] The footer at 320px wide. Six labels now; confirm the row still clears
+      the viewport and the tighter tracking is still readable.
+
 ## The menu row is a ring
 
 - [ ] Swipe (or wheel) past the last ART icon — BUILD follows on, with an even
