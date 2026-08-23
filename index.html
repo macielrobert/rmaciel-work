@@ -1928,18 +1928,35 @@
   if (!gl) rootEl.classList.add('nogl');
 
   // ---------------------------------------------------------------- theme
-  // GL-side theme state. DARK is the load default (the black-at-load chain
-  // stays intact); setTheme() flips these plus the CSS vars and metas.
+  // GL-side theme state. Declared here because the first clear (below) needs
+  // it; setTheme() — down in the system-theme section — is what writes it,
+  // along with the CSS vars and the html/body backgrounds.
   let BG  = [0, 0, 0];    // clear color
   let INK = [1, 1, 1];    // icon color (uInk) for a BANDED icon
   let DIM = [0.5, 0.5, 0.5];   // ...and for one outside the band: the accent
                                // grey already resolved over BG. See setTheme.
 
+  // THE DEVICE SETTING, READ ONCE, HERE. The live listener stays with the rest
+  // of the theme machinery further down; only this read and the first call had
+  // to move, because everything above and below them assumes a resolved theme.
+  const mqLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+  // RESOLVE THE THEME BEFORE THE FIRST CLEAR — this call is the fix for a real
+  // bug, not tidiness. The three values above used to be hard-coded DARK and
+  // corrected by setTheme() ~1500 lines later. On a dark device that cost
+  // nothing. On a LIGHT one it left the canvas holding a BLACK buffer from the
+  // clear below until resize() re-cleared it in the right colour — and resize()
+  // runs after the icon bake, which AWAITS every icon image. So a light-mode
+  // load showed a black rectangle for the whole bake: 300x150, the browser's
+  // DEFAULT canvas size, centred above the footer, aligned to nothing in this
+  // layout because it was not this layout's geometry at all.
+  setTheme(mqLight && mqLight.matches ? 'light' : 'dark');
+
   // Paint the theme background immediately. The icon bake is async (images
   // decode before the first frame()), so without this the canvas can show an
   // uninitialised (grey/garbage) buffer for a beat on load. Together with the
   // CSS canvas background, the color-scheme/theme-color metas, and the inline
-  // html background, the page is black at every stage of load.
+  // html background, the page is in-theme at every stage of load.
   if (gl) {
     gl.clearColor(BG[0], BG[1], BG[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -3431,8 +3448,9 @@ void main() {
     // (theme-color metas are media-scoped in the head — the browser picks
     // the matching one itself; no JS update needed)
   }
-  const mqLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
-  setTheme(mqLight && mqLight.matches ? 'light' : 'dark');
+  // mqLight and the FIRST setTheme() call live up at the theme-state block, next
+  // to the GL clear that needs the theme already resolved. Only the live change
+  // listener is here, where the rest of the theme machinery is.
   if (mqLight && mqLight.addEventListener) mqLight.addEventListener('change',
     (e) => setTheme(e.matches ? 'light' : 'dark'));
 
