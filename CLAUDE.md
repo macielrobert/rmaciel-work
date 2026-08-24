@@ -53,19 +53,20 @@ He works **primarily on an iPhone**, and on a MacBook Pro 14" M2 Max.
   forks; do not stall on small ones.
 - **He approves by moving on.** Silence usually means yes. Corrections are
   short and direct.
-- **On mobile, ship it — commit, push, AND merge to main, without asking.** He
-  is on a phone, where reading a diff and merging is the whole friction, and a
-  deploy is the only way he can see a change at all. So develop on the working
-  branch, verify, fast-forward main, push both. The merge is not a fork to
-  raise. **Assume mobile unless he says otherwise** — it is where he works, and
-  there is no way to detect it from here.
+- **Ship it — commit, push, AND merge to main, without asking. Every device.**
+  It began as a phone rule, because on a phone reading a diff and merging is
+  the whole friction and a deploy is the only way he can see a change at all.
+  It is not conditional on the device any more: the laptop gets the same rule
+  with less friction, and nothing has to be inferred about where he is sitting.
+  Develop on the working branch, verify, fast-forward main, push both. The
+  merge is not a fork to raise.
 - **The price of that rule is verifying BEFORE the merge.** Merging to main
   deploys, so the checks under Conventions run first, not after, and anything
   visual gets looked at rather than reasoned about. Three things still stop and
-  ask, on any device: DNS (the standing rules in `TO-DO.md`), content (the CMS
-  owns it — the next build overwrites a hand edit), and anything else that is
-  hard to undo. Revisit the rule itself once the domain points at Netlify:
-  today main deploys to a Netlify URL, not to `rmaciel.work`.
+  ask: DNS (the standing rules in `TO-DO.md`), content (the CMS owns it — the
+  next build overwrites a hand edit), and anything else that is hard to undo.
+  Revisit the rule itself once the domain points at Netlify: today main deploys
+  to a Netlify URL, not to `rmaciel.work`.
 - **Tell him when he is wrong.** He asked explicitly for a true assessment and
   acted on it. Do not soften real problems.
 
