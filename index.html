@@ -1054,8 +1054,18 @@
      grouping the gap used to.
      500 rather than the 400 above because these are different failures: that
      rule is about the labels not FITTING, this one about the gap not READING.
-     A landscape phone or a tablet keeps the two ends. */
+     A landscape phone or a tablet keeps the two ends.
+
+     AND THE RUN IS CENTRED, not left-aligned. The left margin is where a
+     COLUMN of text starts, and one run of six labels spanning nearly the whole
+     width is not a column — it is a strip. Left-aligned it left a ragged
+     offcut of space at the right end that changed size with every viewport and
+     read as the row having stopped short; centred, the air is equal at both
+     ends and the strip is deliberately placed. The site's other centred thing
+     is nothing: this is the one element wide enough that its own width, not a
+     margin, is what positions it. */
   @media (max-width: 500px) {
+    #nl-fns { justify-content: center; }
     #nl-fns > [data-nav="contact"] { margin-left: 0; }
     #nl-fns > .sep { display: inline; }
   }

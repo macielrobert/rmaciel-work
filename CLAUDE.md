@@ -181,8 +181,15 @@ understanding why it exists will reintroduce a solved bug.
   any.** At 11px the six labels run to ~400px, so the widest phone portrait
   there is (430) leaves 83px between ART and CONTACT against the 16px between
   two labels inside a group — an uneven row, not a division. Under 500 the
-  auto margin comes off, the whole run sits against the left margin, and a
-  `|` between ART and CONTACT says the grouping the gap used to. The divider
+  auto margin comes off and the whole run CENTRES, and a
+  `|` between ART and CONTACT says the grouping the gap used to. Centred and
+  not left-aligned because the left margin is where a text COLUMN starts, and
+  six labels spanning nearly the whole width are a strip, not a column: left
+  against the margin, the leftover space piles up at the right end, changes
+  size with every viewport, and reads as a row that stopped short. This is the
+  one element wide enough that its own width, rather than a margin, places it —
+  which is why centring it is not the centred clump this rule exists to
+  forbid. The divider
   exists ONLY there: on a wide screen the layout already says it, and a mark
   that repeats what the layout says is furniture. It is `aria-hidden`,
   unfocusable and untappable — punctuation, not a label.
