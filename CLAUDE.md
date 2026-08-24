@@ -177,6 +177,15 @@ understanding why it exists will reintroduce a solved bug.
   `--nl-m` minus 8, because every label carries 8px of its own for the tap
   target: the INK lands on the margin and the target overhangs it, at both
   ends. True in both renderings below.
+  **Two ends need width to read as two ends, and below 500px there is not
+  any.** At 11px the six labels run to ~400px, so the widest phone portrait
+  there is (430) leaves 83px between ART and CONTACT against the 16px between
+  two labels inside a group — an uneven row, not a division. Under 500 the
+  auto margin comes off, the whole run sits against the left margin, and a
+  `|` between ART and CONTACT says the grouping the gap used to. The divider
+  exists ONLY there: on a wide screen the layout already says it, and a mark
+  that repeats what the layout says is furniture. It is `aria-hidden`,
+  unfocusable and untappable — punctuation, not a label.
 - **The band has two renderings, and `?wheel` picks the other one.**
   DEFAULT IS THE FLAT ROW — it is also the DOM's resting state, so a visitor
   without the flag never sees a swap, and the flag is read at parse time
@@ -275,6 +284,21 @@ understanding why it exists will reintroduce a solved bug.
 - **The seam follows the menu.** The grid half is exactly
   `canvas height + FOOTER_RESERVE` — never a fixed fraction of the page. The
   no-WebGL fallback obeys this too, measuring the wrapped title list.
+- **The seam is placed BEFORE THE FIRST PAINT, and is not drawn until the
+  thing it divides has been measured.** One row at a fixed pitch makes the
+  resting grid half a CONSTANT — `ROW_CANVAS_H + FOOTER_RESERVE`, 127px flat
+  and 147 with the wheel, independent of icon count and viewport width — so
+  `placeSeam()` writes it at parse time, next to `?wheel`, for the same
+  reason: two frames later is after the first paint. It used to arrive in
+  `boot()`, which is deferred behind two rAFs, so every visitor saw the CSS
+  fallback of 50% — a hairline across the middle of the screen that then
+  jumped up to the menu. Nothing about that read as intentional.
+  The paint is gated separately, on `.laid`, because the no-WebGL fallback
+  measures a wrapped list of titles and genuinely cannot know its height until
+  `boot()` has built it. `border-top-COLOR: transparent` until the first
+  `resize()` returns — the 1px is inside the box either way, so lighting it
+  shifts nothing. With a shader the seam is already correct when it lights;
+  without one, it lights in the place it landed rather than sliding there.
 - **`justify-self: stretch`, not `start`,** on `#nl-window-text` in landscape.
   `start` sizes a grid item to *fit-content*, which is invisible for prose and
   collapses anything short. This is what broke the contact form in v74.
@@ -373,6 +397,7 @@ understanding why it exists will reintroduce a solved bug.
 | A separate deliberately-broken build for testing | Use `?nogl` instead — one file, no confusable copies |
 | ◄ ► arrows on the menu row | Duplicate a capability the wheel already gives, in furniture the phone would never show — a device-conditional design paying for what the faded edge says for free on both |
 | Caret or arrow indicators on the section wheel | Same answer the menu row gave, and for more reason: the half-lit neighbours already name what is above and below |
+| A `|` divider in the footer at every width | On a wide screen the two ends already say where the sections stop and the fixtures begin. A mark that repeats what the layout says is furniture — the same answer the menu row gave the arrows |
 | Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---

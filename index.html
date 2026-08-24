@@ -194,14 +194,27 @@
     position: relative;
   }
   #nl-content { flex: 1 1 auto; }
-  #nl-grid    { flex: 0 0 auto; height: 50%; /* pre-boot fallback; JS overwrites */ }
+  /* 50% is a LAST-RESORT fallback for a page whose script never runs at all.
+     It is not the load state any more: placeSeam() writes the real resting
+     height at parse time, before the first paint, so nothing here is ever
+     seen at 50% and then moved. */
+  #nl-grid    { flex: 0 0 auto; height: 50%; }
 
   /* menu half — the icon grid (canvas sized in JS) */
   /* the hairline is the seam between the halves — accent grey holds on both themes */
   #nl-grid  { display: flex; align-items: center; justify-content: center;
               border-top: 1px solid var(--accent-dim); }
+  /* THE SEAM IS NOT DRAWN UNTIL THE LAYOUT IT DIVIDES EXISTS. With a shader
+     the height is already right at first paint (placeSeam()), but the no-WebGL
+     fallback measures a wrapped list of titles and cannot know its height
+     until boot() has built the list — so that one path would still show a
+     hairline sliding into place. Nothing draws the line until the first
+     resize() has run and .laid goes on.
+     border-top-COLOR, not the border itself: the 1px is inside the box either
+     way, so lighting it shifts nothing. */
+  #noiselab:not(.laid) #nl-grid { border-top-color: transparent; }
   /* canvas anchors to the BOTTOM of the half: it sits flush against the
-     footer reserve (padding-bottom, set in boot), i.e. on top of the footer.
+     footer reserve (padding-bottom, set by placeSeam()), i.e. on top of the footer.
      position: relative so the keyboard layer can be placed onto the canvas. */
   #nl-stage { width: 100%; height: 100%; display: flex; align-items: flex-end; justify-content: center;
               position: relative; }
@@ -999,6 +1012,16 @@
   /* everything from CONTACT rightward goes to the far end — one auto margin
      instead of a wrapper element around each group */
   #nl-fns > [data-nav="contact"] { margin-left: auto; }
+  /* THE GROUP DIVIDER, for the narrow layout below and nowhere else. On a wide
+     screen the two ends already say where the sections stop and the fixtures
+     start, and a mark that repeats what the layout says is furniture — the
+     same answer the menu row gave the arrows. aria-hidden and no data-nav: it
+     is punctuation, so it is not focusable, not tappable (pointer events are
+     off for everything in the strip except the words), and not in the tab
+     order or the accessibility tree. Its 2px of air either side puts it a
+     little clear of the 6px gaps between labels, so it divides the run rather
+     than joining it. */
+  #nl-fns > .sep { display: none; padding: 0 2px; }
   #nl-fns > [data-nav] {
     color: inherit;
     pointer-events: auto; cursor: pointer;
@@ -1019,6 +1042,22 @@
   @media (max-width: 400px) {
     #nl-fns { letter-spacing: 0.06em; }
     #nl-fns > [data-nav] { padding-left: 6px; padding-right: 6px; }
+  }
+  /* NARROW: ONE RUN, NOT TWO ENDS. The two ends only read as two ends when
+     the space between them is unmistakably bigger than the space between two
+     labels, and a phone in portrait does not have the width to spare. At 11px
+     the six labels run to ~400px, so the WIDEST phone portrait there is (430)
+     leaves 83px between ART and CONTACT against the 16px that separates two
+     labels inside a group — an uneven row rather than a division. Below 500px
+     the auto margin comes off, the run closes up against the left margin like
+     every other text column in the site, and the divider above says the
+     grouping the gap used to.
+     500 rather than the 400 above because these are different failures: that
+     rule is about the labels not FITTING, this one about the gap not READING.
+     A landscape phone or a tablet keeps the two ends. */
+  @media (max-width: 500px) {
+    #nl-fns > [data-nav="contact"] { margin-left: 0; }
+    #nl-fns > .sep { display: inline; }
   }
 
   /* --------------------------------------------- the section wheel (the band)
@@ -1101,7 +1140,8 @@
   @media (hover: hover) { #nl-field:hover { color: var(--ink); } }
   /* in the field the section links are gone — they are not what this mode is
      for — and the one control left is the way out, lit so it can be found */
-  #noiselab.field #nl-fns > [data-nav], #noiselab.field #nl-sec { display: none; }
+  #noiselab.field #nl-fns > [data-nav], #noiselab.field #nl-sec,
+  #noiselab.field #nl-fns > .sep { display: none; }
   #noiselab.field #nl-field { color: var(--ink); }
   /* the window half has nothing in it here, and must not take pointer events
      from a field that now covers the screen */
@@ -1181,7 +1221,7 @@
        scroll it; CONTACT / ABOUT open the window without a grid selection.
        Absolutely positioned, so it is a SIBLING of the window while sitting
        geometrically inside the grid half — see the below-the-seam exit. -->
-  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections, under ?wheel only --></div><span class="sec" role="button" tabindex="0" data-nav="all">ALL</span><span class="sec" role="button" tabindex="0" data-nav="build">BUILD</span><span class="sec" role="button" tabindex="0" data-nav="design">DESIGN</span><span class="sec" role="button" tabindex="0" data-nav="art">ART</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
+  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections, under ?wheel only --></div><span class="sec" role="button" tabindex="0" data-nav="all">ALL</span><span class="sec" role="button" tabindex="0" data-nav="build">BUILD</span><span class="sec" role="button" tabindex="0" data-nav="design">DESIGN</span><span class="sec" role="button" tabindex="0" data-nav="art">ART</span><span class="sep" aria-hidden="true">|</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -1445,6 +1485,34 @@
   // one case where icons give up their fixed size rather than evict the
   // content half.
   const GRID_MAX_FRAC = 0.60;
+
+  // --------------------------------------------------- the resting seam
+  // THE SEAM'S RESTING POSITION IS A CONSTANT, not a measurement. One row at a
+  // fixed pitch means the grid half does not depend on the icon count, on the
+  // viewport width, or on anything boot() has to discover first — only the
+  // last-resort cap above can move it, and that needs a viewport under ~210px
+  // tall. resize() derives the same two numbers from the same knobs, so they
+  // are named here once and read in both places rather than written twice.
+  const ROW_PITCH_PX = CELL_PX / (1 - GAP_RATIO);                          // 62.5
+  const ROW_CANVAS_H = ROW_PITCH_PX * (1 - GAP_RATIO + 2 * MARGIN_RATIO);  // 75
+
+  // ...AND IT IS PLACED BEFORE THE FIRST PAINT, not by boot(). boot() is
+  // deliberately held behind two rAFs so the shell paints immediately, which
+  // meant the shell painted with #nl-grid at its CSS fallback of 50%: the
+  // first thing a visitor saw was the seam lying across the middle of the
+  // screen, then jumping up to the menu two frames later. Nothing about that
+  // read as intentional. Same knobs and the same cap resize() will apply, run
+  // at parse time — so when resize() arrives at this number it changes
+  // nothing. Read at parse time for the reason ?wheel is: the element has to
+  // be right before the first paint, not two frames after it.
+  (function placeSeam() {
+    const rootEl = document.getElementById('noiselab');   // 100dvh: laid out
+    const gridEl = document.getElementById('nl-grid');    // by the time we run
+    const maxCh  = rootEl.getBoundingClientRect().height * GRID_MAX_FRAC - FOOTER_RESERVE;
+    const ch     = (maxCh > 0 && ROW_CANVAS_H > maxCh) ? maxCh : ROW_CANVAS_H;
+    gridEl.style.paddingBottom = FOOTER_RESERVE + 'px';   // single source: the JS knob
+    gridEl.style.height = (ch + FOOTER_RESERVE).toFixed(1) + 'px';
+  })();
 
   // ------------------------------------------------------- menu row feel
   // Knobs for the swipeable menu row (armed only while it overflows — see
@@ -2210,7 +2278,8 @@ void main() {
   const stageEl   = document.getElementById('nl-stage');
   // rootEl is declared up at the webgl block — the GL failure path needs it
   // before this point.
-  gridEl.style.paddingBottom = FOOTER_RESERVE + 'px';   // single source: the JS knob
+  // the footer reserve and the resting height are both written pre-boot,
+  // above — see placeSeam(). Nothing to redo here.
 
   // ------------------------------------------------------ menu row (state)
   // THE ROW IS A RING. It has no first icon and no last one: past the end of
@@ -2608,8 +2677,8 @@ void main() {
     // FIXED pitch (the taskbar rule): cell size never follows the viewport.
     // Available width decides how much of the row is VISIBLE, never how big
     // the icons in it are.
-    const g = GAP_RATIO, m = MARGIN_RATIO;
-    const basePitch = CELL_PX / (1 - g);
+    const m = MARGIN_RATIO;
+    const basePitch = ROW_PITCH_PX;
 
     // NO SHADER: there is no canvas to size and no grid to lay out — the key
     // layer flows itself as a wrapped list. Everything else still holds.
@@ -2655,7 +2724,7 @@ void main() {
     // gone with the ring: a row that continues past the right edge cannot stop
     // short of it, or the space beyond would be a gap in something endless.
     let cw = availW;
-    let ch = basePitch * (1 - g + 2 * m);
+    let ch = ROW_CANVAS_H;
 
     // cap the grid half at GRID_MAX_FRAC of the page so the contact half
     // always keeps working room. One row needs a viewport under ~210px tall
@@ -4552,6 +4621,9 @@ void main() {
 
     buildKeys();                      // the DOM twin of the starting icon set
     resize();
+    rootEl.classList.add('laid');     // the seam may be drawn now: whatever it
+                                      // divides has been measured (see the
+                                      // :not(.laid) rule in the stylesheet)
     updateNav();                      // light the starting section
     updateFieldBtn();                 // offer the field only where it works
 
