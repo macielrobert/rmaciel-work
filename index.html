@@ -4637,6 +4637,17 @@ void main() {
     updateNav();                      // light the starting section
     updateFieldBtn();                 // offer the field only where it works
 
+    // THE ROW STARTS WHERE A FOOTER JUMP PARKS IT. scrollX 0 puts the first
+    // icon flat against the left margin, which is half inside the edge
+    // dissolve and reads as a row that was cut off rather than one that starts
+    // here. Every other move the row makes on its own lands at margin +
+    // ROW_SNAP_INSET, so the resting position is the same one BUILD lands at:
+    // one call to the same function, not a second constant to keep in step.
+    // INSTANT, and before the deep link below — a page arriving already in
+    // motion reads as a glitch, and anything the hash targets moves the row
+    // again from here (also instant, on bootRoute).
+    scrollToSection(0, true);
+
     // INCOMING DEEP LINK, applied once everything it might target exists.
     // A bare load writes NOTHING: appearing to navigate on arrival, and
     // pushing '#build' into a clean address bar, is noise. The first real

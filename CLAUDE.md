@@ -257,8 +257,10 @@ understanding why it exists will reintroduce a solved bug.
   time a swipe starts on an icon — which is most of the time. The row always
   scrolls now, so this is the only path.
 - **`ROW_SNAP_INSET` is where the row parks an icon, and it is ONE number for
-  every move the row makes on its own** — the footer category jump and
-  scroll-into-view, at both edges. They are one problem: an icon the row has
+  every move the row makes on its own** — the footer category jump,
+  scroll-into-view at both edges, and the RESTING POSITION THE PAGE LOADS IN,
+  which is the BUILD jump made instantly at boot rather than a second
+  constant. They are one problem: an icon the row has
   deliberately brought to an edge has to be legible when it gets there, and the
   margin alone lands it inside the one-pitch dissolve. At the default pitch the
   leading glyph's alpha is `(margin + inset + 9) / 62.5`, so 0 gives 34%, 30
