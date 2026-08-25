@@ -137,8 +137,21 @@ Half the closed debt is only verifiable here. See `STRESS-TESTS.md`.
       this site
 - [ ] **Form endpoint** — replace the mailto with Netlify's native form
       handling. Consider a dirty-state confirm on `×`.
-- [ ] **`IMAGE_TRANSFORM`** — set to Netlify's image CDN URL format; verify
-      the format against their live docs at setup
+- [x] **`IMAGE_TRANSFORM`** — set to Netlify's Image CDN
+      (`/.netlify/images?url=…&w=…`, no `fm`, so the browser's Accept header
+      picks AVIF or WebP). Off on `file:` and localhost, where no CDN exists.
+      The expanded view was routed through it too at `EXPAND_W` 2048 — it used
+      to ask for the camera original, which was harmless while the originals
+      were placeholders and a 6.6 MB download once they were photographs.
+      **Verify on the deploy preview**, not locally: the URL shape could not
+      be tested from the sandbox, and the failure mode is a 404 per image.
+- [ ] **Downsize the camera originals in `images/`** — the three Asia Society
+      photographs are 4928x3264 / 6.6 MB each, straight off the card, and
+      nothing on the site ever shows more than ~2500 px of one. The CDN means
+      a visitor no longer downloads them, so this is repo weight and build
+      time, not page speed. 2048 px on the long edge at q82 is the target, and
+      the real fix is at the upload end: **export before uploading to
+      Keystatic**, because the next upload will be full-size again otherwise.
 
 ---
 

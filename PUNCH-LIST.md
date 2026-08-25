@@ -119,9 +119,12 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
 - [ ] **Contact form endpoint** — SEND currently opens the visitor's mail app
       via `mailto:`. Swap for Netlify's native form handling. Consider a
       confirm-on-close when the form has been typed into.
-- [ ] **`IMAGE_TRANSFORM`** — still `null`, so every image serves at full size.
-      Set it to Netlify's image CDN format and verify the format against their
-      live docs at the time; the comment above it in `index.html` has the shape.
+- [x] **`IMAGE_TRANSFORM`** — wired to Netlify's Image CDN. The strip asks at
+      `THUMB_W` 640 and the expanded view at `EXPAND_W` 2048; neither asks for
+      the camera original any more. **Still needs one check on the deploy
+      preview**: open a project with real photographs and confirm the strip
+      loads rather than showing three empty grey boxes. A wrong URL shape is a
+      404 per image and looks exactly like that.
 - [ ] Throttle `resize()` — it currently reallocates the GPU buffer and forces
       two layout reads on every resize event. Desktop-only symptom.
 

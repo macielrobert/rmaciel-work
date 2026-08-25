@@ -1295,8 +1295,10 @@
    - Image expand: in-flow display swap ('x' class); swipe = prev/next;
      captions static below the image; the strip becomes the filmstrip.
      Per-entry `expand` decides whether images open at all.
-   - IMAGES: one upload each; the strip loads a host-resized version via
-     IMAGE_TRANSFORM (the deploy seam), the expanded view loads the original.
+   - IMAGES: one upload each; every view loads a host-resized version via
+     IMAGE_TRANSFORM (the deploy seam, wired to Netlify's Image CDN) — the
+     strip at THUMB_W, the expanded view at EXPAND_W. Nothing asks for the
+     camera original any more.
      Records carry `ratio` so the page never downloads an image to measure it.
    - ROUTING: state has an ADDRESS. #section/slug/image mirrors the three
      state values; applyRoute() drives the same setters the pointer does, so
@@ -1816,21 +1818,36 @@
   /* CONTENT:END */
 
   /* ------------------------------------------------- host image transform
-     THE DEPLOY SEAM — set this once, when the host is chosen.
+     THE DEPLOY SEAM — wired to Netlify, which is the host.
 
-     Static hosts resize images on demand from a single uploaded file: ask for
-     the same photo at 480px and the CDN generates, caches, and serves it. That
-     is what keeps ONE upload per image and NO size variants to manage locally.
+     Netlify's Image CDN resizes on demand from the single uploaded file: ask
+     for the same photo at 480px and it generates, caches at the edge, and
+     serves it. That is what keeps ONE upload per image and NO size variants
+     to manage locally — the `thumb` field stays empty forever.
 
-     Point this at the host's URL format and every thumbnail derives itself —
-     the `thumb` field stays empty forever. Formats to VERIFY against the
-     host's current docs at setup (they change):
-       Netlify     (src, w) => `/.netlify/images?url=${encodeURIComponent(src)}&w=${w}&fm=webp`
-       Cloudflare  (src, w) => `/cdn-cgi/image/width=${w},format=auto/${src}`
+     WHY IT WAS TURNED ON. It was `null` while every image was an inline
+     placeholder with nothing to resize. The first real photographs arrived as
+     camera originals — 4928x3264, 6.6 MB each — and `null` meant the carousel
+     strip downloaded 20 MB of them to paint three 240px boxes. That is the
+     three-to-five second stall on a phone, and it is the whole of it.
 
-     null = no transform, `src` serves both roles. That is correct today (the
-     placeholders are inline data, nothing to resize) and correct for local
-     preview, where no CDN exists to do the resizing. */
+     TWO PARAMETERS, DELIBERATELY:
+       url   the source path, encoded. Local files in the publish directory
+             need no allowlist; only REMOTE sources do (netlify.toml
+             [images] remote_images), and there are none.
+       w     the width. Height follows the source ratio; no `fit` needed,
+             because nothing here crops through the CDN — the thumb crops in
+             CSS (background-size: cover) and the expand view contains.
+
+     NO `fm`. Omitted on purpose: with no format asked for, Netlify reads the
+     browser's Accept header and returns AVIF or WebP to those that take them
+     and the source format to those that do not. Naming `fm=webp` would pin
+     every visitor to the worse of the two. `q` is likewise left at its
+     default of 75, which is the right place to tune if a photograph ever
+     shows artefacts — not the width.
+
+     Cloudflare, if the host ever changes:
+       (src, w) => `/cdn-cgi/image/width=${w},format=auto/${src}` */
   // Valid layout names. Add here AND add matching `.l-<name>` CSS rules.
   // 'form' is not selectable from CONTENT — the contact form is hand-built and
   // assigns it directly — but it lives here so applyLayout() clears it like
@@ -1838,20 +1855,53 @@
   const LAYOUTS = ['standard', 'text', 'grid', 'form'];
   const DEFAULT_LAYOUT = 'standard';
 
-  const IMAGE_TRANSFORM = null;
+  const IMAGE_TRANSFORM = (src, w) =>
+    `/.netlify/images?url=${encodeURIComponent(src).replace(/%2F/g, '/')}&w=${w}`;
+  /* The un-escaping of the slashes is not cosmetic. encodeURIComponent alone
+     is correct — a query value is decoded before it is read — but it turns a
+     path into %2Fimages%2F..., which is NOT the shape Netlify's own examples
+     take, and an untestable difference in the one URL the whole strip depends
+     on is not worth the tidiness. Putting the slashes back leaves every other
+     escape in place, so a filename with a space, an ampersand or a hash still
+     survives. */
 
-  // Request widths, each set to what the element can actually SHOW at 2x.
-  // Anything displayed small asks for a small file; the expanded image is
-  // the one place that deliberately asks for the original.
-  const THUMB_W = 480;   // carousel strip — 240px box at 2x
-  const MARK_W  = 640;   // wordmark — capped at 320px wide by CSS, at 2x
-  const HERO_W  = 1440;  // hero image — capped at 720px wide by CSS, at 2x
+  /* THE ONE PLACE THE TRANSFORM IS SWITCHED OFF: there is no CDN on a local
+     machine. `file://` and localhost get the originals, which is slow and
+     correct — a preview that 404s every image is worse than a preview that
+     loads a big one. Checked against the PROTOCOL and HOSTNAME rather than
+     against a deploy domain, because the domain is about to change: a test
+     for `netlify.app` would silently turn the CDN off again the day
+     rmaciel.work points here. */
+  const HAS_IMAGE_CDN = location.protocol !== 'file:'
+    && !/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
+
+  /* Request widths, each set to what the element can actually SHOW on the
+     densest screen that will show it. Anything displayed small asks for a
+     small file.
+
+     COUNTED, NOT ASSUMED. The old note said "at 2x", but the site is built
+     for a phone first and a phone is 3x. The carousel thumb is height-driven
+     (--car-h is 25% of the window), so on a 430x932 iPhone it is ~195 CSS px
+     tall and, at the 3:2 these photographs arrive in, ~295 CSS px wide —
+     885 device px, not the 480 the old constant assumed. */
+  const THUMB_W  = 640;   // carousel strip — ~295px box on a 3x phone, under-asked on purpose:
+                          //   it is cropped to cover and scrolling past, and 640 -> 885 is a
+                          //   ~1.4x upscale nobody can see on a photograph moving under a thumb
+  const MARK_W   = 640;   // wordmark — capped at 320px wide by CSS, at 2x
+  const HERO_W   = 1440;  // hero image — capped at 720px wide by CSS, at 2x
+  const EXPAND_W = 2048;  /* the expanded image. It USED to ask for the original, which was
+                             right when the original was a placeholder and wrong the moment it
+                             became a 16-megapixel camera file. The stage is at most half the
+                             viewport in landscape, so a 14" MacBook shows it at ~1480 device
+                             px and a 5K 27" at ~2500. 2048 covers the first outright and
+                             upscales ~1.2x on the second, which on a photograph is invisible —
+                             against 6.6 MB saved on every phone that opens one. */
 
   // any source URL -> the URL to actually load at a given display width.
   // Data URIs pass through untouched: there is no file for a CDN to fetch.
   function sized(src, w) {
     if (!src) return src;
-    if (IMAGE_TRANSFORM && !src.startsWith('data:')) return IMAGE_TRANSFORM(src, w);
+    if (HAS_IMAGE_CDN && IMAGE_TRANSFORM && !src.startsWith('data:')) return IMAGE_TRANSFORM(src, w);
     return src;
   }
   // one image record -> the URL the STRIP should load (explicit thumb wins)
@@ -4013,7 +4063,7 @@ void main() {
   function setExpandIndex(k) {
     const en = winEntries[winActive], im = en.images[k];
     expIdx = k;
-    expImg.src = im.src;
+    expImg.src = sized(im.src, EXPAND_W);
     expImg.alt = im.alt || '';
     expCap.textContent = im.caption || '';
     // STATIC caption: visible iff this image has content — no interaction
