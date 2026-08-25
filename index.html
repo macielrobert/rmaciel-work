@@ -1297,8 +1297,8 @@
      Per-entry `expand` decides whether images open at all.
    - IMAGES: one upload each; every view loads a host-resized version via
      IMAGE_TRANSFORM (the deploy seam, wired to Netlify's Image CDN) — the
-     strip at THUMB_W, the expanded view at EXPAND_W. Nothing asks for the
-     camera original any more.
+     strip at the rung fitThumbs() measures off the rendered thumbnail, the
+     expanded view at EXPAND_W. Nothing asks for the camera original any more.
      Records carry `ratio` so the page never downloads an image to measure it.
    - ROUTING: state has an ADDRESS. #section/slug/image mirrors the three
      state values; applyRoute() drives the same setters the pointer does, so
@@ -1875,27 +1875,51 @@
   const HAS_IMAGE_CDN = location.protocol !== 'file:'
     && !/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
 
-  /* Request widths, each set to what the element can actually SHOW on the
-     densest screen that will show it. Anything displayed small asks for a
-     small file.
+  /* --------------------------------------------------- how wide to ask for
 
-     COUNTED, NOT ASSUMED. The old note said "at 2x", but the site is built
-     for a phone first and a phone is 3x. The carousel thumb is height-driven
-     (--car-h is 25% of the window), so on a 430x932 iPhone it is ~195 CSS px
-     tall and, at the 3:2 these photographs arrive in, ~295 CSS px wide —
-     885 device px, not the 480 the old constant assumed. */
-  const THUMB_W  = 640;   // carousel strip — ~295px box on a 3x phone, under-asked on purpose:
-                          //   it is cropped to cover and scrolling past, and 640 -> 885 is a
-                          //   ~1.4x upscale nobody can see on a photograph moving under a thumb
+     THE THUMB MEASURES ITSELF. It used to be a constant, and a constant is a
+     second copy of a number CSS already owns: the strip's height is --car-h,
+     the grid's cell is --g-cell, and a portrait phone overrides both. Change
+     any one of those and a hard-coded width does not follow — the thumbnails
+     go quietly soft, months later, with nothing to connect the two edits.
+     fitThumbs() reads the box off the rendered element instead, so the CSS
+     stays the single source of truth for how big a thumbnail is.
+
+     A LADDER, NOT THE EXACT NUMBER. Asking for the measured width to the
+     pixel would mint a separate URL per viewport — 294, 295, 297 — and each
+     distinct URL is its own resize and its own edge-cache entry, so almost
+     every visitor would pay for a cold one. Rounding UP to a rung means a
+     handful of URLs serve every screen there is, and the cache stays warm.
+     The rungs are wide apart on purpose: a photograph does not reward
+     precision here, and the whole point is that a near-miss costs nothing.
+
+     DPR IS CAPPED AT 2. The phone is 3x, and a 3x request is ~2.2x the bytes
+     of a 2x one for a difference nobody has ever picked out of a photograph
+     — least of all one cropped into a thumbnail that is scrolling past. This
+     is the knob to raise if a thumbnail ever looks soft; the ladder and the
+     measuring are not. */
+  const WIDTH_STEPS = [320, 480, 640, 960, 1280, 1920, 2560];
+  const DPR_CAP = 2;
+  function stepFor(cssW) {
+    const want = Math.ceil(cssW * Math.min(window.devicePixelRatio || 1, DPR_CAP));
+    return WIDTH_STEPS.find(w => w >= want) || WIDTH_STEPS[WIDTH_STEPS.length - 1];
+  }
+
+  /* THESE THREE STAY CONSTANTS, and the difference is not inconsistency.
+     A constant is safe wherever it is a CEILING the element cannot grow past;
+     it is unsafe wherever the element's size is a knob. The mark and the hero
+     are capped by CSS at 320 and 720 CSS px, so 2x of each is a ceiling. The
+     expanded image has no width rule at all, but it can never be wider than
+     the window, and the window can never be wider than the screen — 2048
+     covers a 14" MacBook (~1480 device px) outright and upscales ~1.2x on a
+     5K 27" (~2500), which on a photograph is invisible. The thumbnail was the
+     one whose size a stylesheet edit could change, which is why it is the one
+     that now measures. */
   const MARK_W   = 640;   // wordmark — capped at 320px wide by CSS, at 2x
   const HERO_W   = 1440;  // hero image — capped at 720px wide by CSS, at 2x
-  const EXPAND_W = 2048;  /* the expanded image. It USED to ask for the original, which was
-                             right when the original was a placeholder and wrong the moment it
-                             became a 16-megapixel camera file. The stage is at most half the
-                             viewport in landscape, so a 14" MacBook shows it at ~1480 device
-                             px and a 5K 27" at ~2500. 2048 covers the first outright and
-                             upscales ~1.2x on the second, which on a photograph is invisible —
-                             against 6.6 MB saved on every phone that opens one. */
+  const EXPAND_W = 2048;  // expanded image — see above
+  const PROBE_W  = WIDTH_STEPS[0];   // only ever loaded to READ A SHAPE (the
+                                     // no-ratio fallback), never to be looked at
 
   // any source URL -> the URL to actually load at a given display width.
   // Data URIs pass through untouched: there is no file for a CDN to fetch.
@@ -1904,8 +1928,39 @@
     if (HAS_IMAGE_CDN && IMAGE_TRANSFORM && !src.startsWith('data:')) return IMAGE_TRANSFORM(src, w);
     return src;
   }
-  // one image record -> the URL the STRIP should load (explicit thumb wins)
-  function thumbURL(im) { return im.thumb || sized(im.src, THUMB_W); }
+  // one image record -> the URL the STRIP should load at a given rung
+  // (an explicit `thumb` in the record still wins outright: it is a hand-made
+  // crop, not a resize, and no width we could ask for would reproduce it)
+  function thumbURL(im, w) { return im.thumb || sized(im.src, w); }
+
+  /* Measure one entry's thumbs and ask for the rung each actually needs.
+     Cheap to call often, which is the point — it runs on every resize, every
+     entry switch, and every expand, and does nothing at all unless a box has
+     genuinely crossed onto a higher rung.
+
+     TWO RULES:
+     - A BOX OF ZERO IS SKIPPED, not treated as tiny. A hidden entry (display:
+       none until it is switched to) measures zero, and painting it would put
+       its images on the wire while nothing is showing them. Skipping keeps
+       hidden strips off the network, which is the behaviour the strip has
+       always had.
+     - IT NEVER GOES DOWN. Rotating a phone back, or collapsing an expanded
+       image, can leave a thumb smaller than it was a moment ago. Re-asking at
+       the lower rung would spend a fresh download to end up with a WORSE
+       picture, when the bigger one is already sitting in the browser cache.
+       Up is a real improvement; down is never worth a request. */
+  function fitThumbs(en) {
+    if (!en || !en.thumbs || !en.images) return;
+    for (let k = 0; k < en.thumbs.length; k++) {
+      const ph = en.thumbs[k];
+      const boxW = ph.getBoundingClientRect().width;
+      if (!boxW) continue;
+      const step = stepFor(boxW);
+      if (step <= (ph._step || 0)) continue;
+      ph._step = step;
+      ph.style.backgroundImage = 'url("' + thumbURL(en.images[k], step) + '")';
+    }
+  }
 
   // ------------------------------------------------------------ data adapter
   // THE SEAM. Reads the editable CONTENT block above (authoring shape: title /
@@ -2772,6 +2827,7 @@ void main() {
       const wh = nlRect.height - marginPxCss - Math.max(0, wb);
       rootEl.style.setProperty('--car-h', Math.max(48, wh * 0.25).toFixed(1) + 'px');
       if (typeof updateMore === 'function') updateMore();
+      fitThumbs(winEntries[winActive]);   // --car-h just moved, so the thumbs did
       return;
     }
 
@@ -2837,6 +2893,14 @@ void main() {
     // the window just changed width: copy re-wraps, so whether it overflows
     // the clamp may have flipped
     if (typeof updateMore === 'function') updateMore();
+    /* AND THE THUMBS JUST CHANGED SIZE. --car-h is a fraction of the window,
+       so every resize and every rotation moves them; a portrait phone crossing
+       480px swaps the grid's column rule outright. Unguarded on purpose:
+       resize() is only ever reached from boot() below the point winEntries is
+       built, and from listeners wired later still, so there is no order in
+       which this can run first. fitThumbs() is a no-op unless a box has
+       actually crossed onto a higher rung, which is the common case. */
+    fitThumbs(winEntries[winActive]);
   }
 
   // ----------------------------------------------------- selection + morph
@@ -3889,7 +3953,11 @@ void main() {
       thumbs = en.images.map((im, k) => {
         const ph = document.createElement('div');
         ph.className = 'ph';
-        const tsrc = thumbURL(im);                // resized by the host when configured
+        // NOT PAINTED HERE. The box has no size until CSS has laid it out and
+        // this entry is the visible one, and the width we ask for is read off
+        // that box — so the background-image is fitThumbs()' job, not the
+        // builder's. The one URL this function still builds is the ratio
+        // probe below, and that is not a picture: nobody looks at it.
         if (en.layout === 'grid') {
           // a grid is uniform by definition: every cell 16:9, images cropped
           // to fill. The per-image ratio is deliberately ignored here.
@@ -3904,13 +3972,15 @@ void main() {
           // than pulling every full-size image on the site.
           ph.style.aspectRatio = '1 / 1';
           const probe = new Image();
+          // PROBE_W, the smallest rung: a resize preserves the ratio, so the
+          // shape reads the same off 320px as off the original, for a fraction
+          // of the bytes. This image is never displayed.
           probe.onload = () => {
             im.ratio = [probe.naturalWidth, probe.naturalHeight];
             ph.style.aspectRatio = im.ratio[0] + ' / ' + im.ratio[1];
           };
-          probe.src = tsrc;
+          probe.src = thumbURL(im, PROBE_W);
         }
-        ph.style.backgroundImage = 'url("' + tsrc + '")';
         if (en.expand === false) {
           // not a control — it opens nothing. No button role, no tab stop,
           // no pointer: the picture is the presentation, not a door.
@@ -4027,6 +4097,10 @@ void main() {
     setMore(false);                             // every entry opens clamped
     winTxt.scrollTop = 0;                       // each entry opens at its top
     winActive = i;
+    fitThumbs(next);                            // this strip has a size for the first
+                                                // time; applyLayout() above may also have
+                                                // changed what that size IS (l-grid cells
+                                                // are nothing like the standard strip)
     updateMore();                               // does THIS body overflow?
     // a deep link asked for an image on an entry that was not on screen yet —
     // it is now
@@ -4037,6 +4111,8 @@ void main() {
       }
     }
   }
+  fitThumbs(winEntries[0]);                     // entry 0 is the visible one at boot,
+                                                // so it is the one with a measurable strip
   applyLayout(winEntries[0]);                   // entry 0 is built visible; seed
   applyMark(winEntries[0]);                     // its layout class and wordmark
   setMore(false); updateMore();
@@ -4078,6 +4154,8 @@ void main() {
     expHd.textContent = winEntries[winActive].hd;
     setExpandIndex(k);
     winEntries[winActive].car.classList.add('expanded');
+    fitThumbs(winEntries[winActive]);           // l-grid's cells become a filmstrip on
+                                                // expand — a different box, so re-measure
     setMore(false);            // opening an image leaves the text view, so the
                                // read-more state goes with it (and its rule
                                // stops competing with the filmstrip)

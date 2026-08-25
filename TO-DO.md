@@ -140,6 +140,11 @@ Half the closed debt is only verifiable here. See `STRESS-TESTS.md`.
 - [x] **`IMAGE_TRANSFORM`** — set to Netlify's Image CDN
       (`/.netlify/images?url=…&w=…`, no `fm`, so the browser's Accept header
       picks AVIF or WebP). Off on `file:` and localhost, where no CDN exists.
+      The thumbnail width is MEASURED off the rendered box and rounded up to a
+      rung of `WIDTH_STEPS`, so a stylesheet edit to `--car-h` or `--g-cell`
+      carries the request width with it and there is no second number to keep
+      in step. `MARK_W` / `HERO_W` / `EXPAND_W` stay constants because each is
+      a ceiling its element cannot grow past.
       The expanded view was routed through it too at `EXPAND_W` 2048 — it used
       to ask for the camera original, which was harmless while the originals
       were placeholders and a 6.6 MB download once they were photographs.
