@@ -117,9 +117,14 @@ still obey the length rules — a sentence, not a section.
    against the left margin, ABOUT / CONTACT against the right. Primary nav,
    not decoration. The sections have two renderings — a flat row of labels
    (the default) and a vertical three-slot wheel (`?wheel`).
-4. **Window.** Per-entry text and imagery, swapped through a character-churn
-   transition, arranged by a named layout (`standard` / `grid` / `text` /
-   `form`).
+4. **Window.** Per-entry text and imagery, swapped through a hard cut,
+   arranged by a named layout (`standard` / `grid` / `text` / `form`). The
+   swap used to churn every character through a pool of ASCII glyphs on the
+   way past — the DOM twin of the icons' noise. **It is OFF**, at the
+   `TEXT_CHURN` knob rather than deleted: it read as a screen effect from
+   another decade instead of as this site's own material. `spanify()` and the
+   per-character thresholds still run, so flipping the constant back to `true`
+   restores it with no other edit.
 5. **Image expand.** In-flow view swap inside the window; swipe to navigate;
    two-scope exits (`←` local, `×` global).
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
@@ -361,7 +366,18 @@ understanding why it exists will reintroduce a solved bug.
   device, and a split page the moment it does not.
 - **Controls never churn.** `×`, `←`, the caret, thumbs, footer,
   copyright, focus marks. They appear and disappear with their views but stay
-  resolved. Content churns; controls do not.
+  resolved. Content churns; controls do not. (With `TEXT_CHURN` off, nothing
+  in the DOM churns — the rule still governs the icons, and still governs the
+  text the moment the knob goes back.)
+- **Where the swap CUTS depends on whether it churns.** The midpoint is
+  invisible only because both sides are noise there. With resolved text on
+  both sides it is a plain cut, and the close clock puts it 0.8s after the tap
+  — the window sitting fully legible while the icons churn back reads as a
+  missed tap. So with churn off the cut moves to the START of the move:
+  `cTarget`, not the eased `e`, decides who is showing. Opening is unaffected
+  either way (`ON_TIME` is 0.12s, so its midpoint is 0.06s in). This also
+  fixes the same 0.8s stall for anyone on `prefers-reduced-motion`, which had
+  it all along — one predicate, `churnOff()`, covers both.
 - **Exactly one thing is coherent at any moment.** With a fixture open, that
   thing is the footer label and the whole grid churns.
 

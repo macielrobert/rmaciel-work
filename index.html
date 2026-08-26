@@ -1380,6 +1380,18 @@
   // runs at 2x the icon OFF_TIME. Opening still shares ON_TIME.
   const CONTACT_OFF_TIME = OFF_TIME * 2;   // 1.60s
 
+  // TEXT CHURN — OFF. The window/about swap used to cycle every character
+  // through a pool of ASCII glyphs on the way past, the DOM twin of the noise
+  // the icons churn in. It read as a screen effect from another decade rather
+  // than as this site's own material, so it is switched off at the knob rather
+  // than deleted: spanify() still runs, the spans and their thresholds are
+  // still there, and flipping this back to true restores it with no other
+  // edit. Everything else the swap does — the timing, the hard cut, the icon
+  // churn underneath it — is untouched.
+  //
+  // Turning it off changes WHERE the cut lands; see applyContact.
+  const TEXT_CHURN = false;
+
   // GRID REORGANISATION (see NOTES-GRID-MOTION.md). A section switch displaces
   // every icon while it is churned, so the grid ARRIVES SOMEWHERE rather than
   // exchanging contents inside a fixed lattice. Position rides the same
@@ -4354,7 +4366,7 @@ void main() {
   function applyExpand(xe, moving) {
     const on = xe >= 0.5;                       // midpoint hard cut, both directions
     winEl.classList.toggle('x', on);            // display swap: text view <-> expand view
-    if (reduceMotion || on) return;
+    if (churnOff() || on) return;   // no churn -> the display swap is the whole move
     churn(winEntries[winActive].spans, Math.max(0, 1 - xe * 2), moving);
   }
 
@@ -4636,6 +4648,10 @@ void main() {
   // single-width ASCII pool only — CJK/block glyphs are double-width in some
   // monospace stacks and make the line lengths jitter
   const POOL = '#%*+=-:;/\\|<>~^';
+  // Two reasons the text can be resolved the whole way through: the visitor
+  // asked for less motion, or the effect is switched off at the knob. They
+  // want the same thing everywhere, so they are one predicate.
+  function churnOff() { return reduceMotion || !TEXT_CHURN; }
   function churn(spans, res, moving) {   // res: 0..1 resolvedness for this element
     for (const s of spans) {
       if (res >= s.t) { if (s.el.textContent !== s.ch) s.el.textContent = s.ch; }
@@ -4653,11 +4669,22 @@ void main() {
     // cut and materialises FROM full churn after it, so the swap is
     // noise-to-noise and the cut itself is invisible — coherence dissolves,
     // then re-forms as the other content.
-    const aboutOn = e < 0.5;
+    //
+    // WITHOUT churn the midpoint is the WRONG place to cut. It is invisible
+    // only because both sides are noise there; with resolved text on both
+    // sides it is a plain cut, and on the CLOSE clock it lands 0.8s after the
+    // tap — the window sits fully legible while the icons have already begun
+    // churning back, which reads as the page having missed the tap. So when
+    // nothing churns, the cut moves to the START of the move: cTarget, not e,
+    // says who is showing. Opening is unaffected either way — ON_TIME is
+    // 0.12s, so its midpoint is 0.06s in. Content is set BEFORE cTarget flips
+    // (commit(): setWinContent then contactSet), so the window is never
+    // revealed holding the previous entry.
+    const aboutOn = churnOff() ? cTarget === 0 : e < 0.5;
     aboutEl.style.visibility = aboutOn ? 'visible' : 'hidden';
     winEl.style.visibility   = aboutOn ? 'hidden'  : 'visible';
 
-    if (reduceMotion) { restoreChars(); return; }   // instant swap, resolved text
+    if (churnOff()) { restoreChars(); return; }   // instant swap, resolved text
 
     churn(aboutSpans, Math.max(0, 1 - e * 2), moving);  // fully churned by e = 0.5
     churn(winEntries[winActive].spans, Math.max(0, e * 2 - 1), moving);  // resolves from churn after e = 0.5
