@@ -43,6 +43,35 @@ Same as above, but press **New Project**. Three fields decide where it lands:
 
 ---
 
+## To put two projects behind one icon
+
+Every icon in the grid is a different mark, and most of them are client logos.
+So when you do a second job for a client who is already in the row, the second
+one cannot have an icon of its own — it shares the first one's.
+
+1. Make the second project as normal. It still needs an icon file; that one
+   just won't get used.
+2. In **Sub-project of**, pick the first project.
+3. Open the *first* project and type the client's name into **Client name** —
+   that becomes the heading over both.
+
+On the site there is now one icon. Open it and the client's name sits at the
+top with the project titles listed under it: the one you're reading in white,
+the others in grey. Tap to move between them. Each keeps its own web address,
+so a link to either still lands on the right one.
+
+Two rules the build will enforce for you, with a message naming the file:
+
+- Both projects have to be in the **same section**. An icon can only sit in
+  one place in the row.
+- A sub-project can't point at another sub-project. One icon holds a flat list
+  of works, not a chain.
+
+Holding back the first project holds back the whole group — the icon they
+share isn't on the site any more, so neither are they.
+
+---
+
 ## When something goes red
 
 A red ✕ on GitHub means Netlify tried to rebuild and stopped. The site that's already live is untouched — a failed build never replaces a working one.

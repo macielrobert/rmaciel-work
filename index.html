@@ -2144,6 +2144,7 @@
   let SECTION_OFFSET = null;  // flat index where each section's entries start
   let ABOUT_INDEX = 0, FORM_INDEX = 0;
   let FLAT_OF = null;         // entry object -> its index in LIST
+  let ROUTE_OF = null;        // 'section/slug' -> { sel, sub } — see below
 
   // ------------------------------------------------------------------ boot
   // EVERYTHING below runs inside boot(), deferred until after the black shell
@@ -2167,6 +2168,25 @@
   // entry -> flat window index, for the sibling row (its targets are spread
   // across the sections and the tail, so there is no arithmetic to do)
   FLAT_OF = new Map(); LIST.forEach((en, i) => FLAT_OF.set(en, i));
+  // EVERY WORK KEEPS ITS OWN ADDRESS, sub-projects included: the URL does not
+  // gain a level for them. `sel` is the icon to select — the lead's, shared by
+  // the whole group — and `sub` is which of its works to show, or null for the
+  // lead's own. So '#build/asia-society' and '#build/asia-society-monster'
+  // select the same icon and part company only inside the window.
+  //
+  // The group is NOT in the URL, deliberately, and for the reason the band is
+  // not: it is which icon you are behind, not which thing you are looking at.
+  ROUTE_OF = new Map();
+  DATA.sections.forEach((sec, si) => {
+    sec.entries.forEach((en, i) => {
+      const sel = SECTION_OFFSET[si] + i;
+      ROUTE_OF.set(sec.id + '/' + en.slug, { sel, sub: null });
+      if (!en.sibs) return;
+      en.sibs.forEach(sib => {
+        if (sib !== en) ROUTE_OF.set(sec.id + '/' + sib.slug, { sel, sub: FLAT_OF.get(sib) });
+      });
+    });
+  });
 
   // ------------------------------------------------------------------ webgl
   // `gl` is a LET and doubles as the feature flag: any failure below sets it
@@ -3016,6 +3036,21 @@ void main() {
   // out of the work, so nothing in the work is coherent.
   let selected = null;
   let fixture  = null;
+  // WHICH WORK, when the selected icon holds more than one. `selected` still
+  // names the ICON — nothing about the grid, the band or the row changes — and
+  // this names the entry inside it.
+  //
+  // SELF-CLEARING, which is why it is not reset in the eight places that move
+  // the selection: subEntry() only honours it while the selection is still the
+  // lead of the same group, so any other selection makes it inert on its own.
+  // A flag that has to be cleared by hand in eight places gets missed in one.
+  let subActive = null;
+  function subEntry() {
+    if (subActive === null || selected === null) return null;
+    const en = LIST[subActive], lead = LIST[selected];
+    if (!en || !lead || !en.group || en.group !== lead.group) { subActive = null; return null; }
+    return en;
+  }
 
   // [lo, hi) of the banded section — the whole row when the band is ALL.
   function bandRange() {
@@ -3081,8 +3116,11 @@ void main() {
   function winTarget() {
     if (fixture === 'about')   return ABOUT_INDEX;
     if (fixture === 'contact') return FORM_INDEX;
-    if (selected !== null)     return selected;   // the flat icon index IS the
-                                                  // flat window index
+    if (selected !== null) {
+      // the flat icon index IS the flat window index — unless this icon holds
+      // a group, where the window may be showing one of the other works
+      return subEntry() ? subActive : selected;
+    }
     return null;
   }
 
@@ -3133,6 +3171,8 @@ void main() {
   function setSelected(next) {
     const prev = winTarget();
     selected = next;
+    subActive = null;             // an icon always opens on its FIRST work; the
+                                  // sibling row is how you reach the others
     fixture  = null;              // a grid selection always leaves a fixture
     // The band is commit()'s to decide: picking INSIDE it leaves it alone,
     // picking outside it clears it to ALL. Either way the URL names the
@@ -4113,9 +4153,9 @@ void main() {
         // label — a button that lands you where you already are is furniture.
         el.setAttribute('role', 'button');
         el.tabIndex = 0;
-        el.addEventListener('click', () => contactSwap(t));
+        el.addEventListener('click', () => showSib(t));
         el.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); contactSwap(t); }
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); showSib(t); }
         });
       }
       row.appendChild(el);
@@ -4123,6 +4163,18 @@ void main() {
     // after the heading and its two breaks: [span.hd, br, br, ...]
     we.el.insertBefore(row, we.el.childNodes[3] || null);
   });
+
+  // Picking a work from the sibling row. The GRID DOES NOT MOVE — same icon,
+  // same band, same scroll position — so this is not a selection: it swaps the
+  // window on the churn and writes the new work's address, and that is all.
+  // The URL write is immediate, as it is for every other transition; only the
+  // churn is deferred.
+  function showSib(t) {
+    if (t === winActive) return;
+    subActive = t;
+    contactSwap(t);
+    syncRoute(false);
+  }
 
   // ONE shared wordmark element whose mask swaps with the entry (the same
   // pattern as the expanded image — only one entry is ever visible, and there
@@ -4430,7 +4482,9 @@ void main() {
     if (selected !== null) {
       const si = sectionOf(selected), sec = DATA.sections[si];
       if (!sec) return '';
-      const en = sec.entries[selected - SECTION_OFFSET[si]];
+      // the WORK on show names the address, not the icon: a sub-project has
+      // its own slug and a link to it must come back to it
+      const en = subEntry() || sec.entries[selected - SECTION_OFFSET[si]];
       if (!en) return sec.id;
       let s = sec.id + '/' + en.slug;
       if (xTarget === 1) s += '/' + (expIdx + 1);
@@ -4466,7 +4520,7 @@ void main() {
       const si  = selected !== null ? sectionOf(selected) : activeSection;
       const sec = si === null ? null : DATA.sections[si];
       const en  = (sec && selected !== null)
-                ? sec.entries[selected - SECTION_OFFSET[si]] : null;
+                ? (subEntry() || sec.entries[selected - SECTION_OFFSET[si]]) : null;
       if (en)       t = en.hd + ' \u2014 ' + base;
       else if (sec) t = sec.label + ' \u2014 ' + base;   // ALL keeps the bare
                                                         // site title
@@ -4522,15 +4576,21 @@ void main() {
       const slug = parts[1] ? String(parts[1]).toLowerCase() : null;
       // an unknown slug resolves to the SECTION, not to an error — a link to a
       // renamed or deleted project still lands somewhere sensible
-      const idx = slug ? sec.entries.findIndex(e => e.slug === slug) : -1;
+      const hit = slug ? ROUTE_OF.get(sec.id + '/' + slug) : null;
 
-      const want = idx >= 0 ? SECTION_OFFSET[si] + idx : null;
+      const want    = hit ? hit.sel : null;
+      const wantSub = hit ? hit.sub : null;
       // A SLUG DOES NOT BAND. '#design' is a category link and bands DESIGN;
       // '#design/bus-stop' is one project's address and leaves the band where
       // it is, which is what makes the URL a mirror of the tap that wrote it.
       if (want === null) activeSection = si;
       if (selected !== want || fixture !== null) {
-        const p = winTarget(); selected = want; fixture = null; commit(p);
+        const p = winTarget(); selected = want; subActive = wantSub; fixture = null; commit(p);
+      } else if (subActive !== wantSub) {
+        // SAME ICON, DIFFERENT WORK. Nothing in the grid moves — commit() finds
+        // winTarget() changed and swaps the window on the usual churn, which is
+        // exactly what a tap on the sibling row does.
+        const p = winTarget(); subActive = wantSub; commit(p);
       } else {
         // the selection did not move, but the BAND may have. commit() is what
         // normally paints it; on this branch there is nothing to commit, so the
@@ -4544,7 +4604,9 @@ void main() {
       if (want === null) scrollToSection(si, !!initial);
 
       // ---- image level
-      const flat = want !== null ? want : -1;
+      // the images belong to the WORK on show, which is the sub-project when
+      // there is one — not to the icon's lead
+      const flat = wantSub !== null ? wantSub : (want !== null ? want : -1);
       const en   = flat >= 0 ? winEntries[flat] : null;
       const imgs = en && en.images;
       if (en && imgs && imgs.length && en.expand !== false && parts[2] !== undefined) {

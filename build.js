@@ -514,16 +514,107 @@ function loadProjects() {
   if (!entries.length) warn('content/projects/ contains no projects — every section will be empty.');
 
   const kept = [];
+  // EVERY file, published or not. Only used to explain a "Sub-project of" that
+  // points somewhere real but unpublishable — "held back" and "does not exist"
+  // are different mistakes and deserve different messages.
+  const seen = Object.create(null);
   for (const entry of entries) {
     const { raw, label, key } = readProjectEntry(entry);
+    seen[key] = { label, section: raw.section, draft: raw.draft === true, partOf: partOfKey(raw) };
     if (raw && raw.draft === true) continue;            // held back, not published
-    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label), file: key });
+    kept.push({ label, order: raw.order, section: raw.section, project: buildProject(raw, label),
+                file: key, partOf: partOfKey(raw), client: plainText(raw.client, label) });
   }
-  return kept;
+  return { kept, seen };
+}
+
+/* THE "Sub-project of" VALUE. Keystatic's relationship field stores the
+   referenced entry's FILENAME, which is also its slug and its permanent URL —
+   the same string three ways round, which is why nothing has to be looked up
+   by title. Absent, null and empty all mean "not a sub-project". */
+function partOfKey(raw) {
+  const v = raw && raw.part_of;
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  return s ? s : null;
+}
+
+/* GROUPS: two or more works behind ONE grid icon.
+
+   A sub-project names the project whose icon it shares. That project — the
+   LEAD — keeps its icon and its place in the row; the sub-projects leave the
+   grid entirely and are reached from inside the window.
+
+   This runs on the section's already-sorted list and RE-ORDERS it: each lead
+   is followed immediately by its own sub-projects, in their own order. The
+   site reads the first member it meets as the lead, so the order here is not
+   cosmetic — it is what decides which project owns the icon.
+
+   Everything it emits is two fields on the project record: `group` (the
+   lead's slug, shared by every member) and `groupTitle` (the heading over
+   them). buildData() in index.html reads those and nothing else. */
+function groupSection(sec, mine, seen) {
+  const byFile = Object.create(null);
+  mine.forEach(p => { byFile[p.file] = p; });
+
+  const kids = Object.create(null);          // lead file -> members, in order
+  const dropped = [];
+  const standalone = mine.filter(p => {
+    if (!p.partOf) return true;
+    const lead = byFile[p.partOf];
+    if (!lead) {
+      // Points at something this section cannot see. Three distinguishable
+      // cases, because "fix the typo" and "un-hold the other one" are
+      // different actions.
+      const other = seen[p.partOf];
+      if (!other) {
+        fail(`${p.label}: "Sub-project of" names "${p.partOf}", which is not a project. ` +
+             `Pick one from the list rather than typing a name.`);
+      }
+      if (other.section !== p.section) {
+        fail(`${p.label}: "Sub-project of" names "${p.partOf}", which is in the ` +
+             `${String(other.section).toUpperCase()} section. Two works behind one icon must be ` +
+             `in the same section — the icon can only sit in one place in the row.`);
+      }
+      // held back: the icon it would share is not in the row, so neither is it
+      dropped.push(p.label);
+      return false;
+    }
+    if (lead.partOf) {
+      fail(`${p.label}: "Sub-project of" names "${p.partOf}", which is itself a sub-project. ` +
+           `Point it at "${lead.partOf}" instead — an icon holds one level of works, not a chain.`);
+    }
+    (kids[lead.file] || (kids[lead.file] = [])).push(p);
+    return false;
+  });
+  if (dropped.length) {
+    warn(`held back with their lead project: ${dropped.join(', ')}`);
+  }
+
+  const out = [];
+  standalone.forEach(lead => {
+    const mine2 = kids[lead.file];
+    out.push(lead);
+    if (!mine2) return;
+    // The heading names the CLIENT, and the client is the icon — so it is read
+    // off the lead and nowhere else. A sub-project's own `client` is ignored
+    // rather than fought over; blank leaves the lead's title as the heading.
+    const groupTitle = lead.client || lead.project.title;
+    lead.project.group = lead.file;
+    lead.project.groupTitle = groupTitle;
+    mine2.forEach(k => {
+      k.project.group = lead.file;
+      k.project.groupTitle = groupTitle;
+      // The icon file is still required by the form and is simply unused here.
+      // Saying so once per build beats wondering why a mark never appeared.
+      out.push(k);
+    });
+  });
+  return out;
 }
 
 function assemble() {
-  const projects = loadProjects();
+  const { kept: projects, seen } = loadProjects();
 
   const sections = SECTIONS.map(sec => {
     const mine = projects.filter(p => p.section === sec.id)
@@ -531,7 +622,9 @@ function assemble() {
       // reproducible regardless of how the filesystem lists the directory
       .sort((a, b) => (a.order - b.order) || a.file.localeCompare(b.file));
     if (!mine.length) warn(`section "${sec.id}" has no published projects.`);
-    return { id: sec.id, label: sec.label, projects: mine.map(p => p.project) };
+    // sub-projects fold in behind the icon they share — see groupSection()
+    const ordered = groupSection(sec, mine, seen);
+    return { id: sec.id, label: sec.label, projects: ordered.map(p => p.project) };
   });
 
   /* THE THREE SINGLETON FILENAMES ARE NOT A CHOICE — Keystatic derives each

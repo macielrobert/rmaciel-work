@@ -170,6 +170,23 @@ understanding why it exists will reintroduce a solved bug.
   it is the funnel the pointer, the keyboard and a deep link all pass through.
   The consequence to know: the band is not in the URL when a project is open,
   so reloading `#design/bus-stop` lands in ALL rather than in DESIGN.
+- **One icon can be a CLIENT, and the sibling row is what picks between their
+  works.** Every icon is a different mark and most are client logos, so a
+  second job for a client already in the row cannot have an icon of its own. It
+  shares the first one's: the projects declare a `part_of` relationship in the
+  CMS, build.js folds them into a `group`, and the non-leads leave the grid
+  entirely — they become window entries with no icon, appended past the form
+  where the window list is ALREADY longer than the icon list (ABOUT and the
+  form live there). **Colour says which work, not churn** — the same division
+  the band draws, so the icon stays frozen because the client is still the one
+  chosen thing. The row is a CONTROL and never churns; it earns that by being
+  inserted AFTER `spanify()` has walked the entry, where the caret and the exit
+  marks earn it by living outside the entry. **The group is not in the URL**,
+  for the reason the band is not: every work keeps its own top-level slug, so
+  `#build/asia-society-monster` selects the client's icon and lights that work.
+  Two rules the build enforces: a group cannot straddle sections (the icon sits
+  in one place in the row), and there are no chains — one icon, a flat list of
+  works. A held-back lead holds back the whole group.
 - **The footer has TWO ENDS, not a centred clump.** The sections sit against
   the left margin — the same one every text column in the site starts at — and
   CONTACT / ABOUT / the field mark are pushed to the right by a single
@@ -393,6 +410,8 @@ understanding why it exists will reintroduce a solved bug.
 |---|---|
 | Sveltia / TinaCMS / hand-edited JSON as the CMS | Each ruled out against a stated requirement, not on taste — see `NOTES-CMS-DECISION.md`. Keystatic is installed and Decap is gone |
 | A custom Decap editor widget | A React component against a CMS's internal API, in the only interface for editing the site, untestable from the build sandbox. Moot now: Keystatic's custom marks do the job as a supported API |
+| Nesting a client's works inside one `.mdoc` | A Keystatic file gets exactly ONE rich-text `contentField`, so only the first work could have a real body — and all fifteen projects have one. Flat files plus a `part_of` relationship keeps one body, one image list and one permanent slug per work |
+| A typed group key in the CMS | A text field naming the client splits the group the first time a character is typed differently, and nothing says so — the row just shows one work. `fields.relationship` is a picker over projects that already exist, so there is no spelling to get wrong |
 | Code blocks in the editor | Need a monospace face the site deliberately stopped shipping — a fifth typeface on a page with one chosen one |
 | Headings in the editor | `Larger` is a real mark now, so borrowing a heading for size is obsolete. Six levels of hierarchy the layout has no answer for |
 | A framework, bundler, or npm dependency **in the shipped file** | The single-file, zero-dependency character of the **shipped** file is the point. build.js is not exempt from npm any more — it needs `@markdoc/markdoc` — but its output is still the same one file, and nothing the editor depends on reaches a visitor |

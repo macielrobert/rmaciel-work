@@ -202,6 +202,42 @@ export default config({
           label: 'Hold back (do not publish)',
           defaultValue: false,
         }),
+        /* SUB-PROJECTS: TWO OR MORE WORKS BEHIND ONE ICON.
+
+           Every icon in the grid is a different mark, most of them client
+           logos, and that stays true — so a second project for a client the
+           row already shows cannot have an icon of its own. It points at the
+           first one instead and shares it. Inside the window a row of work
+           titles picks between them.
+
+           A RELATIONSHIP FIELD, NOT A TYPED KEY. A text field naming the
+           group would split a client in two the first time a character was
+           typed differently, and nothing would say so — the row would just
+           show one work. This is a picker over projects that already exist,
+           so there is no spelling to get wrong.
+
+           ONE LEVEL ONLY. The project picked here must not itself be a
+           sub-project; build.js fails the build rather than following a
+           chain, because a client inside a client has no rendering.
+
+           Sub-projects still need an icon file — the form requires one — and
+           it is simply unused. Said here because a required field that does
+           nothing is otherwise a mystery. */
+        part_of: fields.relationship({
+          label: 'Sub-project of',
+          collection: 'projects',
+          description:
+            'Leave empty for a normal project. Set it to share another project\u2019s grid icon \u2014 both then live behind that one icon, picked between inside the window. Must be in the same section, and that project must not itself be a sub-project.',
+        }),
+        /* The heading over the row of works. Only read on the project that
+           OWNS the icon; a sub-project's own value is ignored, because the
+           heading names the client and the client is the icon. Blank leaves
+           the window headed by the project's own title, exactly as now. */
+        client: fields.text({
+          label: 'Client name',
+          description:
+            'Only used when this project has sub-projects. Shown as the window heading above them \u2014 usually the client the icon belongs to. Leave blank otherwise.',
+        }),
         details: fields.array(
           fields.text({ label: 'Line' }),
           { label: 'Detail lines', itemLabel: (p) => p.value },
