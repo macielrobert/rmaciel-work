@@ -527,6 +527,48 @@
   #nl-exp-cap::-webkit-scrollbar { display: none; }
   #nl-window .hd { color: var(--accent); }
 
+  /* ------------------------------------------------- the sibling row
+     TWO OR MORE WORKS UNDER ONE CLIENT. The icon is the client; this row is
+     which of their projects the window is showing. It is the FOOTER'S
+     GRAMMAR, one level in: labels against the same left margin every text
+     column starts at, the chosen one in ink, the rest in accent grey.
+
+     COLOUR SAYS IT, not churn. The band already established that division —
+     coherence is churn, the band is colour — and it holds here: the icon
+     stays frozen because the client is still the one chosen thing, and
+     colour picks the work inside it. Nothing new to learn.
+
+     A CONTROL, SO IT NEVER CHURNS. It is inserted AFTER spanify() has walked
+     the entry, exactly like the caret and the two exit marks — those live
+     outside the entry; this one lives inside it and is added late, which is
+     the same guarantee by a different route.
+
+     WRAPS, and deliberately: unlike the footer this row sits inside a text
+     column with a measure, so a fourth or fifth work becomes a second line
+     rather than a horizontal scroll. Nothing here changes size — only the
+     count does. The taskbar rule, applied to a list of names. */
+  #nl-window-text .sibs {
+    display: flex;
+    flex-wrap: wrap;
+    /* the 8px of tap target each label carries is taken back on the left so
+       the INK lands on the margin and the target overhangs it — the same
+       trade the footer strip makes with its padding */
+    margin: 0 0 var(--nl-m, 12px) -8px;
+  }
+  #nl-window-text .sib {
+    color: var(--accent);
+    padding: 4px 8px;
+    /* the row is navigation, not prose: it does not take the body's 1.9 */
+    line-height: 1.5;
+  }
+  #nl-window-text .sib.on { color: var(--ink); }
+  #nl-window-text .sib[role="button"] { cursor: pointer; }
+  #nl-window-text .sib:focus { outline: none; }
+  #nl-window-text .sib:focus-visible { color: var(--ink); outline: 1px solid var(--accent); }
+  @media (hover: hover) {
+    #nl-window-text .sib[role="button"]:hover { color: var(--ink); }
+  }
+
   /* ---------------------------------------------------------- LAYOUTS
      Each window entry carries a LAYOUT name from the CMS; the window wears it
      as an `l-<name>` class and the rules below restructure accordingly. Two
@@ -2028,6 +2070,10 @@
         const seed = si * 100 + i;             // per-section placeholder variety
         const en = { icon: resolveIcon(p.icon), hd: p.title, lines: p.details,
                      blurb: paras(p.summary) };
+        // GROUPING. `group` is a client key shared by two or more projects;
+        // `groupTitle` is what the window calls that client. Both optional —
+        // an ungrouped project carries neither and behaves exactly as before.
+        if (p.group) { en.group = p.group; en.groupTitle = p.groupTitle || p.group; }
         // THE AUTHORED SLUG WINS. In the CMS it is the filename, which is the
         // permanent address the editor's help text promises — set once, never
         // changed. Falling back to the title keeps hand-written CONTENT and
@@ -2057,11 +2103,37 @@
         return en;
       }),
     };});
+    // GROUPS: two or more works under one client share ONE ICON. The first
+    // in section order stays in the row and keeps the icon; the rest LEAVE
+    // THE GRID and become icon-less window entries, reached by the sibling
+    // row inside the window instead of by a second icon.
+    //
+    // WHY THIS SHAPE AND NOT A NESTED ONE. A Keystatic file gets exactly one
+    // rich-text contentField, so nesting the works inside a single .mdoc
+    // would leave only the first with a real body. Every project has one.
+    // Flat files plus a shared key keeps one body, one image list and one
+    // permanent slug per work — and the CMS never has to learn about groups.
+    //
+    // Non-heads land in EXTRA and are appended past the form, where the
+    // window list is ALREADY longer than the icon list (ABOUT and the form
+    // live there). An entry with a window and no icon is not a new idea here.
+    const extra = [];
+    sections.forEach(sec => {
+      const head = Object.create(null);
+      sec.entries = sec.entries.filter(en => {
+        if (!en.group) return true;
+        if (!head[en.group]) { head[en.group] = en; en.sibs = [en]; return true; }
+        en.sibs = head[en.group].sibs;   // ONE array, shared by reference, so
+        en.sibs.push(en);                // every member sees the same order
+        extra.push(en);
+        return false;
+      });
+    });
     // ABOUT: same shape, but a fixture and image-less (no strip -> full text).
     // Neither fixture carries an icon — both live in the footer, not the grid.
     const about = { hd: CONTENT.about.title, layout: 'text',
       lines: CONTENT.about.details, blurb: paras(CONTENT.about.summary) };
-    return { sections, about };
+    return { sections, about, extra };
   }
   // Window entries are ONE FLAT LIST across all sections, so switching an
   // entry stays a display swap and never a rebuild:
@@ -2071,6 +2143,7 @@
   let SECTION_ICONS = null;   // icon descriptors, per section (grid order)
   let SECTION_OFFSET = null;  // flat index where each section's entries start
   let ABOUT_INDEX = 0, FORM_INDEX = 0;
+  let FLAT_OF = null;         // entry object -> its index in LIST
 
   // ------------------------------------------------------------------ boot
   // EVERYTHING below runs inside boot(), deferred until after the black shell
@@ -2085,8 +2158,15 @@
   LIST = [];
   DATA.sections.forEach(sec => { SECTION_OFFSET.push(LIST.length); LIST = LIST.concat(sec.entries); });
   ABOUT_INDEX = LIST.length;          // ABOUT sits after every section
-  FORM_INDEX  = LIST.length + 1;      // the form is appended after the build
   LIST = LIST.concat(DATA.about);
+  // Grouped siblings: window entries with no icon behind them, appended after
+  // ABOUT. FORM_INDEX is read off the length AFTER they land, so the form
+  // stays the last entry and its index stays the one thing that names it.
+  LIST = LIST.concat(DATA.extra);
+  FORM_INDEX  = LIST.length;          // the form is appended after the build
+  // entry -> flat window index, for the sibling row (its targets are spread
+  // across the sections and the tail, so there is no arithmetic to do)
+  FLAT_OF = new Map(); LIST.forEach((en, i) => FLAT_OF.set(en, i));
 
   // ------------------------------------------------------------------ webgl
   // `gl` is a LET and doubles as the feature flag: any failure below sets it
@@ -3940,7 +4020,10 @@ void main() {
   const winEntries = LIST.map((en, i) => {
     const d = document.createElement('div');
     if (i !== 0) d.style.display = 'none';
-    d.innerHTML = `<span class="hd">${en.hd}</span><br><br>`
+    // THE HEADING IS THE CLIENT when this entry belongs to a group — the
+    // icon named them, so the window agrees with the icon and the sibling row
+    // below says which of their projects you are looking at.
+    d.innerHTML = `<span class="hd">${en.groupTitle || en.hd}</span><br><br>`
       + `${en.lines.join('<br>')}<br><br>`
       + `<div class="body">${paras(en.blurb).join('<br><br>')}</div>`;
     winTxt.appendChild(d);
@@ -4005,6 +4088,40 @@ void main() {
              layout: en.layout || DEFAULT_LAYOUT,
              expand: en.expand !== false,
              wordmark: en.wordmark || null, spans: spanify(d) };
+  });
+
+  // THE SIBLING ROW, inserted AFTER the map above — which is what keeps it out
+  // of the churn: spanify() has already walked each entry by the time this
+  // runs, so the row is never in its span list. Controls stay resolved; this
+  // is a control. (The caret and the two exit marks get the same guarantee by
+  // living outside the entry entirely; this one has to sit inside the text
+  // column to land on the margin, so it earns it by arriving late instead.)
+  winEntries.forEach((we, i) => {
+    const en = LIST[i];
+    if (!en || !en.sibs || en.sibs.length < 2) return;
+    const row = document.createElement('div');
+    row.className = 'sibs';
+    en.sibs.forEach(sib => {
+      const t = FLAT_OF.get(sib);
+      const el = document.createElement('span');
+      el.className = 'sib' + (t === i ? ' on' : '');
+      el.textContent = sib.hd;
+      if (t === i) {
+        el.setAttribute('aria-current', 'true');
+      } else {
+        // only the OTHER works are controls. The one you are looking at is a
+        // label — a button that lands you where you already are is furniture.
+        el.setAttribute('role', 'button');
+        el.tabIndex = 0;
+        el.addEventListener('click', () => contactSwap(t));
+        el.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); contactSwap(t); }
+        });
+      }
+      row.appendChild(el);
+    });
+    // after the heading and its two breaks: [span.hd, br, br, ...]
+    we.el.insertBefore(row, we.el.childNodes[3] || null);
   });
 
   // ONE shared wordmark element whose mask swaps with the entry (the same
