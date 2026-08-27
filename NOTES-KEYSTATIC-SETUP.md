@@ -273,6 +273,58 @@ Prefills the new-branch name so branches an editor creates stay
 distinguishable from branches code work creates — the same convention Decap
 used. It only prefills the field; it does not hide branches.
 
+## The economics — the real reason to branch, discovered the hard way
+
+Review was always the stated reason to branch. The **cost** is the reason it is
+not optional, and it went unrecorded until it bit.
+
+Netlify builds the production branch (`main`) and pull-request deploy previews.
+It does **not** build a bare `cms/…` branch that has no PR. So the credit map is:
+
+| Action | Rebuild? | Credits |
+|---|---|---|
+| Keystatic save onto a `cms/…` branch, no PR | no | **0** |
+| Open a PR from that branch (deploy preview) | yes | ~15 |
+| Merge to `main` | yes | ~15 |
+
+So the cheapest real workflow is: **branch → save as many times as you like
+(free) → merge once.** One rebuild for a whole session's edits instead of one
+per save. A PR preview is an optional middle step that costs one extra build if
+you want to look before merging — still two builds for a session, not twenty.
+
+**What this cost in August:** ~66 saves committed straight to `main`, each its
+own rebuild — on the order of 1,000 credits against Free's 300 per month. The
+same edits batched onto branches are ~300. The BUS STOP alt-text incident (an
+editor save with an empty required field killed the build and stranded three
+later commits behind the red) is the same root cause wearing a different hat:
+**editing directly against production, one save at a time, with nothing between
+the save and the deploy.** Branching fixes both — the review gap and the bill.
+
+Recorded honestly because "create a branch first" reads as fussy discipline
+until you have the number next to it. It is not about editing less; it is about
+not paying for each keystroke as a separate deploy.
+
+## Making it automatic vs. leaving it a habit — an open owner decision
+
+Everything above is a **habit**: nothing forces a branch, so a save straight to
+`main` still works and still costs. Two ways to make cheap the default:
+
+1. **The branch-protection ruleset** (the "Enable it" table above). When it
+   takes, Keystatic can no longer write to `main` at all — it answers every
+   save with *"Create a new branch to save changes."* That is the strongest
+   fix. Two catches: rulesets may not be enforced on a **free private repo**
+   (unverified — try it and watch whether a direct save is actually blocked),
+   and once it takes, **every** write to `main` needs a PR, including Claude's
+   own ship-to-`main` pushes and any hand fix. That is a deliberate trade, not
+   a free win — raise it with the owner before enabling, do not switch it on
+   silently.
+2. **Turn off Netlify deploy previews** so even a stray PR cannot bill. Cheaper
+   still, but it removes the preview URL that lets you look before merging.
+   Netlify setting, not repo code; the owner's call.
+
+Neither is set. The habit (README, "The cheap way to work") is what is in force
+today.
+
 ## ~~Until this branch merges~~ — merged
 
 Kept because the failure it describes is worth recognising if it recurs: while

@@ -25,9 +25,27 @@ You do not upload anything, ever. You change words in the CMS and the rest happe
 2. Edit what you want. **Projects** are the work; **Singletons** are ABOUT, CONTACT and the site settings.
 3. Press **Save**.
 
-**Saving publishes, right now.** This is the one thing that changed with the new editor and it is worth knowing: there is no review step in front of it. The old editor parked every change in a pull request first; this one writes straight to the live content.
+**Saving publishes, right now — and every publish costs money.** This is the one thing that changed with the new editor. The old editor parked every change in a pull request first; this one writes straight to the live content, and each write makes Netlify rebuild the whole site. A rebuild costs build credits (~15 each). Save straight to the live site ten times in an afternoon and that is ten rebuilds, whether you meant it as ten changes or one.
 
-To get a review step back, click the branch name at the top of the editor and **create a branch** before you start editing. Your saves go there instead, and you can look at them on that branch's preview before merging. It is one extra click at the start of a session, and it is the difference between "seen it" and "hoped".
+So there is a cheap way to work and an expensive way, and they are the same amount of typing.
+
+---
+
+## The cheap way to work — do this every time
+
+The rule in one line: **make a branch first, do everything on it, merge once.**
+
+1. Open `/keystatic`. Before editing anything, click the **branch name** at the top and **create a branch** (it will prefill a name like `cms/…`).
+2. Now do *all* of it on that branch — edit words, upload images, add projects, fix a typo you spot. **Save as often as you like.** These saves are free: they pile up on the branch and do not rebuild the site.
+3. When the whole batch is done, **merge that branch into `main`**. *That* is the one rebuild, the one charge, and the moment it all goes live together.
+
+Merging is one action on GitHub — or tell Claude "merge my `cms` branch" and it does the single merge for you.
+
+Why it matters, in numbers: August ran ~66 separate saves straight to the live site — near 1,000 credits against a free month's 300. The exact same work, batched onto branches, is around 300. It is not about editing less; it is about not paying for each keystroke separately.
+
+**The bonus you get for free:** because the branch holds your changes off the live site until you merge, you can look before you leap. That is the review step the old editor gave you — now it is a side effect of working cheaply, not extra work.
+
+The one time you skip the branch: a single genuinely urgent fix you want live this second. One save, one rebuild, fine. It is *routine* editing — the ten-small-things afternoon — that has to go on a branch.
 
 ---
 
