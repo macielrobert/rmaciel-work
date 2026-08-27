@@ -273,14 +273,42 @@ export default config({
           directory: 'images',
           publicPath: '/images/',
         }),
+        /* ALT IS REQUIRED, AND THE EDITOR IS THE PLACE TO SAY SO.
+
+           build.js treats a missing `alt` as fatal: it is the only description
+           a screen reader ever gets, and an image without one is a hole in the
+           page. But the field was a plain text box here, with no validation at
+           all, so the editor would happily save an entry the build was
+           guaranteed to reject. The failure then surfaced minutes later, in a
+           deploy log nobody was watching, and the site quietly stopped
+           publishing. That is exactly what happened to BUS STOP: one image
+           saved with no alt text on 26 Aug, and every commit after it — three
+           of them unrelated — sat unshipped behind the red build.
+
+           NOT SOFTENED IN build.js INSTEAD. Defaulting a blank alt to the empty
+           string would build green and ship an inaccessible image, which is the
+           worse of the two failures: a broken deploy is loud and gets fixed, a
+           silently missing alt is neither. The build's rule is right; the
+           editor just has to enforce it at the point of entry, where it costs a
+           red field instead of a failed deploy.
+
+           `src` is belt-and-braces. An empty image field already fails to parse
+           ("Must be a string") without any validation, so this changes no
+           behaviour — it is here so the schema STATES the requirement rather
+           than inheriting it from a parse-time accident that a future Keystatic
+           release could quietly soften. */
         images: fields.array(
           fields.object({
             src: fields.image({
               label: 'File',
               directory: 'images',
               publicPath: '/images/',
+              validation: { isRequired: true },
             }),
-            alt: fields.text({ label: 'Alt text' }),
+            alt: fields.text({
+              label: 'Alt text',
+              validation: { isRequired: true },
+            }),
             caption: fields.text({ label: 'Caption' }),
           }),
           { label: 'Images', itemLabel: (p) => p.fields.alt.value || 'Image' },
