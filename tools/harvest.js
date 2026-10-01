@@ -69,14 +69,29 @@ const THUMBS = path.join(STORE, 'thumbs');
 fs.mkdirSync(TEXT, { recursive: true });
 fs.mkdirSync(THUMBS, { recursive: true });
 
-const load = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
+// A file that exists but will not parse is set aside and SAID, not quietly
+// replaced: the next save would otherwise overwrite every accept/reject
+// decision with an empty state and nothing would tell anyone.
+function load(f, d) {
+  if (!fs.existsSync(f)) return d;
+  try { return JSON.parse(fs.readFileSync(f, 'utf8')); }
+  catch (e) {
+    const bad = `${f}.unreadable-${Date.now()}`;
+    fs.renameSync(f, bad);
+    console.warn(`${path.basename(f)} could not be read (${e.message}); kept as ${path.basename(bad)}, starting empty`);
+    return d;
+  }
+}
+// Write beside, then rename: a rename is all-or-nothing, so a crash or sleep
+// mid-write leaves the previous file intact instead of half a file.
+const writeAtomic = (f, s) => { fs.writeFileSync(f + '.tmp', s); fs.renameSync(f + '.tmp', f); };
 const state = load(STATE_FILE, { root: null, findings: {} });
 const cache = load(CACHE_FILE, {});
 // Saves are coalesced: a click, an inline edit and a crawl's progress all ask
 // for one, and each used to re-serialise every finding on the spot. At most one
 // write per 300 ms; flushed on the way out, so closing the window loses nothing.
 let saveTimer = null;
-const flush = () => { clearTimeout(saveTimer); saveTimer = null; fs.writeFileSync(STATE_FILE, JSON.stringify(state)); };
+const flush = () => { clearTimeout(saveTimer); saveTimer = null; writeAtomic(STATE_FILE, JSON.stringify(state)); };
 const persist = () => { saveTimer ||= setTimeout(flush, 300); };
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { if (saveTimer) flush(); process.exit(0); });
 
@@ -187,7 +202,12 @@ fs.writeFileSync(INDD_AS, `on run argv
   tell application id "com.adobe.InDesign"
     set user interaction level of script preferences to never interact
     set d to open (POSIX file (item 1 of argv)) without showing window
-    set t to contents of every story of d
+    try
+      set t to contents of every story of d
+    on error msg
+      close d saving no
+      error msg
+    end try
     close d saving no
   end tell
   set AppleScript's text item delimiters to (ASCII character 30)
@@ -247,7 +267,7 @@ async function extract(file) {
     return [];
   }
   units = units.map(u => String(u).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 6000));
-  fs.writeFileSync(cached, JSON.stringify(units));
+  writeAtomic(cached, JSON.stringify(units));
   return units;
 }
 
@@ -392,8 +412,15 @@ function run(phase, fn) {
     job = { running: true, phase, done: 0, total: 0, added: 0, error: null };
     try { await fn(); await sizeImages(); job.phase = 'Done'; }
     catch (e) { job.error = e.message; console.warn(e); }
-    finally { flush(); job.running = false; }
+    finally { prune(); flush(); job.running = false; }
   });
+}
+
+// A pending card whose file has been moved or deleted is dropped, so the count
+// beside a project matches the cards shown. Decided ones stay as a record.
+// A re-crawl finds the file again wherever it went.
+function prune() {
+  for (const [k, f] of Object.entries(state.findings)) if (f.status === 'pending' && !fs.existsSync(f.path)) delete state.findings[k];
 }
 
 // The SAVED state is the queue of folders to expand: any accepted folder not
@@ -405,7 +432,10 @@ function drain() {
   for (const f of Object.values(state.findings)) {
     if (f.kind !== 'folder' || f.status !== 'accepted' || f.expanded || queued.has(f.id)) continue;
     queued.add(f.id);
-    run(`Reading ${path.basename(f.path)}`, async () => { try { await expandFolder(f); } finally { queued.delete(f.id); } });
+    run(`Reading ${path.basename(f.path)}`, async () => {
+      // re-checked when its turn comes: it may have been undone while it waited
+      try { if (f.status === 'accepted') await expandFolder(f); } finally { queued.delete(f.id); }
+    });
   }
 }
 
@@ -465,7 +495,11 @@ async function dhash(file) {
     let bits = 0n;
     for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) bits = (bits << 1n) | (grey(x, y) > grey(x + 1, y) ? 1n : 0n);
     h = bits.toString(16).padStart(16, '0');
-  } catch { /* unreadable image: no fingerprint, no match — not an error worth stopping for */ }
+  } catch (e) {
+    // No fingerprint means no match — not worth stopping for, but said, so a
+    // parsing mistake here cannot pass for "no look-alikes found".
+    console.warn(`no fingerprint for ${file}: ${e.message.split('\n')[0]}`);
+  }
   finally { fs.rmSync(tmp, { force: true }); }
   cache[key] = h;
   return h;
@@ -482,7 +516,9 @@ const clean = (s) => s.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_\-.]+/g, ' ')
   .replace(/^(\s*\d+\b)+/, '').replace(/(\s+(v ?\d+|r ?\d+|final|\d+))+\s*$/i, '').replace(/\s+/g, ' ').trim();
 
 function namingFolder(file, root) {
-  for (let d = path.dirname(file); d.startsWith(root + path.sep); d = path.dirname(d)) {
+  // The crawl root counts too — pointing at "Wave House" itself is the most
+  // direct way to ask — but never the home folder, which names the person.
+  for (let d = path.dirname(file); (d === root || d.startsWith(root + path.sep)) && d !== HOME; d = path.dirname(d)) {
     const c = clean(path.basename(d));
     if (c.length > 2 && !FILING.test(c)) return d;
   }
@@ -518,7 +554,7 @@ async function lookalikes(projs, imgs, root) {
     if (!name || pr.m.name(name)) continue;
     job.added += add({ project: pr.slug, kind: 'nickname', path: folder, text: name, pairs: pairs.slice(0, 4), count: pairs.length });
   }
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
+  writeAtomic(CACHE_FILE, JSON.stringify(cache));
 }
 
 function addNickname(slug, name) {
@@ -532,6 +568,14 @@ function addNickname(slug, name) {
 /* ------------------------------------------------------------- writing */
 
 async function importImage(src, slug, n, w, h) {
+  // Size unknown (sips gave no answer at crawl time): ask again now rather than
+  // assume small, which copied 40 MB camera originals into the repo unshrunk.
+  if (!w || !h) {
+    const real = fs.realpathSync(src);
+    const i = (await sipsInfo([real]))[real] || {};
+    w = +i.pixelWidth; h = +i.pixelHeight;
+    if (!w || !h) throw new Error(`cannot read the size of ${path.basename(src)} — re-export it as JPEG or PNG`);
+  }
   const e = ext(src);
   const outExt = KEEP_EXT.has(e) ? (e === '.jpeg' ? '.jpg' : e) : '.jpg';
   const dir = path.join(REPO, imgRel(slug, n));
@@ -563,12 +607,19 @@ async function write(slug) {
 
   data.images = data.images || [];
   data.details = data.details || [];
-  const paras = [];
+  const paras = [], copied = [];
   for (const f of acc) {
     if (f.kind === 'image') {
       let n = data.images.length;
       while (fs.existsSync(path.join(REPO, imgRel(slug, n)))) n++;
-      const rec = { src: await importImage(f.path, slug, n, f.w, f.h), alt: f.alt.trim() };
+      // All or nothing: if a later image fails, the ones already copied are
+      // removed. Left behind they were unreferenced files that build.js ships
+      // anyway (it copies all of images/), and a retry copied them again.
+      copied.push(path.join(REPO, imgRel(slug, n)));
+      let src;
+      try { src = await importImage(f.path, slug, n, f.w, f.h); }
+      catch (e) { for (const d of copied) fs.rmSync(d, { recursive: true, force: true }); throw e; }
+      const rec = { src, alt: f.alt.trim() };
       if (String(f.caption || '').trim()) rec.caption = f.caption.trim();
       data.images.push(rec);
     } else {
@@ -679,6 +730,7 @@ server.listen(0, '127.0.0.1', () => {
   ORIGIN = `http://127.0.0.1:${server.address().port}`;
   console.log(`Harvest is open at ${ORIGIN}/\nClose this window (or press Ctrl-C) when you are done.`);
   if (!process.env.HARVEST_NO_OPEN) execFile('open', [ORIGIN + '/']);
+  prune();
   drain();   // folders accepted last time but never expanded
 });
 
@@ -826,7 +878,11 @@ function buttons() {
   $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';
 }
 async function poll() {
-  S = await api('/api/state');
+  // Always reschedules, even when a request fails: one bad answer used to stop
+  // polling for good, freezing the page on its last status.
+  clearTimeout(poll.t);
+  try { S = await api('/api/state'); }
+  catch (e) { $('status').textContent = '⚠ ' + e.message; poll.t = setTimeout(poll, 4000); return; }
   const j = S.job;
   $('rootline').textContent = S.root ? 'Last crawl: ' + S.root : 'Pick a folder, then crawl it';
   $('status').textContent = j.error ? '⚠ ' + j.error
@@ -844,7 +900,7 @@ async function poll() {
   // every poll while nothing new had been found)
   const key = [j.phase, j.added, j.running].join('|');
   if (key !== lastJob && project && !editing()) { loadFindings(); lastJob = key; }
-  clearTimeout(poll.t); poll.t = setTimeout(poll, j.running ? 1200 : 4000);
+  poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
 
 /* ---- findings */
@@ -858,7 +914,9 @@ const dirty = new Map();   // finding id -> { field: value } not yet sent
 let saving = Promise.resolve();
 function save() {
   clearTimeout(save.t);
-  for (const [id, fields] of dirty) saving = saving.then(() => api('/api/finding', { id, ...fields }));
+  // each save catches its own failure: one rejected link used to leave the
+  // chain rejected for good, so every Accept and Write after it failed too
+  for (const [id, fields] of dirty) saving = saving.then(() => api('/api/finding', { id, ...fields })).catch(e => { $('status').textContent = '⚠ ' + e.message; });
   dirty.clear();
   return saving;
 }
@@ -934,6 +992,7 @@ $('write').addEventListener('click', async () => {
 
 (async () => {
   await poll();
+  while (!S) await new Promise(r => setTimeout(r, 1000));   // first answer failed: wait for a retry
   const li = document.createElement('li');
   li.innerHTML = '<span data-p="' + esc(S.home) + '" class="sel"><i>⌄</i>~ ' + esc(S.home.split('/').pop()) + '</span>';
   const ul = document.createElement('ul'); ul.appendChild(li); $('tree').appendChild(ul);
