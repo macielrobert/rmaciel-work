@@ -107,6 +107,8 @@ function projects() {
     return {
       slug: f.slice(0, -5), title: data.title || f, section: data.section, order: data.order ?? 10,
       draft: !!data.draft, images: (data.images || []).length, details: (data.details || []).length,
+      nicknames: data.nicknames || [],
+      siteImages: (data.images || []).map(i => path.join(REPO, String(i.src || '').replace(/^\/+/, ''))),
       words: body.trim() ? body.trim().split(/\s+/).length : 0,
     };
   }).sort((a, b) => (a.section || '').localeCompare(b.section || '') || a.order - b.order || a.title.localeCompare(b.title));
@@ -122,13 +124,18 @@ const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // out ("Asia Society" ~ "AsiaSociety_2023"), or when every real word of the
 // title does ("Book of Hov" ~ "HOV book final"). Text matches the title as a
 // phrase, any run of spaces / hyphens / underscores standing for a space.
-function matcher(title) {
-  const whole = compact(title);
-  const words = title.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1 && !STOP.has(t));
-  return {
-    name: (n) => { const c = compact(n); return (whole.length >= 3 && c.includes(whole)) || (words.length > 1 && words.every(w => c.includes(w))); },
-    text: new RegExp(title.trim().split(/\s+/).map(escRe).join('[\\s\\-_]+'), 'i'),
-  };
+// The working titles ("Wave House" for BUS STOP) count exactly as the title
+// does: files are saved under whatever the work was called at the time.
+function matcher(names) {
+  const each = names.map(n => String(n || '').trim()).filter(Boolean).map(title => {
+    const whole = compact(title);
+    const words = title.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1 && !STOP.has(t));
+    return {
+      name: (n) => { const c = compact(n); return (whole.length >= 3 && c.includes(whole)) || (words.length > 1 && words.every(w => c.includes(w))); },
+      text: title.split(/\s+/).map(escRe).join('[\\s\\-_]+'),
+    };
+  });
+  return { name: (n) => each.some(m => m.name(n)), text: new RegExp(each.map(m => m.text).join('|'), 'i') };
 }
 
 /* ------------------------------------------------------------- text */
@@ -229,6 +236,8 @@ function walk(root, visit, depth = 0) {
   for (const e of entries) {
     if (SKIP.test(e.name)) continue;
     const p = path.join(root, e.name);
+    // the site's own images would match themselves and teach nothing
+    if (p === REPO) continue;
     if (e.isDirectory()) { if (visit(p, true) !== false && depth < MAX_DEPTH) walk(p, visit, depth + 1); }
     else if (e.isFile()) visit(p, false);
   }
@@ -236,8 +245,8 @@ function walk(root, visit, depth = 0) {
 
 async function crawl(root, indesign) {
   job = { running: true, phase: 'Listing files', done: 0, total: 0, added: 0, error: null };
-  const projs = projects().map(p => ({ ...p, m: matcher(p.title) }));
-  const docs = [];
+  const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
+  const docs = [], imgs = [];
   walk(root, (p, dir) => {
     job.done++;
     const name = path.basename(p);
@@ -247,6 +256,7 @@ async function crawl(root, indesign) {
       else if (IMAGE_EXT.has(ext(p))) job.added += add({ project: pr.slug, kind: 'image', path: p });
     }
     if (!dir && isDoc(ext(p), indesign)) docs.push(p);
+    if (!dir && IMAGE_EXT.has(ext(p))) imgs.push(p);
   });
   persist();
   job.phase = 'Reading documents'; job.done = 0; job.total = docs.length;
@@ -259,6 +269,7 @@ async function crawl(root, indesign) {
     if (job.done % 10 === 0) { persist(); persistCache(); }
     await tick();
   }
+  await lookalikes(projs, imgs, root);
   await sizeImages();
   persist(); persistCache();
   job.running = false; job.phase = 'Done';
@@ -302,6 +313,116 @@ async function sizeImages() {
 function run(fn) {
   if (job.running) throw new Error('Already working — wait for the current crawl to finish.');
   fn().catch(e => { job.running = false; job.error = e.message; console.warn(e); });
+}
+
+/* ------------------------------------------------------------- look-alikes */
+
+/* INFERRING A WORKING TITLE FROM THE PICTURES
+     A name match cannot find BUS STOP's files if they are all saved as "Wave
+     House". But the photos on the site were exported from those files, so the
+     same picture usually exists in that folder. Find it, and the folder it
+     sits in names the work as it was called then.
+
+   THE FINGERPRINT — a "difference hash"
+     sips shrinks the image to 9 x 8 pixels; each of the 64 bits says whether a
+     pixel is brighter than its right-hand neighbour. Re-exports, resizes and
+     recompressions of one picture land within a few bits of each other;
+     different pictures land ~32 apart. It does NOT survive a crop or a
+     different angle — this finds the same photo, not the same object.
+     Chosen over a learned image model because it is fifty lines, runs on
+     what the Mac already has, and its mistakes are easy to see on a card.
+
+   WHAT IT SUGGESTS
+     The nearest folder above the found copy whose name is not filing furniture
+     ("renders", "final", "2024", "Desktop"...), cleaned of dates and version
+     tags. It is a SUGGESTION card with the two pictures side by side — the
+     name is a guess and is editable before it is accepted. */
+
+const LOOKALIKE = 6;   // bits of 64. Re-exports measured 0-4; unrelated photos ~32
+const pop = (x) => { let n = 0; while (x) { x &= x - 1n; n++; } return n; };
+// A near-blank image (white page, flat logo) hashes to almost all one bit and
+// "matches" every other near-blank image. Those say nothing.
+const useful = (h) => h && pop(BigInt('0x' + h)) >= 8 && pop(BigInt('0x' + h)) <= 56;
+
+let hashN = 0;
+async function dhash(file) {
+  const st = fs.statSync(file);
+  const key = `dhash|${file}|${st.size}|${st.mtimeMs}`;
+  if (key in cache) return cache[key];
+  const tmp = path.join(STORE, `dh-${process.pid}-${hashN++}.bmp`);
+  let h = null;
+  try {
+    await sh('sips', ['-z', '8', '9', '-s', 'format', 'bmp', file, '--out', tmp]);
+    const b = fs.readFileSync(tmp);
+    const off = b.readUInt32LE(10), w = b.readInt32LE(18), ht = b.readInt32LE(22);
+    const bytes = b.readUInt16LE(28) / 8, stride = Math.ceil(w * bytes / 4) * 4;
+    // BMP rows run bottom-up when the height is positive; pixels are B, G, R
+    const grey = (x, y) => { const i = off + (ht > 0 ? ht - 1 - y : y) * stride + x * bytes; return 0.114 * b[i] + 0.587 * b[i + 1] + 0.299 * b[i + 2]; };
+    let bits = 0n;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) bits = (bits << 1n) | (grey(x, y) > grey(x + 1, y) ? 1n : 0n);
+    h = bits.toString(16).padStart(16, '0');
+  } catch { /* unreadable image: no fingerprint, no match — not an error worth stopping for */ }
+  finally { fs.rmSync(tmp, { force: true }); }
+  cache[key] = h;
+  return h;
+}
+
+async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) await fn(items[i++]); }));
+}
+
+const FILING = /^(renders?|images?|imgs?|photos?|pictures?|pics|exports?|finals?|output|out|web|jpe?gs?|pngs?|tiffs?|heics?|selects?|edits?|edited|process|wip|archive|old|new|misc|assets|links|docs?|documentation|stills|(hi|lo|low)[ -]?res|print|social|instagram|desktop|documents|downloads|dropbox|google drive|icloud drive.*|creative cloud files.*|projects?|work|clients?|portfolio|unsorted|screenshots?|jobs?|others?|temp|tmp|stuff|untitled.*|new folder.*|v ?\d+|r ?\d+|\d+)$/i;
+// "240512_Wave-House_v3" -> "Wave House"
+const clean = (s) => s.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_\-.]+/g, ' ')
+  .replace(/^(\s*\d+\b)+/, '').replace(/(\s+(v ?\d+|r ?\d+|final|\d+))+\s*$/i, '').replace(/\s+/g, ' ').trim();
+
+function namingFolder(file, root) {
+  for (let d = path.dirname(file); d.startsWith(root + path.sep); d = path.dirname(d)) {
+    const c = clean(path.basename(d));
+    if (c.length > 2 && !FILING.test(c)) return d;
+  }
+  return null;
+}
+
+async function lookalikes(projs, imgs, root) {
+  job.phase = 'Comparing pictures'; job.done = 0; job.total = imgs.length;
+  const site = [];
+  for (const pr of projs) for (const f of pr.siteImages) {
+    if (!fs.existsSync(f)) continue;
+    const h = await dhash(f);
+    if (useful(h)) site.push({ pr, f, h: BigInt('0x' + h) });
+  }
+  const hits = {};
+  await pool(imgs, 8, async (img) => {
+    const h = await dhash(img);
+    job.done++;
+    if (!useful(h) || !site.length) return;
+    const hb = BigInt('0x' + h);
+    for (const s of site) {
+      if (pop(hb ^ s.h) > LOOKALIKE) continue;
+      if (s.pr.m.name(img)) continue;   // the path already names the project: nothing to learn
+      const folder = namingFolder(img, root);
+      ((hits[s.pr.slug + '|' + folder] ||= { pr: s.pr, folder, pairs: [] }).pairs).push([img, s.f]);
+    }
+  });
+  for (const { pr, folder, pairs } of Object.values(hits)) {
+    // No named folder above it means a stray copy (IMG_4412 on the Desktop):
+    // a filename is a camera counter, not a working title.
+    if (!folder) continue;
+    const name = clean(path.basename(folder));
+    if (!name || pr.m.name(name)) continue;
+    job.added += add({ project: pr.slug, kind: 'nickname', path: folder, text: name, pairs: pairs.slice(0, 4), count: pairs.length });
+  }
+  persistCache();
+}
+
+function addNickname(slug, name) {
+  const file = path.join(PROJECTS, slug + '.mdoc');
+  const { data, body } = readMdoc(file);
+  if ((data.nicknames || []).some(n => compact(n) === compact(name))) return;
+  data.nicknames = [...(data.nicknames || []), name];
+  fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${body}`);
 }
 
 /* ------------------------------------------------------------- writing */
@@ -427,6 +548,20 @@ const server = http.createServer(async (req, res) => {
       for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
       persist();
       if (f.kind === 'folder' && b.status === 'accepted') run(() => expandFolder(f, !!b.indesign));
+      // An accepted working title is written to the project at once (it is
+      // what the NEXT crawl matches on), and its folder is taken as the work's.
+      if (f.kind === 'nickname' && b.status === 'accepted') {
+        const name = String(f.edited ?? f.text).trim();
+        if (name) addNickname(f.project, name);
+        if (fs.statSync(f.path).isDirectory()) {
+          add({ project: f.project, kind: 'folder', path: f.path });
+          const folder = state.findings[id(f.project, 'folder', f.path, '')];
+          folder.status = 'accepted';
+          run(() => expandFolder(folder, !!b.indesign));
+        }
+        f.status = 'written';
+      }
+      persist();
       return json(f);
     }
     if (p === '/api/link') {
@@ -438,6 +573,7 @@ const server = http.createServer(async (req, res) => {
       return json(f);
     }
     if (p === '/api/write') return json(await write(b.project));
+    if (p === '/api/nickname') { addNickname(b.project, String(b.name || '').trim()); return json({ ok: true }); }
     send(404, 'text/plain', 'not found');
   } catch (e) {
     send(400, 'application/json', JSON.stringify({ error: e.message }));
@@ -503,6 +639,11 @@ const PAGE = String.raw`<!doctype html>
   #projects div { cursor:pointer; color:var(--accent); padding:3px 0; display:flex; gap:8px; }
   #projects div:hover, #projects div.sel { color:var(--ink); }
   #projects div b { margin-left:auto; font-weight:400; }
+  #projects div small { display:block; font-size:inherit; color:var(--accent-dim); }
+  #nick { margin:0 0 14px; }
+  .pairs { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:8px 0 4px; }
+  .pairs img { height:90px; margin:0; }
+  .card input.big { font-size:13px; }
   #projects .sec { color:var(--accent-dim); margin-top:12px; cursor:default; }
 
   /* review columns */
@@ -541,6 +682,7 @@ const PAGE = String.raw`<!doctype html>
   </section>
   <section>
     <h2 class="cap">Projects</h2>
+    <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
   </section>
   <section id="review">
@@ -577,13 +719,14 @@ function drawProjects() {
   let last = null, h = '';
   for (const p of S.projects) {
     if (p.section !== last) { h += '<div class="sec cap">' + esc(p.section) + '</div>'; last = p.section; }
-    h += '<div data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"><span>' + esc(p.title) + (p.draft ? ' · draft' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
+    h += '<div data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"><span>' + esc(p.title) + (p.draft ? ' · draft' : '') + (p.nicknames.length ? '<small>aka ' + p.nicknames.map(esc).join(', ') + '</small>' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
   }
   $('projects').innerHTML = h;
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d) return;
-  project = d.dataset.s; $('msg').textContent = ''; drawProjects(); buttons(); loadFindings();
+  project = d.dataset.s; $('msg').textContent = '';
+  $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons(); loadFindings();
 });
 
 /* ---- status */
@@ -620,6 +763,9 @@ function card(f) {
     ? '<button class="btn" data-a="accepted">Accept</button><button class="btn" data-a="rejected">Reject</button>'
     : f.status === 'written' ? '<span class="dim cap">Written</span>' : '<button class="btn" data-a="pending">Undo</button>';
   let h = '<div class="card" data-id="' + f.id + '">';
+  if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
+    '<div class="pairs">' + (f.pairs || []).map(([found, site]) => '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(site) + '"><img loading="lazy" src="/thumb?p=' + encodeURIComponent(found) + '">').join('') + '</div>' +
+    '<div class="dim">On the site · found in ' + esc(f.path.replace(S.home, '~')) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
   if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + esc(f.path.replace(S.home, '~')) + '</div>';
   if (f.kind === 'image') {
     h += '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(f.path) + '"><div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
@@ -635,7 +781,7 @@ function drawFindings() {
   for (const col of ['pending', 'accepted', 'rejected']) {
     // folders first in PENDING: accepting one is what fills the rest
     const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written'))
-      .sort((a, b) => (a.kind === 'folder' ? 0 : 1) - (b.kind === 'folder' ? 0 : 1));
+      .sort((a, b) => (/folder|nickname/.test(a.kind) ? 0 : 1) - (/folder|nickname/.test(b.kind) ? 0 : 1));
     $(col).innerHTML = list.map(card).join('');
     $('n-' + col).textContent = list.length || '';
   }
@@ -647,7 +793,7 @@ $('review').addEventListener('click', async (e) => {
   const f = findings.find(x => x.id === id);
   Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked }));
   drawFindings();
-  if (f.kind === 'folder') poll();
+  if (f.kind === 'folder' || f.kind === 'nickname') poll();
 });
 // inline edits save on every change, so nothing typed is lost to a reload
 $('review').addEventListener('change', (e) => {
@@ -657,6 +803,12 @@ $('review').addEventListener('change', (e) => {
   api('/api/finding', { id, [k]: e.target.value });
 });
 
+$('nick').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter' || !e.target.value.trim()) return;
+  await api('/api/nickname', { project, name: e.target.value });
+  e.target.value = '';
+  poll();
+});
 $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('write').addEventListener('click', async () => {

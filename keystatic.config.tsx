@@ -184,6 +184,20 @@ export default config({
               'Frozen permanent address. Set once and never change it — a sent link breaks if this changes, and renaming it is what deleted a project under the previous CMS.',
           },
         }),
+        /* WORKING TITLES — for tools/harvest.js, not for the site.
+
+           Files get saved under whatever the work was called before it was
+           named: BUS STOP's folders say "Wave House". The crawler matches
+           files by name, so without these it cannot find them. build.js
+           ignores the field and nothing here reaches a visitor. */
+        nicknames: fields.array(
+          fields.text({ label: 'Working title' }),
+          {
+            label: 'Working titles',
+            description: 'Earlier names this work was saved under (e.g. "Wave House"). Only used by the Harvest crawler to find old files — never shown on the site.',
+            itemLabel: (p) => p.value,
+          },
+        ),
         section: fields.select({
           label: 'Section',
           options: [
