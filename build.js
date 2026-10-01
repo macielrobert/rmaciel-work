@@ -160,6 +160,31 @@ function jpegSize(buf, label) {
   fail(`${label}: no JPEG frame header (SOFn) found — cannot determine dimensions`);
 }
 
+// WebP: "RIFF" <size> "WEBP", then ONE of three first chunks, each of which
+// stores the size its own way. Added because the CMS accepts .webp uploads and
+// the first one (book-of-hov, Aug 2026) failed the build — refusing a format
+// the editor offers just moves the error somewhere the owner cannot see it.
+function webpSize(buf, label) {
+  if (buf.length < 30 || buf.toString('latin1', 0, 4) !== 'RIFF' || buf.toString('latin1', 8, 12) !== 'WEBP') {
+    fail(`${label}: not a WebP file (missing the RIFF/WEBP header)`);
+  }
+  const chunk = buf.toString('latin1', 12, 16);
+  // extended: 24-bit little-endian canvas width-1 and height-1
+  if (chunk === 'VP8X') return [buf.readUIntLE(24, 3) + 1, buf.readUIntLE(27, 3) + 1];
+  // lossy: 3-byte frame tag, 9D 01 2A start code, then 14-bit width and height
+  if (chunk === 'VP8 ') {
+    if (buf[23] !== 0x9d || buf[24] !== 0x01 || buf[25] !== 0x2a) fail(`${label}: WebP lossy frame has no start code`);
+    return [buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff];
+  }
+  // lossless: 0x2F signature, then width-1 and height-1 packed as 14 bits each
+  if (chunk === 'VP8L') {
+    if (buf[20] !== 0x2f) fail(`${label}: WebP lossless frame has no signature byte`);
+    const bits = buf.readUInt32LE(21);
+    return [(bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1];
+  }
+  fail(`${label}: unknown WebP chunk "${chunk}" — cannot determine dimensions`);
+}
+
 // The CMS stores image paths against its public path ("/images"), while the
 // files land in the directory of the same name at the repo root. One is the
 // other without the leading slash.
@@ -187,8 +212,9 @@ function measure(src, label) {
     return pngSize(buf, `${label}: ${src}`);
   }
   if (ext === '.jpg' || ext === '.jpeg') return jpegSize(buf, `${label}: ${src}`);
+  if (ext === '.webp') return webpSize(buf, `${label}: ${src}`);
   fail(
-    `${label}: cannot measure "${src}" — only PNG and JPEG can be read from the file header. ` +
+    `${label}: cannot measure "${src}" — only PNG, JPEG and WebP can be read from the file header. ` +
     `Strip images REQUIRE a ratio, so this format cannot be used there. Re-export as PNG or JPEG. ` +
     `(Icons and wordmarks are exempt and may be SVG.)`
   );
