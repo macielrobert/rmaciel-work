@@ -72,18 +72,19 @@ fs.mkdirSync(THUMBS, { recursive: true });
 const load = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const state = load(STATE_FILE, { root: null, findings: {} });
 const cache = load(CACHE_FILE, {});
-const persist = () => fs.writeFileSync(STATE_FILE, JSON.stringify(state));
-const persistCache = () => fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
+// Saves are coalesced: a click, an inline edit and a crawl's progress all ask
+// for one, and each used to re-serialise every finding on the spot. At most one
+// write per 300 ms; flushed on the way out, so closing the window loses nothing.
+let saveTimer = null;
+const flush = () => { clearTimeout(saveTimer); saveTimer = null; fs.writeFileSync(STATE_FILE, JSON.stringify(state)); };
+const persist = () => { saveTimer ||= setTimeout(flush, 300); };
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { if (saveTimer) flush(); process.exit(0); });
 
 // Formats build.js can measure go in as-is; HEIC/TIFF become JPEG on the way
 // in. GIF is left out: build.js cannot read its size and every strip image
 // needs one.
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.tif', '.tiff']);
 const KEEP_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
-const PDF_EXT = new Set(['.pdf', '.ai']);
-const TEXTUTIL_EXT = new Set(['.docx', '.doc', '.rtf', '.odt']);
-const PLAIN_EXT = new Set(['.txt', '.md']);
-const isDoc = (e, indesign) => PDF_EXT.has(e) || TEXTUTIL_EXT.has(e) || PLAIN_EXT.has(e) || (indesign && e === '.indd');
 // Longest side written into the repo. Netlify's image CDN resizes per screen;
 // this only keeps 40 MB camera files out of git.
 const MAX_SIDE = 2400;
@@ -98,12 +99,10 @@ const MAX_FOLDER_IMAGES = 300;   // per accepted folder; past this it is a dump,
 const ext = (p) => path.extname(p).toLowerCase();
 const id = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
 const tick = () => new Promise(r => setImmediate(r));   // let the server answer between chunks of work
-// Nothing on stdout but something on stderr is a failure even with exit code
-// 0: textutil reports "You don't have permission" that way, and taking it as
-// success cached a locked file as empty.
-const sh = (cmd, args, opts = {}) => new Promise((ok, no) =>
-  execFile(cmd, args, { maxBuffer: 256 << 20, timeout: 600000, ...opts }, (e, out, err) =>
-    e ? no(e) : (!out.trim() && err.trim()) ? no(new Error(err.trim())) : ok(out)));
+// The exit code decides. stdout rides on the error, because sips exits non-zero
+// for a batch with one bad file in it and the rest of its answer is still good.
+const sh = (cmd, args) => new Promise((ok, no) =>
+  execFile(cmd, args, { maxBuffer: 256 << 20, timeout: 600000 }, (e, out) => e ? no(Object.assign(e, { stdout: out })) : ok(out)));
 
 function readMdoc(file) {
   const s = fs.readFileSync(file, 'utf8');
@@ -112,15 +111,29 @@ function readMdoc(file) {
   return { data: JSON.parse(m[1]), body: m[2] };
 }
 
+// "images/<slug>/images/<n>" is Keystatic's own layout. The repo path and the
+// public URL are the same string, the URL with a leading slash.
+const imgRel = (slug, n) => `images/${slug}/images/${n}`;
+
+// Every write to a project goes through here, so the project list read below
+// can be kept between polls and dropped only when something actually changed.
+function writeMdoc(file, data, body) {
+  body = body.trim();
+  fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${body ? body + '\n' : ''}`);
+  projectsCache = null;
+}
+
+// Kept, not re-read: the page asks for this on every poll, and parsing every
+// project each time is wasted. Harvest's own writes clear it (writeMdoc); edits
+// made elsewhere while it runs appear after a restart — the launcher pulls first.
+let projectsCache = null;
 function projects() {
-  return fs.readdirSync(PROJECTS).filter(f => f.endsWith('.mdoc')).map(f => {
-    const { data, body } = readMdoc(path.join(PROJECTS, f));
+  return projectsCache ||= fs.readdirSync(PROJECTS).filter(f => f.endsWith('.mdoc')).map(f => {
+    const { data } = readMdoc(path.join(PROJECTS, f));
     return {
       slug: f.slice(0, -5), title: data.title || f, section: data.section, order: data.order ?? 10,
-      draft: !!data.draft, images: (data.images || []).length, details: (data.details || []).length,
-      nicknames: data.nicknames || [],
+      draft: !!data.draft, nicknames: data.nicknames || [],
       siteImages: (data.images || []).map(i => path.join(REPO, String(i.src || '').replace(/^\/+/, ''))),
-      words: body.trim() ? body.trim().split(/\s+/).length : 0,
     };
   }).sort((a, b) => (a.section || '').localeCompare(b.section || '') || a.order - b.order || a.title.localeCompare(b.title));
 }
@@ -193,19 +206,37 @@ function chunk(text) {
   return out;
 }
 
+// One table of which reader handles which extension; isDoc and extract both
+// read it, so a new format is one line.
+const READERS = {
+  '.pdf': pdfText, '.ai': pdfText,
+  '.docx': textutilText, '.doc': textutilText, '.rtf': textutilText, '.odt': textutilText,
+  '.txt': async (f) => chunk(fs.readFileSync(f, 'utf8')), '.md': async (f) => chunk(fs.readFileSync(f, 'utf8')),
+  '.indd': async (f) => (await sh('osascript', [INDD_AS, f])).split('\x1e'),
+};
+const isDoc = (e, indesign) => Object.hasOwn(READERS, e) && (e !== '.indd' || indesign);
+
+async function pdfText(f) { return JSON.parse(await sh('osascript', ['-l', 'JavaScript', PDF_JS, f])); }
+
+// textutil exits 0 even when it cannot read the file ("You don't have
+// permission" goes to stderr, nothing to stdout), so nothing back is treated
+// as a failure HERE, where that quirk lives. A genuinely empty document is
+// therefore re-read on each crawl, which costs nothing.
+async function textutilText(f) {
+  const t = await sh('textutil', ['-convert', 'txt', '-stdout', f]);
+  if (!t.trim()) throw new Error('textutil returned no text (locked, or not really this format)');
+  return chunk(t);
+}
+
 // Returns an array of text units: pages, stories or chunks. Cached by path,
 // size and date, so an unchanged file is read once, ever.
 async function extract(file) {
   const st = fs.statSync(file);
   const cached = path.join(TEXT, id(file, st.size, st.mtimeMs) + '.json');
   if (fs.existsSync(cached)) return JSON.parse(fs.readFileSync(cached, 'utf8'));
-  const e = ext(file);
-  let units = [];
+  let units;
   try {
-    if (PDF_EXT.has(e)) units = JSON.parse(await sh('osascript', ['-l', 'JavaScript', PDF_JS, file]));
-    else if (TEXTUTIL_EXT.has(e)) units = chunk(await sh('textutil', ['-convert', 'txt', '-stdout', file]));
-    else if (PLAIN_EXT.has(e)) units = chunk(fs.readFileSync(file, 'utf8'));
-    else if (e === '.indd') units = (await sh('osascript', [INDD_AS, file])).split('\x1e');
+    units = await READERS[ext(file)](file);
   } catch (err) {
     // A locked, damaged or password-protected file must not stop the crawl —
     // but it must say so, or a missing result looks like a missing match.
@@ -255,10 +286,10 @@ function add(f) {
 // inserted into a PDF, "page 5" is different text, and keying on the number
 // carried the old text and the old decision forward onto it. Pending cards for
 // text the document no longer contains are dropped; decided ones stay, as a
-// record of what was chosen. `owns` limits the clean-up to this pass's own
-// cards — a crawl's title mentions and a folder's every-page cards for the
-// same file must not delete each other.
-function addTexts(file, units, pick, owns, from) {
+// record of what was chosen. The clean-up only touches cards made by the same
+// kind of pass (`from`: none for a crawl's title mentions, the folder's id for
+// a folder's every-page cards) so the two cannot delete each other's.
+function addTexts(file, units, pick, from) {
   const live = new Set();
   units.forEach((text, i) => {
     const th = id(text);
@@ -268,7 +299,7 @@ function addTexts(file, units, pick, owns, from) {
     }
   });
   for (const [k, f] of Object.entries(state.findings)) {
-    if (f.kind === 'text' && f.path === file && f.status === 'pending' && owns(f) && !live.has(f.project + f.th)) delete state.findings[k];
+    if (f.kind === 'text' && f.path === file && f.status === 'pending' && (f.from ?? null) === (from ?? null) && !live.has(f.project + f.th)) delete state.findings[k];
   }
 }
 
@@ -289,8 +320,8 @@ async function walk(root, visit, depth = 0) {
   }
 }
 
-async function crawl(root, indesign) {
-  job = { running: true, phase: 'Listing files', done: 0, total: 0, added: 0, error: null };
+async function crawl(root) {
+  const indesign = state.indesign;
   const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
   const docs = [], imgs = [];
   await walk(root, (p, dir) => {
@@ -307,21 +338,18 @@ async function crawl(root, indesign) {
   persist();
   job.phase = 'Reading documents'; job.done = 0; job.total = docs.length;
   for (const d of docs) {
-    addTexts(d, await extract(d), (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug), (f) => !f.from);
+    addTexts(d, await extract(d), (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
     job.done++;
     if (job.done % 10 === 0) persist();
     await tick();
   }
   await lookalikes(projs, imgs, root);
-  await sizeImages();
-  persist();
-  job.running = false; job.phase = 'Done';
 }
 
 // An accepted folder is about the project whether or not the title is written
 // anywhere inside it, so everything in it becomes a finding.
-async function expandFolder(f, indesign) {
-  job = { running: true, phase: `Reading ${path.basename(f.path)}`, done: 0, total: 0, added: 0, error: null };
+async function expandFolder(f) {
+  const indesign = state.indesign;
   const imgs = [], docs = [];
   await walk(f.path, (p, dir) => {
     if (dir) return;
@@ -331,35 +359,64 @@ async function expandFolder(f, indesign) {
   for (const p of imgs) job.added += add({ project: f.project, kind: 'image', path: p, from: f.id });
   job.total = docs.length;
   for (const d of docs) {
-    addTexts(d, await extract(d), (text) => text.length >= 40 ? [f.project] : [], (x) => x.from === f.id, f.id);
+    addTexts(d, await extract(d), (text) => text.length >= 40 ? [f.project] : [], f.id);
     job.done++;
     await tick();
   }
-  await sizeImages();
-  persist();
-  job.running = false; job.phase = 'Done';
+  f.expanded = true;
 }
 
 async function sizeImages() {
-  // A file moved or renamed since it was found has nothing to measure. Marked
-  // as measured (null) so it is not retried — it was retried on every job,
-  // and its missing path threw, failing that job and every one after it.
-  const todo = Object.values(state.findings).filter(f => f.kind === 'image' && f.w === undefined && (fs.existsSync(f.path) || (f.w = null)));
-  const info = await sipsInfo(todo.map(f => fs.realpathSync(f.path)));
-  for (const f of todo) {
-    const i = info[fs.realpathSync(f.path)] || {};
+  // Resolved once per image (sips reports real paths). A file moved or renamed
+  // since it was found has nothing to measure: marked measured (null) so it is
+  // not retried — its missing path used to throw and fail every later job.
+  const todo = [];
+  for (const f of Object.values(state.findings)) {
+    if (f.kind !== 'image' || f.w !== undefined) continue;
+    try { todo.push([f, fs.realpathSync(f.path)]); } catch { f.w = null; }
+  }
+  const info = await sipsInfo(todo.map(([, real]) => real));
+  for (const [f, real] of todo) {
+    const i = info[real] || {};
     f.w = +i.pixelWidth || null; f.h = +i.pixelHeight || null;
     f.camera = [i.make, i.model].filter(Boolean).join(' ') || null;
     f.taken = i.creation ? i.creation.replace(/^(\d+):(\d+):(\d+)/, '$1-$2-$3').slice(0, 10) : null;
   }
 }
 
-// Jobs run one after another. Accepting a folder while a crawl is still
-// reading documents queues its expansion behind the crawl — it used to be
-// refused AFTER the folder was already marked accepted, so it never expanded.
+// Jobs run one after another, and every job starts and ends the same way:
+// fresh counters; then image sizes measured and state saved, even on failure.
 let queue = Promise.resolve();
-function run(fn) {
-  queue = queue.then(fn).catch(e => { job.running = false; job.error = e.message; console.warn(e); });
+function run(phase, fn) {
+  queue = queue.then(async () => {
+    job = { running: true, phase, done: 0, total: 0, added: 0, error: null };
+    try { await fn(); await sizeImages(); job.phase = 'Done'; }
+    catch (e) { job.error = e.message; console.warn(e); }
+    finally { flush(); job.running = false; }
+  });
+}
+
+// The SAVED state is the queue of folders to expand: any accepted folder not
+// yet expanded is queued whenever this runs — after an accept, and at startup.
+// So closing the window mid-crawl strands nothing, and accepting the same
+// folder twice (Accept, Undo, Accept) cannot expand it twice.
+const queued = new Set();
+function drain() {
+  for (const f of Object.values(state.findings)) {
+    if (f.kind !== 'folder' || f.status !== 'accepted' || f.expanded || queued.has(f.id)) continue;
+    queued.add(f.id);
+    run(`Reading ${path.basename(f.path)}`, async () => { try { await expandFolder(f); } finally { queued.delete(f.id); } });
+  }
+}
+
+// Pointing at a folder — by hand, or by accepting a working title — is the
+// same as accepting a match for it.
+function acceptFolder(project, p, extra) {
+  const f = { project, kind: 'folder', path: p, ...extra };
+  add(f);
+  state.findings[f.id].status = 'accepted';
+  drain();
+  return state.findings[f.id];
 }
 
 /* ------------------------------------------------------------- look-alikes */
@@ -389,7 +446,7 @@ const LOOKALIKE = 6;   // bits of 64. Re-exports measured 0-4; unrelated photos 
 const pop = (x) => { let n = 0; while (x) { x &= x - 1n; n++; } return n; };
 // A near-blank image (white page, flat logo) hashes to almost all one bit and
 // "matches" every other near-blank image. Those say nothing.
-const useful = (h) => h && pop(BigInt('0x' + h)) >= 8 && pop(BigInt('0x' + h)) <= 56;
+const useful = (h) => { if (!h) return false; const n = pop(BigInt('0x' + h)); return n >= 8 && n <= 56; };
 
 let hashN = 0;
 async function dhash(file) {
@@ -435,11 +492,11 @@ function namingFolder(file, root) {
 async function lookalikes(projs, imgs, root) {
   job.phase = 'Comparing pictures'; job.done = 0; job.total = imgs.length;
   const site = [];
-  for (const pr of projs) for (const f of pr.siteImages) {
-    if (!fs.existsSync(f)) continue;
+  await pool(projs.flatMap(pr => pr.siteImages.map(f => ({ pr, f }))), 8, async ({ pr, f }) => {
+    if (!fs.existsSync(f)) return;
     const h = await dhash(f);
     if (useful(h)) site.push({ pr, f, h: BigInt('0x' + h) });
-  }
+  });
   const hits = {};
   await pool(imgs, 8, async (img) => {
     const h = await dhash(img);
@@ -461,7 +518,7 @@ async function lookalikes(projs, imgs, root) {
     if (!name || pr.m.name(name)) continue;
     job.added += add({ project: pr.slug, kind: 'nickname', path: folder, text: name, pairs: pairs.slice(0, 4), count: pairs.length });
   }
-  persistCache();
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
 }
 
 function addNickname(slug, name) {
@@ -469,17 +526,15 @@ function addNickname(slug, name) {
   const { data, body } = readMdoc(file);
   if ((data.nicknames || []).some(n => compact(n) === compact(name))) return;
   data.nicknames = [...(data.nicknames || []), name];
-  fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${body}`);
+  writeMdoc(file, data, body);
 }
 
 /* ------------------------------------------------------------- writing */
 
-const runSips = (args) => sh('sips', args);
-
 async function importImage(src, slug, n, w, h) {
   const e = ext(src);
   const outExt = KEEP_EXT.has(e) ? (e === '.jpeg' ? '.jpg' : e) : '.jpg';
-  const dir = path.join(REPO, 'images', slug, 'images', String(n));
+  const dir = path.join(REPO, imgRel(slug, n));
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, 'src' + outExt);
   const big = Math.max(w || 0, h || 0) > MAX_SIDE;
@@ -488,8 +543,8 @@ async function importImage(src, slug, n, w, h) {
   if (big) args.push('-Z', String(MAX_SIDE));
   if (outExt === '.jpg' && (big || !KEEP_EXT.has(e))) args.push('-s', 'format', 'jpeg', '-s', 'formatOptions', '85');
   if (!args.length || e === '.webp') fs.copyFileSync(src, out);   // sips cannot write WebP
-  else await runSips([...args, src, '--out', out]);
-  return `/images/${slug}/images/${n}/src${outExt}`;
+  else await sh('sips', [...args, src, '--out', out]);
+  return `/${imgRel(slug, n)}/src${outExt}`;
 }
 
 // Text from a PDF must stay text. Without escaping, a page that starts with
@@ -512,7 +567,7 @@ async function write(slug) {
   for (const f of acc) {
     if (f.kind === 'image') {
       let n = data.images.length;
-      while (fs.existsSync(path.join(REPO, 'images', slug, 'images', String(n)))) n++;
+      while (fs.existsSync(path.join(REPO, imgRel(slug, n)))) n++;
       const rec = { src: await importImage(f.path, slug, n, f.w, f.h), alt: f.alt.trim() };
       if (String(f.caption || '').trim()) rec.caption = f.caption.trim();
       data.images.push(rec);
@@ -524,8 +579,7 @@ async function write(slug) {
       else paras.push(mdEscape(t));
     }
   }
-  const newBody = [body.trim(), ...paras].filter(Boolean).join('\n\n');
-  fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${newBody ? newBody + '\n' : ''}`);
+  writeMdoc(file, data, [body.trim(), ...paras].filter(Boolean).join('\n\n'));
   for (const f of acc) f.status = 'written';
   persist();
   return { written: acc.length };
@@ -550,22 +604,14 @@ const server = http.createServer(async (req, res) => {
     if (font) return send(200, 'font/woff2', fs.readFileSync(path.join(REPO, 'fonts', font[1])));
 
     if (p === '/api/state') {
-      const counts = {};
-      for (const f of Object.values(state.findings)) {
-        const c = counts[f.project] ||= { pending: 0, accepted: 0 };
-        if (f.status === 'pending') c.pending++; else if (f.status === 'accepted') c.accepted++;
-      }
-      return json({ root: state.root, home: HOME, job, projects: projects().map(pr => ({ ...pr, ...(counts[pr.slug] || { pending: 0, accepted: 0 }) })) });
+      const pending = {};
+      for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
+      return json({ root: state.root, home: HOME, job, projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
     }
     if (p === '/api/ls') {
       const dir = path.resolve(url.searchParams.get('p') || HOME);
-      const dirs = [];
-      let files = 0;
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (SKIP.test(e.name)) continue;
-        if (e.isDirectory()) dirs.push(e.name); else files++;
-      }
-      return json({ path: dir, dirs: dirs.sort((a, b) => a.localeCompare(b)), files });
+      const dirs = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory() && !SKIP.test(e.name)).map(e => e.name);
+      return json({ path: dir, dirs: dirs.sort((a, b) => a.localeCompare(b)) });
     }
     if (p === '/api/findings') {
       const slug = url.searchParams.get('project');
@@ -577,46 +623,38 @@ const server = http.createServer(async (req, res) => {
       // Every thumbnail goes through sips, not just HEIC: a page of forty
       // full-size camera files is a gigabyte of decoding for the browser.
       const t = path.join(THUMBS, id(abs, fs.statSync(abs).mtimeMs) + '.jpg');
-      if (!fs.existsSync(t)) await runSips(['-Z', '480', '-s', 'format', 'jpeg', abs, '--out', t]);
+      if (!fs.existsSync(t)) await sh('sips', ['-Z', '480', '-s', 'format', 'jpeg', abs, '--out', t]);
       return send(200, 'image/jpeg', fs.readFileSync(t));
     }
 
     if (req.method !== 'POST') return send(404, 'text/plain', 'not found');
     const b = await body(req);
+    if ('indesign' in b) state.indesign = !!b.indesign;   // read by every job, queued or not
     if (p === '/api/crawl') {
       if (!fs.statSync(b.root, { throwIfNoEntry: false })?.isDirectory()) throw new Error('That folder no longer exists.');
       state.root = b.root; persist();
-      run(() => crawl(b.root, !!b.indesign));
+      run('Listing files', () => crawl(b.root));
       return json({ ok: true });
     }
     if (p === '/api/finding') {
       const f = state.findings[b.id];
       if (!f) throw new Error('Unknown finding.');
       for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
-      persist();
-      if (f.kind === 'folder' && b.status === 'accepted') run(() => expandFolder(f, !!b.indesign));
+      if (f.kind === 'folder' && b.status === 'accepted') drain();
       // An accepted working title is written to the project at once (it is
       // what the NEXT crawl matches on), and its folder is taken as the work's.
       if (f.kind === 'nickname' && b.status === 'accepted') {
         const name = String(f.edited ?? f.text).trim();
         if (name) addNickname(f.project, name);
-        if (fs.statSync(f.path).isDirectory()) {
-          add({ project: f.project, kind: 'folder', path: f.path });
-          const folder = state.findings[id(f.project, 'folder', f.path, '')];
-          folder.status = 'accepted';
-          run(() => expandFolder(folder, !!b.indesign));
-        }
+        if (fs.statSync(f.path, { throwIfNoEntry: false })?.isDirectory()) acceptFolder(f.project, f.path);
         f.status = 'written';
       }
       persist();
       return json(f);
     }
     if (p === '/api/link') {
-      // Pointing at a folder by hand is the same as accepting a match for it.
-      add({ project: b.project, kind: 'folder', path: b.path, linked: true });
-      const f = state.findings[id(b.project, 'folder', b.path, '')];
-      f.status = 'accepted'; persist();
-      run(() => expandFolder(f, !!b.indesign));
+      const f = acceptFolder(b.project, b.path, { linked: true });
+      persist();
       return json(f);
     }
     if (p === '/api/write') return json(await write(b.project));
@@ -641,6 +679,7 @@ server.listen(0, '127.0.0.1', () => {
   ORIGIN = `http://127.0.0.1:${server.address().port}`;
   console.log(`Harvest is open at ${ORIGIN}/\nClose this window (or press Ctrl-C) when you are done.`);
   if (!process.env.HARVEST_NO_OPEN) execFile('open', [ORIGIN + '/']);
+  drain();   // folders accepted last time but never expanded
 });
 
 /* ------------------------------------------------------------- page */
@@ -742,7 +781,8 @@ const PAGE = String.raw`<!doctype html>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const api = (p, b) => fetch(p, b && { method:'POST', body:JSON.stringify(b) }).then(async r => { const d = await r.json(); if (d.error) throw new Error(d.error); return d; });
-const base = (p) => p.split('/').pop();
+const tilde = (p) => esc(p.replace(S.home, '~'));
+const thumb = (p) => '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(p) + '">';
 let S = null, folder = null, project = null, findings = [], lastJob = '';
 
 /* ---- tree: lazy, one level per click */
@@ -772,6 +812,7 @@ function drawProjects() {
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d) return;
+  save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; $('msg').textContent = '';
   $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons(); loadFindings();
 });
@@ -791,37 +832,54 @@ async function poll() {
   $('status').textContent = j.error ? '⚠ ' + j.error
     : j.running ? j.phase + (j.total ? ' ' + j.done + ' / ' + j.total : ' · ' + j.done) + ' · ' + j.added + ' found'
     : j.phase === 'Done' ? 'Done · ' + j.added + ' new' : '';
-  drawProjects(); buttons();
+  // redrawn only when it changed: this runs every 1-4 seconds
+  const pj = JSON.stringify(S.projects);
+  if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); }
+  buttons();
   // any movement in the job means findings may have changed; a short job can
   // start and finish between two polls, so compare, do not watch for "running"
   // ...but never while a field is being typed in: a redraw replaces every
   // card and would throw away the unsaved text. It catches up on a later poll.
-  const key = [j.phase, j.done, j.added, j.running].join('|');
+  // (not j.done: it moves with every file read, and would refetch every card
+  // every poll while nothing new had been found)
+  const key = [j.phase, j.added, j.running].join('|');
   if (key !== lastJob && project && !editing()) { loadFindings(); lastJob = key; }
   clearTimeout(poll.t); poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
 
 /* ---- findings */
+/* ONE SAVE PATH FOR EVERYTHING TYPED
+   Each keystroke updates the local copy at once and queues a save; the saves
+   run one after another on a single chain. Anything that depends on typed text
+   (Accept, Write) waits for the chain first, so it can never overtake a save.
+   A redraw draws from the local copy, so it cannot lose typing either; it is
+   still skipped while a field has focus, only so the caret stays put. */
+const dirty = new Map();   // finding id -> { field: value } not yet sent
+let saving = Promise.resolve();
+function save() {
+  clearTimeout(save.t);
+  for (const [id, fields] of dirty) saving = saving.then(() => api('/api/finding', { id, ...fields }));
+  dirty.clear();
+  return saving;
+}
 const editing = () => { const a = document.activeElement; return !!(a && a.dataset && a.dataset.k); };
-// Unsaved typing goes WITH the request that depends on it. A separate save
-// fired on blur can reach the server after the request it was meant to precede.
-const edits = (card) => { const o = {}; card.querySelectorAll('[data-k]').forEach(el => { o[el.dataset.k] = el.value; }); return o; };
 async function loadFindings() {
   findings = await api('/api/findings?project=' + encodeURIComponent(project));
+  for (const [id, fields] of dirty) Object.assign(findings.find(f => f.id === id) || {}, fields);
   drawFindings();
 }
-const label = (f) => esc(f.path.replace(S.home, '~')) + (f.kind === 'text' && f.unit !== undefined ? ' · ' + (/\.(pdf|ai)$/i.test(f.path) ? 'page ' : 'part ') + (f.unit + 1) : '');
+const label = (f) => tilde(f.path) + (f.kind === 'text' && f.unit !== undefined ? ' · ' + (/\.(pdf|ai)$/i.test(f.path) ? 'page ' : 'part ') + (f.unit + 1) : '');
 function card(f) {
   const acts = f.status === 'pending'
     ? '<button class="btn" data-a="accepted">Accept</button><button class="btn" data-a="rejected">Reject</button>'
     : f.status === 'written' ? '<span class="dim cap">Written</span>' : '<button class="btn" data-a="pending">Undo</button>';
   let h = '<div class="card" data-id="' + f.id + '">';
   if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
-    '<div class="pairs">' + (f.pairs || []).map(([found, site]) => '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(site) + '"><img loading="lazy" src="/thumb?p=' + encodeURIComponent(found) + '">').join('') + '</div>' +
-    '<div class="dim">On the site · found in ' + esc(f.path.replace(S.home, '~')) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
-  if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + esc(f.path.replace(S.home, '~')) + '</div>';
+    '<div class="pairs">' + (f.pairs || []).map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div>' +
+    '<div class="dim">On the site · found in ' + tilde(f.path) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
+  if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + tilde(f.path) + '</div>';
   if (f.kind === 'image') {
-    h += '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(f.path) + '"><div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
+    h += thumb(f.path) + '<div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
     if (f.status === 'accepted') h += '<input data-k="alt" placeholder="Alt text — what is in the picture (required)" value="' + esc(f.alt) + '"><input data-k="caption" placeholder="Caption (optional)" value="' + esc(f.caption) + '">';
   }
   if (f.kind === 'text') {
@@ -832,9 +890,9 @@ function card(f) {
 }
 function drawFindings() {
   for (const col of ['pending', 'accepted', 'rejected']) {
-    // folders first in PENDING: accepting one is what fills the rest
-    const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written'))
-      .sort((a, b) => (/folder|nickname/.test(a.kind) ? 0 : 1) - (/folder|nickname/.test(b.kind) ? 0 : 1));
+    // folders and working titles first: accepting one is what fills the rest
+    const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' ? 0 : 1);
+    const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
     $(col).innerHTML = list.map(card).join('');
     $('n-' + col).textContent = list.length || '';
   }
@@ -842,19 +900,19 @@ function drawFindings() {
 }
 $('review').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]'); if (!b) return;
-  const card = b.closest('.card'), id = card.dataset.id;
+  const id = b.closest('.card').dataset.id;
   const f = findings.find(x => x.id === id);
-  try { Object.assign(f, await api('/api/finding', { id, ...edits(card), status: b.dataset.a, indesign: $('indesign').checked })); }
+  try { await save(); Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked })); }
   catch (err) { $('status').textContent = '⚠ ' + err.message; return; }
   drawFindings();
   if (f.kind === 'folder' || f.kind === 'nickname') poll();
 });
-// inline edits save on every change, so nothing typed is lost to a reload
-$('review').addEventListener('change', (e) => {
+$('review').addEventListener('input', (e) => {
   const k = e.target.dataset.k; if (!k) return;
   const id = e.target.closest('.card').dataset.id;
   findings.find(x => x.id === id)[k] = e.target.value;
-  api('/api/finding', { id, [k]: e.target.value });
+  dirty.set(id, { ...dirty.get(id), [k]: e.target.value });
+  clearTimeout(save.t); save.t = setTimeout(save, 400);
 });
 
 $('nick').addEventListener('keydown', async (e) => {
@@ -867,8 +925,7 @@ $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, ind
 $('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('write').addEventListener('click', async () => {
   try {
-    // a field still being typed in has not been saved yet: save it first
-    if (editing()) { const card = document.activeElement.closest('.card'); await api('/api/finding', { id: card.dataset.id, ...edits(card) }); }
+    await save();
     const d = await api('/api/write', { project });
     $('msg').textContent = d.written + ' written into the project. Not live yet — tell Claude "publish".';
     loadFindings();
@@ -878,7 +935,7 @@ $('write').addEventListener('click', async () => {
 (async () => {
   await poll();
   const li = document.createElement('li');
-  li.innerHTML = '<span data-p="' + esc(S.home) + '" class="sel"><i>⌄</i>~ ' + esc(base(S.home)) + '</span>';
+  li.innerHTML = '<span data-p="' + esc(S.home) + '" class="sel"><i>⌄</i>~ ' + esc(S.home.split('/').pop()) + '</span>';
   const ul = document.createElement('ul'); ul.appendChild(li); $('tree').appendChild(ul);
   folder = S.home; buttons();
   await branch(li, S.home);
