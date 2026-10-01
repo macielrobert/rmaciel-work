@@ -58,8 +58,15 @@ const HOME = path.resolve(os.homedir());
 const STORE = path.join(HOME, 'Library/Application Support/Harvest');
 fs.mkdirSync(STORE, { recursive: true });
 const STATE_FILE = path.join(STORE, 'state.json');
-const CACHE_FILE = path.join(STORE, 'text-cache.json');
+// Image fingerprints are tiny and live in one file. Document text does NOT:
+// it is up to 6000 characters a page across every document ever crawled, and
+// as one JSON file it was rewritten whole every ten documents — slower each
+// time, and past ~512 MB V8 cannot build the string at all. One small file per
+// document is written once and never rewritten.
+const CACHE_FILE = path.join(STORE, 'hash-cache.json');
+const TEXT = path.join(STORE, 'text');
 const THUMBS = path.join(STORE, 'thumbs');
+fs.mkdirSync(TEXT, { recursive: true });
 fs.mkdirSync(THUMBS, { recursive: true });
 
 const load = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
@@ -91,8 +98,12 @@ const MAX_FOLDER_IMAGES = 300;   // per accepted folder; past this it is a dump,
 const ext = (p) => path.extname(p).toLowerCase();
 const id = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
 const tick = () => new Promise(r => setImmediate(r));   // let the server answer between chunks of work
+// Nothing on stdout but something on stderr is a failure even with exit code
+// 0: textutil reports "You don't have permission" that way, and taking it as
+// success cached a locked file as empty.
 const sh = (cmd, args, opts = {}) => new Promise((ok, no) =>
-  execFile(cmd, args, { maxBuffer: 256 << 20, timeout: 600000, ...opts }, (e, out) => e ? no(e) : ok(out)));
+  execFile(cmd, args, { maxBuffer: 256 << 20, timeout: 600000, ...opts }, (e, out, err) =>
+    e ? no(e) : (!out.trim() && err.trim()) ? no(new Error(err.trim())) : ok(out)));
 
 function readMdoc(file) {
   const s = fs.readFileSync(file, 'utf8');
@@ -130,8 +141,16 @@ function matcher(names) {
   const each = names.map(n => String(n || '').trim()).filter(Boolean).map(title => {
     const whole = compact(title);
     const words = title.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1 && !STOP.has(t));
+    // Under three letters ("H&M" -> "hm") a substring test would match
+    // "rhythm", so a short title must stand alone: the letters in order, any
+    // punctuation between them, nothing alphanumeric either side.
+    const short = whole.length && whole.length < 3 && new RegExp('(^|[^a-z0-9])' + [...whole].join('[^a-z0-9]*') + '($|[^a-z0-9])', 'i');
     return {
-      name: (n) => { const c = compact(n); return (whole.length >= 3 && c.includes(whole)) || (words.length > 1 && words.every(w => c.includes(w))); },
+      name: (n) => {
+        if (short) return short.test(n);
+        const c = compact(n);
+        return (whole.length >= 3 && c.includes(whole)) || (words.length > 1 && words.every(w => c.includes(w)));
+      },
       text: title.split(/\s+/).map(escRe).join('[\\s\\-_]+'),
     };
   });
@@ -178,8 +197,8 @@ function chunk(text) {
 // size and date, so an unchanged file is read once, ever.
 async function extract(file) {
   const st = fs.statSync(file);
-  const key = `${file}|${st.size}|${st.mtimeMs}`;
-  if (cache[key]) return cache[key];
+  const cached = path.join(TEXT, id(file, st.size, st.mtimeMs) + '.json');
+  if (fs.existsSync(cached)) return JSON.parse(fs.readFileSync(cached, 'utf8'));
   const e = ext(file);
   let units = [];
   try {
@@ -190,10 +209,14 @@ async function extract(file) {
   } catch (err) {
     // A locked, damaged or password-protected file must not stop the crawl —
     // but it must say so, or a missing result looks like a missing match.
+    // NOT cached: most failures are passing (InDesign still starting, a file
+    // still downloading from iCloud), and a cached empty result would skip
+    // the file on every crawl until it happened to change.
     console.warn(`could not read ${file}: ${err.message.split('\n')[0]}`);
+    return [];
   }
   units = units.map(u => String(u).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 6000));
-  cache[key] = units;
+  fs.writeFileSync(cached, JSON.stringify(units));
   return units;
 }
 
@@ -222,23 +245,46 @@ async function sipsInfo(files) {
 // Same id for the same thing every crawl, so a decision already made sticks
 // and a re-crawl only ever ADDS what is new.
 function add(f) {
-  f.id = id(f.project, f.kind, f.path, f.unit ?? '');
+  f.id = id(f.project, f.kind, f.path, f.th ?? '');
   if (state.findings[f.id]) return false;
   state.findings[f.id] = { status: 'pending', ...f };
   return true;
 }
 
+// Text is identified by its CONTENT, not its page number: after pages are
+// inserted into a PDF, "page 5" is different text, and keying on the number
+// carried the old text and the old decision forward onto it. Pending cards for
+// text the document no longer contains are dropped; decided ones stay, as a
+// record of what was chosen. `owns` limits the clean-up to this pass's own
+// cards — a crawl's title mentions and a folder's every-page cards for the
+// same file must not delete each other.
+function addTexts(file, units, pick, owns, from) {
+  const live = new Set();
+  units.forEach((text, i) => {
+    const th = id(text);
+    for (const project of pick(text)) {
+      live.add(project + th);
+      job.added += add({ project, kind: 'text', path: file, unit: i, th, text, from });
+    }
+  });
+  for (const [k, f] of Object.entries(state.findings)) {
+    if (f.kind === 'text' && f.path === file && f.status === 'pending' && owns(f) && !live.has(f.project + f.th)) delete state.findings[k];
+  }
+}
+
 let job = { running: false, phase: 'idle', done: 0, total: 0, added: 0, error: null };
 
-function walk(root, visit, depth = 0) {
+// Asynchronous on purpose: listing a home folder takes a while, and a
+// synchronous walk froze the server — no status, no thumbnails — until done.
+async function walk(root, visit, depth = 0) {
   let entries;
-  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return; }
+  try { entries = await fs.promises.readdir(root, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
     if (SKIP.test(e.name)) continue;
     const p = path.join(root, e.name);
     // the site's own images would match themselves and teach nothing
     if (p === REPO) continue;
-    if (e.isDirectory()) { if (visit(p, true) !== false && depth < MAX_DEPTH) walk(p, visit, depth + 1); }
+    if (e.isDirectory()) { visit(p, true); if (depth < MAX_DEPTH) await walk(p, visit, depth + 1); }
     else if (e.isFile()) visit(p, false);
   }
 }
@@ -247,7 +293,7 @@ async function crawl(root, indesign) {
   job = { running: true, phase: 'Listing files', done: 0, total: 0, added: 0, error: null };
   const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
   const docs = [], imgs = [];
-  walk(root, (p, dir) => {
+  await walk(root, (p, dir) => {
     job.done++;
     const name = path.basename(p);
     for (const pr of projs) {
@@ -261,17 +307,14 @@ async function crawl(root, indesign) {
   persist();
   job.phase = 'Reading documents'; job.done = 0; job.total = docs.length;
   for (const d of docs) {
-    const units = await extract(d);
-    units.forEach((text, i) => {
-      for (const pr of projs) if (pr.m.text.test(text)) job.added += add({ project: pr.slug, kind: 'text', path: d, unit: i, text });
-    });
+    addTexts(d, await extract(d), (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug), (f) => !f.from);
     job.done++;
-    if (job.done % 10 === 0) { persist(); persistCache(); }
+    if (job.done % 10 === 0) persist();
     await tick();
   }
   await lookalikes(projs, imgs, root);
   await sizeImages();
-  persist(); persistCache();
+  persist();
   job.running = false; job.phase = 'Done';
 }
 
@@ -280,7 +323,7 @@ async function crawl(root, indesign) {
 async function expandFolder(f, indesign) {
   job = { running: true, phase: `Reading ${path.basename(f.path)}`, done: 0, total: 0, added: 0, error: null };
   const imgs = [], docs = [];
-  walk(f.path, (p, dir) => {
+  await walk(f.path, (p, dir) => {
     if (dir) return;
     if (IMAGE_EXT.has(ext(p)) && imgs.length < MAX_FOLDER_IMAGES) imgs.push(p);
     else if (isDoc(ext(p), indesign)) docs.push(p);
@@ -288,19 +331,20 @@ async function expandFolder(f, indesign) {
   for (const p of imgs) job.added += add({ project: f.project, kind: 'image', path: p, from: f.id });
   job.total = docs.length;
   for (const d of docs) {
-    (await extract(d)).forEach((text, i) => {
-      if (text.length >= 40) job.added += add({ project: f.project, kind: 'text', path: d, unit: i, text, from: f.id });
-    });
+    addTexts(d, await extract(d), (text) => text.length >= 40 ? [f.project] : [], (x) => x.from === f.id, f.id);
     job.done++;
     await tick();
   }
   await sizeImages();
-  persist(); persistCache();
+  persist();
   job.running = false; job.phase = 'Done';
 }
 
 async function sizeImages() {
-  const todo = Object.values(state.findings).filter(f => f.kind === 'image' && f.w === undefined);
+  // A file moved or renamed since it was found has nothing to measure. Marked
+  // as measured (null) so it is not retried — it was retried on every job,
+  // and its missing path threw, failing that job and every one after it.
+  const todo = Object.values(state.findings).filter(f => f.kind === 'image' && f.w === undefined && (fs.existsSync(f.path) || (f.w = null)));
   const info = await sipsInfo(todo.map(f => fs.realpathSync(f.path)));
   for (const f of todo) {
     const i = info[fs.realpathSync(f.path)] || {};
@@ -310,9 +354,12 @@ async function sizeImages() {
   }
 }
 
+// Jobs run one after another. Accepting a folder while a crawl is still
+// reading documents queues its expansion behind the crawl — it used to be
+// refused AFTER the folder was already marked accepted, so it never expanded.
+let queue = Promise.resolve();
 function run(fn) {
-  if (job.running) throw new Error('Already working — wait for the current crawl to finish.');
-  fn().catch(e => { job.running = false; job.error = e.message; console.warn(e); });
+  queue = queue.then(fn).catch(e => { job.running = false; job.error = e.message; console.warn(e); });
 }
 
 /* ------------------------------------------------------------- look-alikes */
@@ -731,9 +778,10 @@ $('projects').addEventListener('click', (e) => {
 
 /* ---- status */
 function buttons() {
-  $('crawl').disabled = !folder || (S && S.job.running);
+  // jobs queue on the server, so nothing here waits for a running one
+  $('crawl').disabled = !folder;
   const pr = S && S.projects.find(p => p.slug === project);
-  $('link').disabled = !folder || !project || S.job.running;
+  $('link').disabled = !folder || !project;
   $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';
 }
 async function poll() {
@@ -746,13 +794,18 @@ async function poll() {
   drawProjects(); buttons();
   // any movement in the job means findings may have changed; a short job can
   // start and finish between two polls, so compare, do not watch for "running"
+  // ...but never while a field is being typed in: a redraw replaces every
+  // card and would throw away the unsaved text. It catches up on a later poll.
   const key = [j.phase, j.done, j.added, j.running].join('|');
-  if (key !== lastJob && project) loadFindings();
-  lastJob = key;
+  if (key !== lastJob && project && !editing()) { loadFindings(); lastJob = key; }
   clearTimeout(poll.t); poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
 
 /* ---- findings */
+const editing = () => { const a = document.activeElement; return !!(a && a.dataset && a.dataset.k); };
+// Unsaved typing goes WITH the request that depends on it. A separate save
+// fired on blur can reach the server after the request it was meant to precede.
+const edits = (card) => { const o = {}; card.querySelectorAll('[data-k]').forEach(el => { o[el.dataset.k] = el.value; }); return o; };
 async function loadFindings() {
   findings = await api('/api/findings?project=' + encodeURIComponent(project));
   drawFindings();
@@ -789,9 +842,10 @@ function drawFindings() {
 }
 $('review').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]'); if (!b) return;
-  const id = b.closest('.card').dataset.id;
+  const card = b.closest('.card'), id = card.dataset.id;
   const f = findings.find(x => x.id === id);
-  Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked }));
+  try { Object.assign(f, await api('/api/finding', { id, ...edits(card), status: b.dataset.a, indesign: $('indesign').checked })); }
+  catch (err) { $('status').textContent = '⚠ ' + err.message; return; }
   drawFindings();
   if (f.kind === 'folder' || f.kind === 'nickname') poll();
 });
@@ -812,10 +866,9 @@ $('nick').addEventListener('keydown', async (e) => {
 $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('write').addEventListener('click', async () => {
-  // a field still being typed in has not fired "change" yet
-  document.activeElement && document.activeElement.blur();
-  await new Promise(r => setTimeout(r, 150));
   try {
+    // a field still being typed in has not been saved yet: save it first
+    if (editing()) { const card = document.activeElement.closest('.card'); await api('/api/finding', { id: card.dataset.id, ...edits(card) }); }
     const d = await api('/api/write', { project });
     $('msg').textContent = d.written + ' written into the project. Not live yet — tell Claude "publish".';
     loadFindings();
