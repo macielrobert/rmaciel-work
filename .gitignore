@@ -9,3 +9,7 @@ node_modules/
 .astro/
 .netlify/
 .DS_Store
+
+# Harvest.app and its DMG, built by tools/build-app.sh. Machine-specific:
+# the app has this Mac's repo path written into it.
+app-build/

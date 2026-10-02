@@ -1,0 +1,53 @@
+#!/bin/zsh
+# Builds Harvest.app and Harvest.dmg into app-build/ (ignored by git).
+#
+#   tools/build-app.sh
+#
+# Rebuild after moving the site folder: the app finds harvest.js by the path
+# written into it here. Changes to harvest.js itself need NO rebuild — the app
+# runs whatever is in the repo each time it opens.
+set -e
+cd "$(dirname "$0")/.."
+REPO="$PWD"
+NODE="$(command -v node || echo /usr/local/bin/node)"
+OUT="$REPO/app-build"
+APP="$OUT/Harvest.app"
+
+rm -rf "$OUT"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+swiftc -O tools/HarvestApp.swift -o "$APP/Contents/MacOS/Harvest"
+
+# ponytail: no icon yet, so the Dock shows the generic app icon. Add an .icns to
+# Contents/Resources and CFBundleIconFile below if it matters.
+xml() { print -r -- "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+cat > "$APP/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleExecutable</key><string>Harvest</string>
+  <key>CFBundleIdentifier</key><string>work.rmaciel.harvest</string>
+  <key>CFBundleName</key><string>Harvest</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>HarvestRepo</key><string>$(xml "$REPO")</string>
+  <key>HarvestNode</key><string>$(xml "$NODE")</string>
+</dict></plist>
+EOF
+
+# Ad-hoc signature: required to run on Apple Silicon, and enough for an app
+# built on this Mac (it is never downloaded, so Gatekeeper never quarantines it).
+# Finder metadata on files in this folder makes codesign refuse; strip it first.
+xattr -cr "$APP"
+codesign --force --sign - "$APP"
+
+# A DMG with an Applications shortcut beside the app: open it, drag across.
+STAGE="$OUT/dmg"
+mkdir -p "$STAGE"
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -quiet -volname Harvest -srcfolder "$STAGE" -ov -format UDZO "$OUT/Harvest.dmg"
+rm -rf "$STAGE"
+echo "Built $APP and $OUT/Harvest.dmg"

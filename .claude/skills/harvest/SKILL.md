@@ -9,6 +9,16 @@ A local crawler with a review queue that fills Keystatic projects from Robert's
 own files. It is entirely `tools/harvest.js` (Node built-ins plus macOS tools);
 the launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 
+## How it runs
+
+- **Harvest.app** (preferred): built by `tools/build-app.sh` into `app-build/`
+  (git-ignored) as `Harvest.app` + `Harvest.dmg`. A Swift shell
+  (`tools/HarvestApp.swift`) that starts `tools/harvest.js` and shows it in a
+  WKWebView. Rebuild only if the repo moves; harvest.js changes need no rebuild.
+  Server log: `~/Library/Application Support/Harvest/harvest.log`.
+- `tools/Harvest.command`: the same server in Terminal + the default browser.
+- Never run both at once: they share one state file.
+
 ## What Robert does
 
 1. Double-clicks `tools/Harvest.command`. It runs `git pull --ff-only` and opens
@@ -16,7 +26,15 @@ the launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 2. Picks a folder in the tree and clicks **Crawl this folder**.
 3. For each project: accepts or rejects cards. Text is editable; images need alt
    text; text cards choose a target (description / detail lines / share).
-4. Clicks **Write to project**, then tells Claude "publish" / "publish the harvest".
+4. Clicks **Write to project**, then **Publish** (top right). Publish runs
+   build.js, commits ONLY content/ and images/ as "Harvest: <slugs>", pulls with
+   rebase, pushes to main. On a clash it undoes its commit and says "ask Claude
+   to publish" — that is the case below.
+5. Bulk: tick cards → Accept / Reject / Move to project (moved cards arrive
+   accepted; the original is kept rejected+hidden so a re-crawl can't refile it).
+   Rejected → Clear hides them but keeps them rejected.
+6. New project (Projects column): writes a draft .mdoc; needs a grid icon in
+   /keystatic before it can go live.
 
 ## What "publish the harvest" means for Claude
 

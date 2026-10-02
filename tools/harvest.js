@@ -56,7 +56,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const PROJECTS = path.join(REPO, 'content/projects');
@@ -100,6 +100,13 @@ let saveTimer = null;
 const flush = () => { clearTimeout(saveTimer); saveTimer = null; writeAtomic(STATE_FILE, JSON.stringify(state)); };
 const persist = () => { saveTimer ||= setTimeout(flush, 300); };
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { if (saveTimer) flush(); process.exit(0); });
+// Started by Harvest.app: if the app goes away without asking (Force Quit, a
+// crash), this server is orphaned — still running, still holding the state
+// file — so it watches for that and saves and exits too.
+if (process.env.HARVEST_APP) {
+  const parent = process.ppid;
+  setInterval(() => { if (process.ppid !== parent) { if (saveTimer) flush(); process.exit(0); } }, 2000).unref();
+}
 
 // Formats build.js can measure go in as-is; HEIC/TIFF become JPEG on the way
 // in. GIF is left out: build.js cannot read its size and every strip image
@@ -146,6 +153,62 @@ function writeMdoc(file, data, body) {
   body = body.trim();
   fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${body ? body + '\n' : ''}`);
   projectsCache = null;
+  unpublished.add(path.basename(file, '.mdoc'));
+}
+
+/* ------------------------------------------------------------- publishing */
+
+/* PUBLISH — the same steps Claude takes, behind one button.
+     1. Only content/ and images/ are committed. Code is never published from
+        here, so a half-finished change to the site cannot ride along.
+     2. build.js must pass first. A build that fails on Netlify stops every
+        later deploy until it is fixed — the BUS STOP alt-text stall.
+     3. Pull (rebasing on top of any edits saved from the phone), then push to
+        main, which Netlify deploys. A clash stops with a message and changes
+        nothing on GitHub.
+   Which projects are waiting is read from git once at start, then kept up to
+   date by writeMdoc, rather than asking git on every poll. */
+const git = (...a) => sh('git', ['-C', REPO, ...a]);
+const unpublished = new Set();
+const changedProjects = (porcelain) => porcelain.split('\n').map(l => (l.slice(3).match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/) || []).slice(1).find(Boolean)).filter(Boolean);
+async function publish() {
+  const changed = await git('status', '--porcelain', '--', 'content', 'images');
+  if (!changed.trim()) { unpublished.clear(); return { message: 'Nothing new to publish.' }; }
+  try { await sh(process.execPath, [path.join(REPO, 'build.js')]); }
+  catch (e) { throw new Error('The site would not build, so nothing was published: ' + String(e.stderr || e.message).trim().split('\n').pop()); }
+  const slugs = [...new Set(changedProjects(changed))];
+  await git('add', '--', 'content', 'images');
+  await git('commit', '-q', '-m', `Harvest: ${slugs.join(', ') || 'content'}`);
+  try { await git('pull', '-q', '--rebase', '--autostash'); }
+  catch {
+    // back to exactly where it started: the commit is undone and its changes
+    // left in place, so they still show as waiting and a later Publish (or
+    // Claude) picks them up — a commit left behind would read "nothing new"
+    await git('rebase', '--abort').catch(() => {});
+    await git('reset', '--soft', 'HEAD~1').catch(() => {});
+    for (const s of slugs) unpublished.add(s);
+    throw new Error('GitHub has edits that clash with these. Nothing was published — ask Claude to publish.');
+  }
+  await git('push', '-q', 'origin', 'HEAD');
+  unpublished.clear();
+  projectsCache = null;   // the pull may have brought in edits from the phone
+  return { message: `Published ${slugs.join(', ')}. Live in about a minute.` };
+}
+
+// Matches Keystatic's slug for a new entry: lowercase letters and digits,
+// anything else one hyphen. The filename IS the slug, and the slug is the URL.
+const slugify = (t) => t.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+function newProject(title, section) {
+  title = String(title || '').trim();
+  const slug = slugify(title);
+  if (!slug) throw new Error('A new project needs a title.');
+  if (!['build', 'design', 'art'].includes(section)) throw new Error('Pick a section.');
+  const file = path.join(PROJECTS, slug + '.mdoc');
+  if (fs.existsSync(file)) throw new Error(`There is already a project called "${slug}".`);
+  // A draft until it has a grid icon: build.js skips drafts before checking
+  // them, so the site keeps building. Finish it in /keystatic.
+  writeMdoc(file, { title, section, order: 10, draft: true, details: [], layout: 'standard', expand: true, icon_type: 'glyph', images: [] }, '');
+  return slug;
 }
 
 // Kept, not re-read: the page asks for this on every poll, and parsing every
@@ -799,6 +862,33 @@ async function expandPage(f) {
   f.expanded = true;
 }
 
+// One card's decision, from the card or from the bulk bar.
+function decide(f, b) {
+  for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
+  if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') drain();
+  // An accepted working title is written to the project at once (it is what
+  // the NEXT crawl matches on), and its folder is taken as the work's.
+  if (f.kind === 'nickname' && b.status === 'accepted') {
+    const name = String(f.edited ?? f.text).trim();
+    if (name) addNickname(f.project, name);
+    if (fs.statSync(f.path, { throwIfNoEntry: false })?.isDirectory()) acceptFolder(f.project, f.path);
+    f.status = 'written';
+  }
+}
+
+// Moving a card the crawler filed under the wrong project. It arrives in the
+// right one ACCEPTED — choosing where it goes is the decision — and the
+// original is kept as rejected and hidden. Simply relabelling it would let the
+// next crawl, which files it by the same rule, put it back where it was.
+function moveFinding(f, project) {
+  if (f.project === project || f.status === 'written') return;
+  const { id: _old, status: _s, cleared: _c, expanded: _e, from: _f, ...rest } = f;
+  const g = { ...rest, project };
+  add(g);
+  decide(state.findings[g.id], { status: 'accepted' });
+  f.status = 'rejected'; f.cleared = true; f.movedTo = project;
+}
+
 function addNickname(slug, name) {
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
@@ -917,7 +1007,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/state') {
       const pending = {};
       for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
-      return json({ root: state.root, home: HOME, job,
+      return json({ root: state.root, home: HOME, job, unpublished: [...unpublished],
         site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
         projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
     }
@@ -928,7 +1018,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/findings') {
       const slug = url.searchParams.get('project');
-      return json(Object.values(state.findings).filter(f => f.project === slug && present(f.path)));
+      return json(Object.values(state.findings).filter(f => f.project === slug && !f.cleared && present(f.path)));
     }
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
@@ -952,19 +1042,29 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/finding') {
       const f = state.findings[b.id];
       if (!f) throw new Error('Unknown finding.');
-      for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
-      if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') drain();
-      // An accepted working title is written to the project at once (it is
-      // what the NEXT crawl matches on), and its folder is taken as the work's.
-      if (f.kind === 'nickname' && b.status === 'accepted') {
-        const name = String(f.edited ?? f.text).trim();
-        if (name) addNickname(f.project, name);
-        if (fs.statSync(f.path, { throwIfNoEntry: false })?.isDirectory()) acceptFolder(f.project, f.path);
-        f.status = 'written';
-      }
+      decide(f, b);
       persist();
       return json(f);
     }
+    // Several cards at once: a decision, or a move to another project.
+    if (p === '/api/bulk') {
+      for (const fid of b.ids || []) {
+        const f = state.findings[fid];
+        if (!f) continue;
+        if (b.project) moveFinding(f, b.project); else decide(f, { status: b.status });
+      }
+      persist();
+      return json({ ok: true });
+    }
+    // Rejected cards are hidden, not forgotten: they keep status 'rejected', so
+    // add() still finds their id and a re-crawl cannot suggest them again.
+    if (p === '/api/clear') {
+      for (const f of Object.values(state.findings)) if (f.project === b.project && f.status === 'rejected') f.cleared = true;
+      persist();
+      return json({ ok: true });
+    }
+    if (p === '/api/publish') return json(await publish());
+    if (p === '/api/newproject') { const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
@@ -995,6 +1095,12 @@ function body(req) {
 
 // 127.0.0.1 only: this serves files off the disk and must not be reachable
 // from anything else on the network.
+// Catch up with GitHub before anything is read: Keystatic saves from the phone
+// land there, not here. Quietly skipped offline or with local changes in the
+// way. Here, not in a launcher, so the app and Harvest.command both get it.
+try { execFileSync('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000, stdio: 'ignore' }); } catch {}
+try { for (const s of changedProjects(execFileSync('git', ['-C', REPO, 'status', '--porcelain', '--', 'content', 'images'], { encoding: 'utf8' }))) unpublished.add(s); } catch {}
+
 server.listen(0, '127.0.0.1', () => {
   ORIGIN = `http://127.0.0.1:${server.address().port}`;
   console.log(`Harvest is open at ${ORIGIN}/\nClose this window (or press Ctrl-C) when you are done.`);
@@ -1025,12 +1131,25 @@ const PAGE = String.raw`<!doctype html>
   .btn { color:var(--accent); cursor:pointer; background:none; border:0; padding:0; font:inherit; text-transform:uppercase; letter-spacing:.15em; text-align:left; }
   .btn:hover, .btn:focus-visible { color:var(--ink); outline:none; }
   .btn[disabled] { opacity:.35; pointer-events:none; }
-  header { display:flex; gap:24px; align-items:baseline; padding:14px var(--m); border-bottom:1px solid var(--accent-dim); flex-wrap:wrap; }
+  header { display:flex; gap:24px; align-items:baseline; padding:14px var(--m); border-bottom:1px solid var(--accent-dim); }
+  header label { white-space:nowrap; }
   header h1 { font-size:13px; font-weight:400; margin:0; letter-spacing:.15em; }
-  #status { margin-left:auto; }
+  #status { margin-left:auto; white-space:nowrap; }
+  /* a long crawl path gives way, not Publish: it shortens with an ellipsis */
+  #rootline { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #publish[disabled] { opacity:.35; }
   main { display:grid; grid-template-columns:260px 220px 1fr; min-height:0; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
-  main > section:last-child { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); }
+  main > section:last-child { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
+  #bulk { grid-column:1 / -1; display:flex; gap:18px; align-items:baseline; padding:10px var(--m); border-bottom:1px solid var(--accent-dim); }
+  #bulk select { width:auto; margin:0; }
+  .card { position:relative; }
+  .card .pick, .col h2 input { position:absolute; top:12px; right:0; width:auto; margin:0; accent-color:var(--ink); cursor:pointer; }
+  .col h2 { position:relative; }
+  .col h2 input { top:0; }
+  .col h2 .btn { margin-left:10px; font-size:inherit; }
+  #newp { display:grid; grid-template-columns:1fr auto; gap:6px; margin:0 0 14px; }
+  #newp select { width:auto; }
   h2 { font-size:11px; font-weight:400; margin:0 0 12px; color:var(--accent); }
 
   /* tree */
@@ -1080,6 +1199,7 @@ const PAGE = String.raw`<!doctype html>
   <span class="dim" id="rootline"></span>
   <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
   <span class="dim" id="status"></span>
+  <button class="btn" id="publish" disabled>Publish</button>
 </header>
 <main>
   <section>
@@ -1097,13 +1217,23 @@ const PAGE = String.raw`<!doctype html>
   </section>
   <section>
     <h2 class="cap">Projects</h2>
+    <div id="newp">
+      <input id="newtitle" placeholder="New project title">
+      <select id="newsection"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select>
+    </div>
     <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
   </section>
   <section id="review">
-    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span></h2><div id="pending"></div></div>
-    <div class="col"><h2 class="cap">Accepted <span id="n-accepted"></span></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div><div id="accepted"></div></div>
-    <div class="col rejected"><h2 class="cap">Rejected <span id="n-rejected"></span></h2><div id="rejected"></div></div>
+    <div id="bulk">
+      <span class="dim" id="n-sel">Tick cards to select</span>
+      <button class="btn" data-bulk="accepted" disabled>Accept</button>
+      <button class="btn" data-bulk="rejected" disabled>Reject</button>
+      <select id="moveto" disabled><option value="">Move to project…</option></select>
+    </div>
+    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><input type="checkbox" data-all="pending" title="Select all"></h2><div id="pending"></div></div>
+    <div class="col"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div><div id="accepted"></div></div>
+    <div class="col rejected"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2><div id="rejected"></div></div>
   </section>
 </main>
 <script>
@@ -1114,6 +1244,7 @@ const tilde = (p) => esc(p.replace(S.home, '~'));
 // a picture on a website loads straight from it, at a thumbnail size where the host can make one
 const thumb = (p) => '<img loading="lazy" src="' + (/^https?:/.test(p) ? esc(/squarespace-cdn\.com/.test(p) ? p + '?format=500w' : p) : '/thumb?p=' + encodeURIComponent(p)) + '">';
 let S = null, folder = null, project = null, findings = [], lastJob = '';
+const picked = new Set();   // ticked card ids, kept across redraws
 
 /* ---- tree: lazy, one level per click */
 async function branch(li, p) {
@@ -1182,6 +1313,10 @@ async function poll() {
   const sj = JSON.stringify(S.site);
   if (sj !== drawPages.last) { drawPages.last = sj; drawPages(); }
   buttons();
+  const n = S.unpublished.length;
+  $('publish').disabled = !n;
+  $('publish').textContent = n ? 'Publish ' + n : 'Publish';
+  $('publish').title = n ? 'Waiting to go live: ' + S.unpublished.join(', ') : 'Nothing waiting to go live';
   // any movement in the job means findings may have changed; a short job can
   // start and finish between two polls, so compare, do not watch for "running"
   // ...but never while a field is being typed in: a redraw replaces every
@@ -1221,7 +1356,7 @@ function card(f) {
   const acts = f.status === 'pending'
     ? '<button class="btn" data-a="accepted">Accept</button><button class="btn" data-a="rejected">Reject</button>'
     : f.status === 'written' ? '<span class="dim cap">Written</span>' : '<button class="btn" data-a="pending">Undo</button>';
-  let h = '<div class="card" data-id="' + f.id + '">';
+  let h = '<div class="card" data-id="' + f.id + '">' + (f.status === 'written' ? '' : '<input type="checkbox" class="pick"' + (picked.has(f.id) ? ' checked' : '') + '>');
   if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
     '<div class="pairs">' + (f.pairs || []).map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div>' +
     '<div class="dim">On the site · found in ' + tilde(f.path) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
@@ -1244,9 +1379,13 @@ function drawFindings() {
     const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page' ? 0 : 1);
     const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
     $(col).innerHTML = list.map(card).join('');
+    const all = document.querySelector('[data-all="' + col + '"]');
+    if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length || '';
   }
   $('write').disabled = !findings.some(f => f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
+  for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
+  bulkBar();
 }
 $('review').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]'); if (!b) return;
@@ -1271,14 +1410,54 @@ $('nick').addEventListener('keydown', async (e) => {
   e.target.value = '';
   poll();
 });
-$('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(e => alert(e.message)));
-$('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
-$('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
+// errors show in the status line, not alert(): the desktop app's window has no browser to show an alert box
+const oops = (e) => { $('status').textContent = '⚠ ' + e.message; };
+$('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(oops));
+$('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
+$('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
+
+/* ---- selection: tick cards, then act on all of them */
+function bulkBar() {
+  const n = picked.size;
+  $('n-sel').textContent = n ? n + ' selected' : 'Tick cards to select';
+  document.querySelectorAll('[data-bulk]').forEach(b => { b.disabled = !n; });
+  $('moveto').disabled = !n;
+  const opts = '<option value="">Move to project…</option>' + (S ? S.projects : []).filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
+  if ($('moveto').innerHTML !== opts) $('moveto').innerHTML = opts;
+}
+$('review').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.classList.contains('pick')) { const id = t.closest('.card').dataset.id; t.checked ? picked.add(id) : picked.delete(id); bulkBar(); }
+  if (t.dataset.all) { for (const c of $(t.dataset.all).querySelectorAll('.card')) { t.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); c.querySelector('.pick') && (c.querySelector('.pick').checked = t.checked); } bulkBar(); }
+});
+async function bulk(body) {
+  try { await save(); await api('/api/bulk', { ids: [...picked], ...body }); picked.clear(); await loadFindings(); poll(); }
+  catch (e) { oops(e); }
+}
+document.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => bulk({ status: b.dataset.bulk })));
+$('moveto').addEventListener('change', (e) => { const to = e.target.value; e.target.value = ''; if (to) bulk({ project: to }); });
+$('clear').addEventListener('click', () => api('/api/clear', { project }).then(loadFindings).catch(oops));
+
+/* ---- publish, new project */
+$('publish').addEventListener('click', async () => {
+  $('publish').disabled = true; $('status').textContent = 'Publishing…';
+  try { await save(); $('status').textContent = (await api('/api/publish', {})).message; } catch (e) { oops(e); }
+  poll();
+});
+$('newtitle').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter' || !e.target.value.trim()) return;
+  try {
+    const d = await api('/api/newproject', { title: e.target.value, section: $('newsection').value });
+    e.target.value = ''; await poll();
+    document.querySelector('[data-s="' + d.slug + '"]')?.click();
+    $('status').textContent = 'Created as a draft. Add a grid icon in /keystatic before it can go live.';
+  } catch (err) { oops(err); }
+});
 $('write').addEventListener('click', async () => {
   try {
     await save();
     const d = await api('/api/write', { project });
-    $('msg').textContent = d.written + ' written into the project. Not live yet — tell Claude "publish".';
+    $('msg').textContent = d.written + ' written into the project. Not live yet — Publish (top right) when ready.';
     loadFindings();
   } catch (e) { $('msg').textContent = '⚠ ' + e.message; }
 });
