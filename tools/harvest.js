@@ -771,7 +771,7 @@ const PAGE = String.raw`<!doctype html>
   #tree li > span:hover { color:var(--ink); }
   #tree li > span.sel { color:var(--ink); }
   #tree li > span i { display:inline-block; width:12px; font-style:normal; }
-  .tree-actions { margin:14px 0 0; display:grid; gap:6px; }
+  .tree-actions { margin:0 0 14px; display:grid; gap:6px; }
 
   /* projects */
   #projects div { cursor:pointer; color:var(--accent); padding:3px 0; display:flex; gap:8px; }
@@ -812,11 +812,13 @@ const PAGE = String.raw`<!doctype html>
 <main>
   <section>
     <h2 class="cap">Folders</h2>
-    <div id="tree"></div>
+    <!-- above the tree, not below it: a home folder lists dozens of folders,
+         and underneath them the buttons were scrolled out of sight -->
     <div class="tree-actions">
       <button class="btn" id="crawl" disabled>Crawl this folder</button>
       <button class="btn" id="link" disabled>Link to project</button>
     </div>
+    <div id="tree"></div>
   </section>
   <section>
     <h2 class="cap">Projects</h2>
