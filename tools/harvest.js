@@ -31,6 +31,12 @@
      .indd         InDesign itself, scripted, OFF unless ticked — it launches
                    InDesign and the first file took ~3 minutes cold.
      .docx .doc .rtf .odt   textutil.   .txt .md   read directly.
+     PDF pages that are PICTURES of text (Rhino's tiled-PNG exports, and
+                   InDesign layouts built from them) — text recognition,
+                   Apple's Vision framework. See TEXT RECOGNITION below.
+     .3dm          the Rhino Notes panel. See RHINO NOTES below.
+     A website     "Crawl website": the sitemap lists every page, linked or
+                   not. See WEBSITE MODE below.
    Results are cached by path + size + date, so a second crawl only reads
    what changed.
 
@@ -118,6 +124,10 @@ const tick = () => new Promise(r => setImmediate(r));   // let the server answer
 // for a batch with one bad file in it and the rest of its answer is still good.
 const sh = (cmd, args) => new Promise((ok, no) =>
   execFile(cmd, args, { maxBuffer: 256 << 20, timeout: 600000 }, (e, out) => e ? no(Object.assign(e, { stdout: out })) : ok(out)));
+
+// A finding's path is a file on this Mac or, from a website crawl, a URL.
+const isRemote = (p) => /^https?:\/\//.test(p);
+const present = (p) => isRemote(p) || fs.existsSync(p);
 
 function readMdoc(file) {
   const s = fs.readFileSync(file, 'utf8');
@@ -233,10 +243,100 @@ const READERS = {
   '.docx': textutilText, '.doc': textutilText, '.rtf': textutilText, '.odt': textutilText,
   '.txt': async (f) => chunk(fs.readFileSync(f, 'utf8')), '.md': async (f) => chunk(fs.readFileSync(f, 'utf8')),
   '.indd': async (f) => (await sh('osascript', [INDD_AS, f])).split('\x1e'),
+  '.3dm': async (f) => rhinoNotes(f),
 };
 const isDoc = (e, indesign) => Object.hasOwn(READERS, e) && (e !== '.indd' || indesign);
 
-async function pdfText(f) { return JSON.parse(await sh('osascript', ['-l', 'JavaScript', PDF_JS, f])); }
+// A PDF's own text layer first. Pages with none are pictures of text — Rhino
+// exports tiled PNGs, and InDesign layouts built from them keep that — and only
+// those pages go to text recognition, so an ordinary PDF stays fast.
+async function pdfText(f) {
+  const pages = JSON.parse(await sh('osascript', ['-l', 'JavaScript', PDF_JS, f]));
+  const blank = pages.flatMap((t, i) => (t.trim() ? [] : [String(i)]));
+  if (!blank.length) return pages;
+  const bin = await ocrTool();
+  if (!bin) return pages;
+  const seen = JSON.parse(await sh(bin, [f, ...blank]));
+  return pages.map((t, i) => (t.trim() ? t : seen[i] || ''));
+}
+
+/* TEXT RECOGNITION (OCR)
+     Apple's own Vision framework, the one Live Text uses; nothing installed.
+     It has no command-line tool, so a 30-line Swift helper is compiled once
+     into the Harvest folder (about a minute, the first time a PDF needs it)
+     and reused. Recompiled only when this source changes. Each page is drawn
+     at ~3000 px on its long side: smaller loses 8 pt type on a 12 x 18 sheet. */
+const OCR_SRC = `import Foundation
+import PDFKit
+import Vision
+func ocr(_ img: CGImage) -> String {
+  let req = VNRecognizeTextRequest()
+  req.recognitionLevel = .accurate
+  req.usesLanguageCorrection = true
+  try? VNImageRequestHandler(cgImage: img, options: [:]).perform([req])
+  return (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\\n")
+}
+let args = CommandLine.arguments
+let want = Set(args.dropFirst(2).compactMap { Int($0) })
+var pages: [String] = []
+if let doc = PDFDocument(url: URL(fileURLWithPath: args[1])) {
+  for i in 0..<doc.pageCount {
+    guard want.isEmpty || want.contains(i), let page = doc.page(at: i) else { pages.append(""); continue }
+    let box = page.bounds(for: .mediaBox)
+    let scale = min(3.0, 3000.0 / max(box.width, box.height))
+    let pic = page.thumbnail(of: CGSize(width: box.width * scale, height: box.height * scale), for: .mediaBox)
+    pages.append(pic.cgImage(forProposedRect: nil, context: nil, hints: nil).map(ocr) ?? "")
+  }
+}
+FileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: pages))
+`;
+const OCR_BIN = path.join(STORE, 'ocr');
+let ocrReady = null;
+function ocrTool() {
+  return (ocrReady ||= (async () => {
+    const src = path.join(STORE, 'ocr.swift');
+    if (fs.existsSync(OCR_BIN) && fs.existsSync(src) && fs.readFileSync(src, 'utf8') === OCR_SRC) return OCR_BIN;
+    fs.writeFileSync(src, OCR_SRC);
+    const was = job.phase;
+    job.phase = 'Preparing text recognition (first time only, about a minute)';
+    try { await sh('swiftc', ['-O', src, '-o', OCR_BIN]); return OCR_BIN; }
+    catch (e) { console.warn(`text recognition unavailable — compiling it failed: ${e.message.split('\n')[0]}`); return null; }
+    finally { job.phase = was; }
+  })());
+}
+
+/* RHINO NOTES
+     The Notes panel lives in the .3dm's properties table, near the start of
+     the file, and Rhino writes it only when there are notes. So: read the first
+     8 MB of a model that can run to hundreds, walk the chunks (a 4-byte code
+     and a length — 8 bytes from Rhino 5 on, 4 before; codes with the top bit
+     set carry no payload) to the notes chunk, and take its longest run of text.
+     Checked against real Rhino 7 and 8 files for the walk; not yet against a
+     file that HAS notes, so the text extraction is the unverified part. */
+function rhinoNotes(f) {
+  const fd = fs.openSync(f, 'r');
+  const buf = Buffer.alloc(8 << 20);
+  const n = fs.readSync(fd, buf, 0, buf.length, 0);
+  fs.closeSync(fd);
+  const b = buf.subarray(0, n);
+  const L = (+b.toString('latin1', 24, 32).trim() || 0) >= 50 ? 8 : 4;
+  const len = (at) => (L === 8 ? Number(b.readBigUInt64LE(at)) : b.readUInt32LE(at));
+  const table = b.indexOf(Buffer.from([0x14, 0x00, 0x00, 0x10]));   // properties table, 0x10000014
+  if (table < 0) return [];
+  const end = Math.min(n, table + 4 + L + len(table + 4));
+  for (let at = table + 4 + L; at + 4 + L <= end;) {
+    const code = b.readUInt32LE(at), size = len(at + 4);
+    if (code === 0x20008022) {
+      const c = b.subarray(at + 4 + L, at + 4 + L + size);
+      const runs = [c, c.subarray(1)].flatMap(x => x.toString('utf16le').match(/[\x20-\x7e -ɏ‐-…\n\r\t]{3,}/g) || [])
+        .concat(c.toString('utf8').match(/[\x20-\x7e\n\r\t]{8,}/g) || []);
+      const best = runs.sort((x, y) => y.length - x.length)[0];
+      return best && best.trim() ? [best.trim()] : [];
+    }
+    at += 4 + L + ((code & 0x80000000) ? 0 : size);
+  }
+  return [];
+}
 
 // textutil exits 0 even when it cannot read the file ("You don't have
 // permission" goes to stderr, nothing to stdout), so nothing back is treated
@@ -420,7 +520,7 @@ function run(phase, fn) {
 // beside a project matches the cards shown. Decided ones stay as a record.
 // A re-crawl finds the file again wherever it went.
 function prune() {
-  for (const [k, f] of Object.entries(state.findings)) if (f.status === 'pending' && !fs.existsSync(f.path)) delete state.findings[k];
+  for (const [k, f] of Object.entries(state.findings)) if (f.status === 'pending' && !present(f.path)) delete state.findings[k];
 }
 
 // The SAVED state is the queue of folders to expand: any accepted folder not
@@ -430,11 +530,11 @@ function prune() {
 const queued = new Set();
 function drain() {
   for (const f of Object.values(state.findings)) {
-    if (f.kind !== 'folder' || f.status !== 'accepted' || f.expanded || queued.has(f.id)) continue;
+    if ((f.kind !== 'folder' && f.kind !== 'page') || f.status !== 'accepted' || f.expanded || queued.has(f.id)) continue;
     queued.add(f.id);
-    run(`Reading ${path.basename(f.path)}`, async () => {
+    run(`Reading ${f.title || path.basename(f.path)}`, async () => {
       // re-checked when its turn comes: it may have been undone while it waited
-      try { if (f.status === 'accepted') await expandFolder(f); } finally { queued.delete(f.id); }
+      try { if (f.status === 'accepted') await (f.kind === 'page' ? expandPage(f) : expandFolder(f)); } finally { queued.delete(f.id); }
     });
   }
 }
@@ -442,7 +542,7 @@ function drain() {
 // Pointing at a folder — by hand, or by accepting a working title — is the
 // same as accepting a match for it.
 function acceptFolder(project, p, extra) {
-  const f = { project, kind: 'folder', path: p, ...extra };
+  const f = { project, kind: isRemote(p) ? 'page' : 'folder', path: p, ...extra };
   add(f);
   state.findings[f.id].status = 'accepted';
   drain();
@@ -477,6 +577,12 @@ const pop = (x) => { let n = 0; while (x) { x &= x - 1n; n++; } return n; };
 // A near-blank image (white page, flat logo) hashes to almost all one bit and
 // "matches" every other near-blank image. Those say nothing.
 const useful = (h) => { if (!h) return false; const n = pop(BigInt('0x' + h)); return n >= 8 && n <= 56; };
+// How close counts as "the same picture" scales with how much a fingerprint
+// says. A detailed photo keeps the full 6 bits; a mostly flat one (an object on
+// a plain ground) has few bits set, sits a few bits from any other flat image,
+// and must match almost exactly. Measured: BUS STOP's 4th image, 15 bits set,
+// was within 4-10 bits of 19 unrelated pictures on the old site at 6.
+const tolerance = (a, b) => Math.min(LOOKALIKE, ...[a, b].map(x => { const n = pop(x); return Math.floor(Math.min(n, 64 - n) / 5); }));
 
 let hashN = 0;
 async function dhash(file) {
@@ -510,7 +616,7 @@ async function pool(items, n, fn) {
   await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) await fn(items[i++]); }));
 }
 
-const FILING = /^(renders?|images?|imgs?|photos?|pictures?|pics|exports?|finals?|output|out|web|jpe?gs?|pngs?|tiffs?|heics?|selects?|edits?|edited|process|wip|archive|old|new|misc|assets|links|docs?|documentation|stills|(hi|lo|low)[ -]?res|print|social|instagram|desktop|documents|downloads|dropbox|google drive|icloud drive.*|creative cloud files.*|projects?|work|clients?|portfolio|unsorted|screenshots?|jobs?|others?|temp|tmp|stuff|untitled.*|new folder.*|v ?\d+|r ?\d+|\d+)$/i;
+const FILING = /^(renders?|images?|imgs?|photos?|pictures?|pics|exports?|finals?|output|out|web|jpe?gs?|pngs?|tiffs?|heics?|selects?|edits?|edited|process|wip|archive|old|new|misc|assets|links|docs?|documentation|stills|(hi|lo|low)[ -]?res|print|social|instagram|desktop|documents|downloads|dropbox|google drive|icloud drive.*|creative cloud files.*|projects?|work|clients?|portfolio|unsorted|screenshots?|jobs?|others?|temp|tmp|stuff|untitled.*|new folder.*|(\w+ )?versions?|variants?|options?|alts?|alternates?|v ?\d+|r ?\d+|\d+)$/i;
 // "240512_Wave-House_v3" -> "Wave House"
 const clean = (s) => s.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_\-.]+/g, ' ')
   .replace(/^(\s*\d+\b)+/, '').replace(/(\s+(v ?\d+|r ?\d+|final|\d+))+\s*$/i, '').replace(/\s+/g, ' ').trim();
@@ -525,14 +631,21 @@ function namingFolder(file, root) {
   return null;
 }
 
-async function lookalikes(projs, imgs, root) {
-  job.phase = 'Comparing pictures'; job.done = 0; job.total = imgs.length;
+// Fingerprints of every picture already on the site, by project. Both the
+// folder crawl and the website crawl compare against these.
+async function siteFingerprints(projs) {
   const site = [];
   await pool(projs.flatMap(pr => pr.siteImages.map(f => ({ pr, f }))), 8, async ({ pr, f }) => {
     if (!fs.existsSync(f)) return;
     const h = await dhash(f);
     if (useful(h)) site.push({ pr, f, h: BigInt('0x' + h) });
   });
+  return site;
+}
+
+async function lookalikes(projs, imgs, root) {
+  job.phase = 'Comparing pictures'; job.done = 0; job.total = imgs.length;
+  const site = await siteFingerprints(projs);
   const hits = {};
   await pool(imgs, 8, async (img) => {
     const h = await dhash(img);
@@ -540,7 +653,7 @@ async function lookalikes(projs, imgs, root) {
     if (!useful(h) || !site.length) return;
     const hb = BigInt('0x' + h);
     for (const s of site) {
-      if (pop(hb ^ s.h) > LOOKALIKE) continue;
+      if (pop(hb ^ s.h) > tolerance(hb, s.h)) continue;
       if (s.pr.m.name(img)) continue;   // the path already names the project: nothing to learn
       const folder = namingFolder(img, root);
       ((hits[s.pr.slug + '|' + folder] ||= { pr: s.pr, folder, pairs: [] }).pairs).push([img, s.f]);
@@ -557,6 +670,135 @@ async function lookalikes(projs, imgs, root) {
   writeAtomic(CACHE_FILE, JSON.stringify(cache));
 }
 
+/* ------------------------------------------------------------- websites */
+
+/* WEBSITE MODE — for the old Squarespace site, whose pages are public but
+   mostly unlinked. The sitemap (/sitemap.xml) lists every page, linked or not,
+   and on Squarespace the pictures on each one too. Each page is read for its
+   text and pictures and filed like a folder: a page whose address or title
+   names a project becomes a PAGE card; accepting it pulls in its text and
+   pictures. A page whose pictures match ones already on the site is offered
+   for that project too — that is how "/prototype3" finds its project.
+
+   Pictures stay on the website until written: thumbnails load from it, and an
+   image is downloaded at full size only when Write copies it into the repo. */
+
+const UA = { 'user-agent': 'Mozilla/5.0 (Macintosh) Harvest' };
+async function fetchText(url) {
+  const r = await fetch(url, { headers: UA, redirect: 'follow' });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
+  return r.text();
+}
+async function download(url, file) {
+  if (fs.existsSync(file)) return file;
+  const r = await fetch(url, { headers: UA, redirect: 'follow' });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
+  fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+  return file;
+}
+// Squarespace's image CDN resizes on request; any other host gets the original.
+const sized = (url, w) => (/squarespace-cdn\.com/.test(url) ? `${url}?format=${w}w` : url);
+
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', mdash: '—', ndash: '–', hellip: '…', copy: '©' };
+const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) =>
+  e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e.toLowerCase()] ?? m));
+function htmlText(html) {
+  return decode(html
+    .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li|blockquote|section|figcaption|tr)>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ''))
+    .replace(/[ \t ]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function sitePages(start) {
+  const origin = new URL(start).origin;
+  try {
+    const xml = await fetchText(origin + '/sitemap.xml');
+    const pages = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map(([, u]) => ({
+      url: decode((u.match(/<loc>([^<]+)/) || [])[1] || '').trim(),
+      images: [...u.matchAll(/<image:loc>([^<]+)/g)].map(m => decode(m[1]).trim()),
+    })).filter(p => p.url && new URL(p.url).origin === origin);
+    if (pages.length) return pages;
+  } catch (e) { console.warn(`no sitemap at ${origin} (${e.message}); reading only the page given`); }
+  return [{ url: start, images: [] }];
+}
+
+// One page's title, text and pictures. Squarespace serves any page's content
+// as JSON (?format=json) without the site's menus and footer, which would
+// otherwise repeat on every page as text cards; other sites get their HTML.
+const pageCache = new Map();
+async function readPage(pg) {
+  if (pageCache.has(pg.url)) return pageCache.get(pg.url);
+  let title = '', html = '';
+  try {
+    const d = JSON.parse(await fetchText(pg.url + (pg.url.includes('?') ? '&' : '?') + 'format=json'));
+    if (typeof d.mainContent !== 'string') throw new Error('not Squarespace');
+    title = d.collection?.title || ''; html = d.mainContent;
+  } catch {
+    const full = await fetchText(pg.url);
+    title = decode((full.match(/<title>([^<]*)/i) || [])[1] || '').trim();
+    html = (full.match(/<main[\s\S]*?<\/main>/i) || full.match(/<body[\s\S]*<\/body>/i) || [full])[0];
+  }
+  const inline = [...html.matchAll(/(?:data-src|data-image|src)="(https?:\/\/[^"]+?\.(?:jpe?g|png|webp|heic|tiff?))(?:\?[^"]*)?"/gi)].map(m => decode(m[1]));
+  const c = { title, units: chunk(htmlText(html)), images: [...new Set([...pg.images, ...inline])] };
+  pageCache.set(pg.url, c);
+  return c;
+}
+
+async function crawlSite(start) {
+  const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
+  job.phase = 'Reading the sitemap';
+  const pages = await sitePages(start);
+  state.site = { start, pages: [] };
+  job.phase = 'Reading pages'; job.total = pages.length; job.done = 0;
+  const pics = [];
+  for (const pg of pages) {
+    let c;
+    try { c = await readPage(pg); } catch (e) { console.warn(`could not read ${pg.url}: ${e.message}`); job.done++; continue; }
+    // its sitemap pictures are kept with it: expanding the page later, after a
+    // restart, has no other way to know them
+    state.site.pages.push({ url: pg.url, title: c.title || new URL(pg.url).pathname, images: pg.images });
+    const where = decodeURIComponent(new URL(pg.url).pathname);
+    for (const pr of projs) {
+      if (pr.m.name(where) || (c.title && pr.m.name(c.title))) job.added += add({ project: pr.slug, kind: 'page', path: pg.url, title: c.title });
+    }
+    addTexts(pg.url, c.units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
+    for (const u of c.images) pics.push({ url: u, page: pg.url, title: c.title });
+    job.done++;
+    await tick();
+  }
+  persist();
+
+  // Pictures that match the site's own say which project an unnamed page is.
+  job.phase = 'Comparing pictures'; job.done = 0; job.total = pics.length;
+  const site = await siteFingerprints(projs);
+  const WEB = path.join(STORE, 'web');
+  fs.mkdirSync(WEB, { recursive: true });
+  const hits = {};
+  await pool(pics, 6, async ({ url, page, title }) => {
+    let h = null;
+    try { h = await dhash(await download(sized(url, 300), path.join(WEB, id(url) + '.jpg'))); }
+    catch (e) { console.warn(`could not fetch ${url}: ${e.message}`); }
+    job.done++;
+    if (!useful(h)) return;
+    const hb = BigInt('0x' + h);
+    for (const s of site) if (pop(hb ^ s.h) <= tolerance(hb, s.h)) ((hits[s.pr.slug + '|' + page] ||= { pr: s.pr, page, title, pairs: [] }).pairs).push([url, s.f]);
+  });
+  for (const { pr, page, title, pairs } of Object.values(hits)) {
+    job.added += add({ project: pr.slug, kind: 'page', path: page, title, pairs: pairs.slice(0, 4), count: pairs.length });
+  }
+  writeAtomic(CACHE_FILE, JSON.stringify(cache));
+}
+
+// An accepted page is about the project, so all of it becomes cards.
+async function expandPage(f) {
+  const c = await readPage((state.site?.pages || []).find(p => p.url === f.path) || { url: f.path, images: [] });
+  for (const u of c.images) job.added += add({ project: f.project, kind: 'image', path: u, from: f.id });
+  addTexts(f.path, c.units, (text) => (text.length >= 40 ? [f.project] : []), f.id);
+  f.expanded = true;
+}
+
 function addNickname(slug, name) {
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
@@ -568,6 +810,22 @@ function addNickname(slug, name) {
 /* ------------------------------------------------------------- writing */
 
 async function importImage(src, slug, n, w, h) {
+  // From a website: fetch the full-size picture first, then treat it as a file.
+  if (isRemote(src)) {
+    const DL = path.join(STORE, 'downloads');
+    fs.mkdirSync(DL, { recursive: true });
+    // Named by what the bytes ARE, not what the address says: a website can
+    // serve a GIF under any name, and a GIF called .jpg would be copied as-is
+    // and then rejected by build.js. Anything not JPEG/PNG/WebP is converted
+    // below — an animated GIF keeps its first frame.
+    const raw = await download(sized(src, 2500), path.join(DL, id(src) + '.download'));
+    const head = fs.readFileSync(raw).subarray(0, 12);
+    const kind = head.toString('latin1', 0, 4) === 'GIF8' ? '.gif' : head[0] === 0x89 ? '.png'
+      : head.toString('latin1', 8, 12) === 'WEBP' ? '.webp' : head[0] === 0xff && head[1] === 0xd8 ? '.jpg' : '.img';
+    src = raw.replace(/\.download$/, kind);
+    fs.copyFileSync(raw, src);
+    w = h = null;   // measured below, from the file actually downloaded
+  }
   // Size unknown (sips gave no answer at crawl time): ask again now rather than
   // assume small, which copied 40 MB camera originals into the repo unshrunk.
   if (!w || !h) {
@@ -602,7 +860,9 @@ const mdEscape = (t) => t
 async function write(slug) {
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
-  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind !== 'folder');
+  // only cards that carry content: folders, pages and working titles are
+  // pointers, and treating an accepted page as text wrote "undefined" in
+  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
   for (const f of acc) if (f.kind === 'image' && !String(f.alt || '').trim()) throw new Error(`${path.basename(f.path)} needs alt text before it can be written — the build refuses an image without it.`);
 
   data.images = data.images || [];
@@ -657,7 +917,9 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/state') {
       const pending = {};
       for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
-      return json({ root: state.root, home: HOME, job, projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
+      return json({ root: state.root, home: HOME, job,
+        site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
+        projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
     }
     if (p === '/api/ls') {
       const dir = path.resolve(url.searchParams.get('p') || HOME);
@@ -666,7 +928,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/findings') {
       const slug = url.searchParams.get('project');
-      return json(Object.values(state.findings).filter(f => f.project === slug && fs.existsSync(f.path)));
+      return json(Object.values(state.findings).filter(f => f.project === slug && present(f.path)));
     }
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
@@ -691,7 +953,7 @@ const server = http.createServer(async (req, res) => {
       const f = state.findings[b.id];
       if (!f) throw new Error('Unknown finding.');
       for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
-      if (f.kind === 'folder' && b.status === 'accepted') drain();
+      if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') drain();
       // An accepted working title is written to the project at once (it is
       // what the NEXT crawl matches on), and its folder is taken as the work's.
       if (f.kind === 'nickname' && b.status === 'accepted') {
@@ -702,6 +964,13 @@ const server = http.createServer(async (req, res) => {
       }
       persist();
       return json(f);
+    }
+    if (p === '/api/crawlsite') {
+      let url = String(b.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      new URL(url);   // throws on nonsense, before anything is queued
+      run('Reading the sitemap', () => crawlSite(url));
+      return json({ ok: true });
     }
     if (p === '/api/link') {
       const f = acceptFolder(b.project, b.path, { linked: true });
@@ -772,6 +1041,9 @@ const PAGE = String.raw`<!doctype html>
   #tree li > span.sel { color:var(--ink); }
   #tree li > span i { display:inline-block; width:12px; font-style:normal; }
   .tree-actions { margin:0 0 14px; display:grid; gap:6px; }
+  #pages:not(:empty) { margin:0 0 14px; padding-bottom:10px; border-bottom:1px solid var(--accent-dim); }
+  #pages span { display:block; cursor:pointer; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pages span:hover, #pages span.sel { color:var(--ink); }
 
   /* projects */
   #projects div { cursor:pointer; color:var(--accent); padding:3px 0; display:flex; gap:8px; }
@@ -817,7 +1089,10 @@ const PAGE = String.raw`<!doctype html>
     <div class="tree-actions">
       <button class="btn" id="crawl" disabled>Crawl this folder</button>
       <button class="btn" id="link" disabled>Link to project</button>
+      <input id="site" placeholder="Or a website, e.g. rmaciel.work">
+      <button class="btn" id="crawlsite">Crawl website</button>
     </div>
+    <div id="pages"></div>
     <div id="tree"></div>
   </section>
   <section>
@@ -836,7 +1111,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const api = (p, b) => fetch(p, b && { method:'POST', body:JSON.stringify(b) }).then(async r => { const d = await r.json(); if (d.error) throw new Error(d.error); return d; });
 const tilde = (p) => esc(p.replace(S.home, '~'));
-const thumb = (p) => '<img loading="lazy" src="/thumb?p=' + encodeURIComponent(p) + '">';
+// a picture on a website loads straight from it, at a thumbnail size where the host can make one
+const thumb = (p) => '<img loading="lazy" src="' + (/^https?:/.test(p) ? esc(/squarespace-cdn\.com/.test(p) ? p + '?format=500w' : p) : '/thumb?p=' + encodeURIComponent(p)) + '">';
 let S = null, folder = null, project = null, findings = [], lastJob = '';
 
 /* ---- tree: lazy, one level per click */
@@ -846,9 +1122,19 @@ async function branch(li, p) {
   ul.innerHTML = d.dirs.map(n => '<li><span data-p="' + esc(d.path + '/' + n) + '"><i>›</i>' + esc(n) + '</span></li>').join('');
   li.appendChild(ul);
 }
+// pages from the last website crawl: picking one is like picking a folder, for Link
+function drawPages() {
+  const ps = (S.site && S.site.pages) || [];
+  $('pages').innerHTML = ps.length ? '<div class="dim cap">' + esc(new URL(S.site.start).host) + '</div>' + ps.map(p => '<span data-p="' + esc(p.url) + '" title="' + esc(p.url) + '">' + esc(p.title) + '</span>').join('') : '';
+}
+$('pages').addEventListener('click', (e) => {
+  const s = e.target.closest('span'); if (!s) return;
+  document.querySelectorAll('#tree .sel, #pages .sel').forEach(x => x.classList.remove('sel'));
+  s.classList.add('sel'); folder = s.dataset.p; buttons();
+});
 $('tree').addEventListener('click', async (e) => {
   const s = e.target.closest('span'); if (!s) return;
-  document.querySelectorAll('#tree .sel').forEach(x => x.classList.remove('sel'));
+  document.querySelectorAll('#tree .sel, #pages .sel').forEach(x => x.classList.remove('sel'));
   s.classList.add('sel'); folder = s.dataset.p; buttons();
   const li = s.parentElement, open = li.querySelector('ul');
   if (open) { open.remove(); s.querySelector('i').textContent = '›'; }
@@ -874,7 +1160,7 @@ $('projects').addEventListener('click', (e) => {
 /* ---- status */
 function buttons() {
   // jobs queue on the server, so nothing here waits for a running one
-  $('crawl').disabled = !folder;
+  $('crawl').disabled = !folder || /^https?:/.test(folder);   // a web page is crawled from its site, not on its own
   const pr = S && S.projects.find(p => p.slug === project);
   $('link').disabled = !folder || !project;
   $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';
@@ -893,6 +1179,8 @@ async function poll() {
   // redrawn only when it changed: this runs every 1-4 seconds
   const pj = JSON.stringify(S.projects);
   if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); }
+  const sj = JSON.stringify(S.site);
+  if (sj !== drawPages.last) { drawPages.last = sj; drawPages(); }
   buttons();
   // any movement in the job means findings may have changed; a short job can
   // start and finish between two polls, so compare, do not watch for "running"
@@ -937,6 +1225,8 @@ function card(f) {
   if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
     '<div class="pairs">' + (f.pairs || []).map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div>' +
     '<div class="dim">On the site · found in ' + tilde(f.path) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
+  if (f.kind === 'page') h += '<div class="cap dim">Web page' + (f.linked ? ' · linked' : '') + '</div><div>' + esc(f.title || '') + '</div><div class="src">' + esc(f.path) + '</div>' +
+    (f.pairs ? '<div class="pairs">' + f.pairs.map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div><div class="dim">Pictures on this page match the site' + (f.count > 4 ? ' (' + f.count + ')' : '') + '</div>' : '');
   if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + tilde(f.path) + '</div>';
   if (f.kind === 'image') {
     h += thumb(f.path) + '<div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
@@ -951,12 +1241,12 @@ function card(f) {
 function drawFindings() {
   for (const col of ['pending', 'accepted', 'rejected']) {
     // folders and working titles first: accepting one is what fills the rest
-    const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' ? 0 : 1);
+    const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page' ? 0 : 1);
     const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
     $(col).innerHTML = list.map(card).join('');
     $('n-' + col).textContent = list.length || '';
   }
-  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind !== 'folder');
+  $('write').disabled = !findings.some(f => f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
 }
 $('review').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]'); if (!b) return;
@@ -965,7 +1255,7 @@ $('review').addEventListener('click', async (e) => {
   try { await save(); Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked })); }
   catch (err) { $('status').textContent = '⚠ ' + err.message; return; }
   drawFindings();
-  if (f.kind === 'folder' || f.kind === 'nickname') poll();
+  if (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page') poll();
 });
 $('review').addEventListener('input', (e) => {
   const k = e.target.dataset.k; if (!k) return;
@@ -981,6 +1271,7 @@ $('nick').addEventListener('keydown', async (e) => {
   e.target.value = '';
   poll();
 });
+$('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(e => alert(e.message)));
 $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(e => alert(e.message)));
 $('write').addEventListener('click', async () => {

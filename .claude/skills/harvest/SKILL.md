@@ -63,6 +63,25 @@ Never test against Robert's real state or repo content without reverting:
 - Commits that touch only `tools/` end the message with `[skip ci]`, so Netlify
   doesn't run a build (and charge credits) for something that doesn't change the site.
 
+## What it reads
+
+| Source | How |
+|---|---|
+| PDF / .ai text layer | PDFKit via osascript JXA |
+| PDF pages with no text (Rhino tiled-PNG exports, InDesign layouts of them) | OCR: Apple Vision, a Swift helper compiled once into `.../Harvest/ocr` (~1 min the first time) |
+| .indd | InDesign itself, only when the checkbox is ticked |
+| .3dm | the Notes panel, read from the file's properties table (first 8 MB only) |
+| .docx .doc .rtf .odt / .txt .md | textutil / directly |
+| A website | **Crawl website**: `/sitemap.xml` for every page (including unlinked ones) and, on Squarespace, every page's pictures; page text via `?format=json` |
+
+Website pages become **page** cards (matched by address/title, or because their
+pictures match ones already on the site). Accepting one pulls in its text and
+pictures. Pictures stay on the website until Write downloads them, read their
+real format from the bytes, and convert anything that isn't JPEG/PNG/WebP.
+
+**The old site is `rmaciel.work` on Squarespace and goes away at DNS cutover** —
+see PUNCH-LIST §4.
+
 ## Limits worth knowing before promising anything
 
 - Matching is by name, so short or common titles (NOISE, LIGHT WORK) produce noise;

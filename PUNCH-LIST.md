@@ -149,6 +149,11 @@ these on the deploy preview **before** the cutover, not after:
 **Read the four standing rules at the top of `TO-DO.md` first.** They are the
 four ways to lose the email.
 
+- [ ] **Harvest the old Squarespace site first.** `rmaciel.work` still serves it,
+  including ~38 unlinked pages of copy and pictures that exist nowhere else.
+  The moment the domain points here, those pages stop answering at that
+  address. Run Harvest → **Crawl website** → `rmaciel.work`, and write what is
+  wanted, BEFORE the step below.
 - [ ] In Netlify: add the custom domain, open **Check DNS configuration**, and
       read the current target values off that panel
 - [ ] Decide apex (`rmaciel.work`) or `www` as primary. Apex reads better and
