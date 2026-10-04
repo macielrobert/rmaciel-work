@@ -1153,6 +1153,8 @@ const PAGE = String.raw`<!doctype html>
   @keyframes busy { from { transform:translateX(-100%); } to { transform:translateX(400%); } }
   .btn:active { color:var(--ink); }
   .more { margin:14px 0; }
+  #pfilter { display:grid; gap:4px; margin:0 0 8px; }
+  #pfilter input, #pfilter select { margin:0; }
   #newcards { margin-left:10px; color:var(--ink); }
   main { display:grid; grid-template-columns:260px 220px 1fr; min-height:0; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
@@ -1249,7 +1251,9 @@ const PAGE = String.raw`<!doctype html>
       <button class="btn" data-bulk="rejected" disabled>Reject</button>
       <select id="moveto" disabled><option value="">Move to project…</option></select>
     </div>
-    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2><div id="pending"></div></div>
+    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2>
+      <div id="pfilter"><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div>
+      <div id="pending"></div></div>
     <div class="col"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div><div id="accepted"></div></div>
     <div class="col rejected"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2><div id="rejected"></div></div>
   </section>
@@ -1306,6 +1310,7 @@ $('projects').addEventListener('click', (e) => {
   save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; $('msg').textContent = '';
   shown.pending = shown.accepted = shown.rejected = 100;
+  $('psrc').value = '';   // sources differ per project; the search text carries over
   $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons(); loadFindings();
 });
 
@@ -1401,16 +1406,39 @@ function card(f) {
 // one project's cards — 300 pictures, 288 text boxes — on every click was most
 // of why a click took seconds to show.
 const shown = { pending: 100, accepted: 100, rejected: 100 };
+/* PENDING FILTER — narrow the queue by where cards came from.
+   A card's SOURCE is the website it came from, or the folder its file sits
+   in. The Source menu lists the sources present in this project's pending
+   cards, most cards first; the search box matches path, page title and text.
+   Only Pending is filtered: it is the column that runs to hundreds. Select-all
+   and the bulk bar act on what the filter leaves showing. */
+const sourceOf = (f) => (/^https?:/.test(f.path) ? new URL(f.path).host : (f.kind === 'folder' ? f.path : f.path.replace(/\/[^/]*$/, '')).replace(S.home, '~'));
+const KIND_ORDER = { folder: 0, page: 1, nickname: 2, text: 3, image: 4 };
+function pendingView(list) {
+  const counts = {};
+  for (const f of list) counts[sourceOf(f)] = (counts[sourceOf(f)] || 0) + 1;
+  const keep = $('psrc').value;
+  const opts = '<option value="">All sources (' + list.length + ')</option>' + Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([k, n]) => '<option value="' + esc(k) + '"' + (k === keep ? ' selected' : '') + '>' + esc(k) + ' (' + n + ')</option>').join('');
+  if ($('psrc').innerHTML !== opts) $('psrc').innerHTML = opts;   // rebuilding while open would close the menu
+  const src = $('psrc').value, q = $('pq').value.trim().toLowerCase();
+  let out = list.filter(f => (!src || sourceOf(f) === src) && (!q || [f.path, f.title, f.text, f.edited].some(x => x && String(x).toLowerCase().includes(q))));
+  const sort = $('psort').value;
+  if (sort === 'source') out = out.sort((a, b) => sourceOf(a).localeCompare(sourceOf(b)) || a.path.localeCompare(b.path));
+  if (sort === 'kind') out = out.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.path.localeCompare(b.path));
+  return out;
+}
 function drawFindings() {
   for (const col of ['pending', 'accepted', 'rejected']) {
     // folders and working titles first: accepting one is what fills the rest
     const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page' ? 0 : 1);
-    const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
+    const every = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
+    const list = col === 'pending' ? pendingView(every) : every;
     const rest = list.length - shown[col];
     $(col).innerHTML = list.slice(0, shown[col]).map(card).join('') + (rest > 0 ? '<button class="btn more" data-more="' + col + '">Show ' + Math.min(rest, 100) + ' more of ' + rest + '</button>' : '');
     const all = document.querySelector('[data-all="' + col + '"]');
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
-    $('n-' + col).textContent = list.length || '';
+    $('n-' + col).textContent = list.length === every.length ? (list.length || '') : list.length + ' of ' + every.length;
   }
   $('write').disabled = !findings.some(f => f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
@@ -1435,6 +1463,11 @@ $('review').addEventListener('click', async (e) => {
   if (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page') poll();
 });
 $('newcards').addEventListener('click', () => loadFindings());
+// filtering is local and instant; paging restarts so the first matches show
+const refilter = () => { shown.pending = 100; drawFindings(); };
+$('pq').addEventListener('input', refilter);
+$('psrc').addEventListener('change', refilter);
+$('psort').addEventListener('change', refilter);
 $('review').addEventListener('input', (e) => {
   const k = e.target.dataset.k; if (!k) return;
   const id = e.target.closest('.card').dataset.id;
