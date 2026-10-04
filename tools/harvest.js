@@ -304,9 +304,9 @@ function chunk(text) {
 const READERS = {
   '.pdf': pdfText, '.ai': pdfText,
   '.docx': textutilText, '.doc': textutilText, '.rtf': textutilText, '.odt': textutilText,
-  '.txt': async (f) => chunk(fs.readFileSync(f, 'utf8')), '.md': async (f) => chunk(fs.readFileSync(f, 'utf8')),
+  '.txt': async (f) => chunk(await fs.promises.readFile(f, 'utf8')), '.md': async (f) => chunk(await fs.promises.readFile(f, 'utf8')),
   '.indd': async (f) => (await sh('osascript', [INDD_AS, f])).split('\x1e'),
-  '.3dm': async (f) => rhinoNotes(f),
+  '.3dm': rhinoNotes,
 };
 const isDoc = (e, indesign) => Object.hasOwn(READERS, e) && (e !== '.indd' || indesign);
 
@@ -376,11 +376,14 @@ function ocrTool() {
      set carry no payload) to the notes chunk, and take its longest run of text.
      Checked against real Rhino 7 and 8 files for the walk; not yet against a
      file that HAS notes, so the text extraction is the unverified part. */
-function rhinoNotes(f) {
-  const fd = fs.openSync(f, 'r');
+// Asynchronous on purpose, like every read of the user's files: a file kept in
+// iCloud but not on this Mac downloads when read, and a synchronous read held
+// the whole server — every click, every status check — for as long as that
+// took. Measured: one status check took 37 s during a folder expansion.
+async function rhinoNotes(f) {
+  const fh = await fs.promises.open(f, 'r');
   const buf = Buffer.alloc(8 << 20);
-  const n = fs.readSync(fd, buf, 0, buf.length, 0);
-  fs.closeSync(fd);
+  const { bytesRead: n } = await fh.read(buf, 0, buf.length, 0).finally(() => fh.close());
   const b = buf.subarray(0, n);
   const L = (+b.toString('latin1', 24, 32).trim() || 0) >= 50 ? 8 : 4;
   const len = (at) => (L === 8 ? Number(b.readBigUInt64LE(at)) : b.readUInt32LE(at));
@@ -414,9 +417,9 @@ async function textutilText(f) {
 // Returns an array of text units: pages, stories or chunks. Cached by path,
 // size and date, so an unchanged file is read once, ever.
 async function extract(file) {
-  const st = fs.statSync(file);
+  const st = await fs.promises.stat(file);
   const cached = path.join(TEXT, id(file, st.size, st.mtimeMs) + '.json');
-  if (fs.existsSync(cached)) return JSON.parse(fs.readFileSync(cached, 'utf8'));
+  if (fs.existsSync(cached)) return JSON.parse(await fs.promises.readFile(cached, 'utf8'));
   let units;
   try {
     units = await READERS[ext(file)](file);
@@ -462,8 +465,13 @@ function add(f) {
   f.id = id(f.project, f.kind, f.path, f.th ?? '');
   if (state.findings[f.id]) return false;
   state.findings[f.id] = { status: 'pending', ...f };
+  rev++;
   return true;
 }
+// Goes up whenever a card is added or dropped. The page compares it to decide
+// whether to fetch the cards again — instead of refetching and redrawing every
+// card on every status check while a crawl runs.
+let rev = 0;
 
 // Text is identified by its CONTENT, not its page number: after pages are
 // inserted into a PDF, "page 5" is different text, and keying on the number
@@ -482,7 +490,7 @@ function addTexts(file, units, pick, from) {
     }
   });
   for (const [k, f] of Object.entries(state.findings)) {
-    if (f.kind === 'text' && f.path === file && f.status === 'pending' && (f.from ?? null) === (from ?? null) && !live.has(f.project + f.th)) delete state.findings[k];
+    if (f.kind === 'text' && f.path === file && f.status === 'pending' && (f.from ?? null) === (from ?? null) && !live.has(f.project + f.th)) { delete state.findings[k]; rev++; }
   }
 }
 
@@ -544,6 +552,7 @@ async function expandFolder(f) {
   for (const d of docs) {
     addTexts(d, await extract(d), (text) => text.length >= 40 ? [f.project] : [], f.id);
     job.done++;
+    if (job.done % 10 === 0) persist();   // a big folder takes a while; a stop part-way keeps what was found
     await tick();
   }
   f.expanded = true;
@@ -583,7 +592,7 @@ function run(phase, fn) {
 // beside a project matches the cards shown. Decided ones stay as a record.
 // A re-crawl finds the file again wherever it went.
 function prune() {
-  for (const [k, f] of Object.entries(state.findings)) if (f.status === 'pending' && !present(f.path)) delete state.findings[k];
+  for (const [k, f] of Object.entries(state.findings)) if (f.status === 'pending' && !present(f.path)) { delete state.findings[k]; rev++; }
 }
 
 // The SAVED state is the queue of folders to expand: any accepted folder not
@@ -934,7 +943,7 @@ async function importImage(src, slug, n, w, h) {
   const args = [];
   if (big) args.push('-Z', String(MAX_SIDE));
   if (outExt === '.jpg' && (big || !KEEP_EXT.has(e))) args.push('-s', 'format', 'jpeg', '-s', 'formatOptions', '85');
-  if (!args.length || e === '.webp') fs.copyFileSync(src, out);   // sips cannot write WebP
+  if (!args.length || e === '.webp') await fs.promises.copyFile(src, out);   // sips cannot write WebP; async: an iCloud original downloads as it is read
   else await sh('sips', [...args, src, '--out', out]);
   return `/${imgRel(slug, n)}/src${outExt}`;
 }
@@ -1007,7 +1016,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/state') {
       const pending = {};
       for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
-      return json({ root: state.root, home: HOME, job, unpublished: [...unpublished],
+      return json({ root: state.root, home: HOME, job, rev, unpublished: [...unpublished],
         site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
         projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
     }
@@ -1138,6 +1147,12 @@ const PAGE = String.raw`<!doctype html>
   /* a long crawl path gives way, not Publish: it shortens with an ellipsis */
   #rootline { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #publish[disabled] { opacity:.35; }
+  /* instant feedback: a hairline runs along the top while anything is saving */
+  body.busy::before { content:''; position:fixed; top:0; left:0; height:2px; width:30%; background:var(--ink); animation:busy 1s linear infinite; z-index:9; }
+  @keyframes busy { from { transform:translateX(-100%); } to { transform:translateX(400%); } }
+  .btn:active { color:var(--ink); }
+  .more { margin:14px 0; }
+  #newcards { margin-left:10px; color:var(--ink); }
   main { display:grid; grid-template-columns:260px 220px 1fr; min-height:0; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
   main > section:last-child { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
@@ -1231,7 +1246,7 @@ const PAGE = String.raw`<!doctype html>
       <button class="btn" data-bulk="rejected" disabled>Reject</button>
       <select id="moveto" disabled><option value="">Move to project…</option></select>
     </div>
-    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><input type="checkbox" data-all="pending" title="Select all"></h2><div id="pending"></div></div>
+    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2><div id="pending"></div></div>
     <div class="col"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div><div id="accepted"></div></div>
     <div class="col rejected"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2><div id="rejected"></div></div>
   </section>
@@ -1243,7 +1258,9 @@ const api = (p, b) => fetch(p, b && { method:'POST', body:JSON.stringify(b) }).t
 const tilde = (p) => esc(p.replace(S.home, '~'));
 // a picture on a website loads straight from it, at a thumbnail size where the host can make one
 const thumb = (p) => '<img loading="lazy" src="' + (/^https?:/.test(p) ? esc(/squarespace-cdn\.com/.test(p) ? p + '?format=500w' : p) : '/thumb?p=' + encodeURIComponent(p)) + '">';
-let S = null, folder = null, project = null, findings = [], lastJob = '';
+let S = null, folder = null, project = null, findings = [], loadedRev = -1;
+let inflight = 0;   // requests sent and not yet answered
+const busy = (d) => { inflight += d; document.body.classList.toggle('busy', inflight > 0); };
 const picked = new Set();   // ticked card ids, kept across redraws
 
 /* ---- tree: lazy, one level per click */
@@ -1285,6 +1302,7 @@ $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d) return;
   save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; $('msg').textContent = '';
+  shown.pending = shown.accepted = shown.rejected = 100;
   $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons(); loadFindings();
 });
 
@@ -1304,7 +1322,9 @@ async function poll() {
   catch (e) { $('status').textContent = '⚠ ' + e.message; poll.t = setTimeout(poll, 4000); return; }
   const j = S.job;
   $('rootline').textContent = S.root ? 'Last crawl: ' + S.root : 'Pick a folder, then crawl it';
-  $('status').textContent = j.error ? '⚠ ' + j.error
+  // a message just shown to the user (moved, published, an error) stays put
+  // for five seconds instead of being replaced by the next status check
+  if (Date.now() - (say.at || 0) > 5000) $('status').textContent = j.error ? '⚠ ' + j.error
     : j.running ? j.phase + (j.total ? ' ' + j.done + ' / ' + j.total : ' · ' + j.done) + ' · ' + j.added + ' found'
     : j.phase === 'Done' ? 'Done · ' + j.added + ' new' : '';
   // redrawn only when it changed: this runs every 1-4 seconds
@@ -1317,14 +1337,14 @@ async function poll() {
   $('publish').disabled = !n;
   $('publish').textContent = n ? 'Publish ' + n : 'Publish';
   $('publish').title = n ? 'Waiting to go live: ' + S.unpublished.join(', ') : 'Nothing waiting to go live';
-  // any movement in the job means findings may have changed; a short job can
-  // start and finish between two polls, so compare, do not watch for "running"
-  // ...but never while a field is being typed in: a redraw replaces every
-  // card and would throw away the unsaved text. It catches up on a later poll.
-  // (not j.done: it moves with every file read, and would refetch every card
-  // every poll while nothing new had been found)
-  const key = [j.phase, j.added, j.running].join('|');
-  if (key !== lastJob && project && !editing()) { loadFindings(); lastJob = key; }
+  // Cards are fetched again only when the server's revision has moved, and
+  // never while a field is being typed in or one of this page's own changes
+  // is still on its way. During a crawl the new cards wait behind a button
+  // rather than redrawing the column under the pointer every second.
+  const changed = project && S.rev !== loadedRev;
+  const quiet = !editing() && !inflight;
+  if (changed && quiet && (!j.running || !findings.length)) loadFindings();
+  $('newcards').hidden = !(changed && j.running && findings.length);
   poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
 
@@ -1347,6 +1367,7 @@ function save() {
 }
 const editing = () => { const a = document.activeElement; return !!(a && a.dataset && a.dataset.k); };
 async function loadFindings() {
+  loadedRev = S ? S.rev : -1;
   findings = await api('/api/findings?project=' + encodeURIComponent(project));
   for (const [id, fields] of dirty) Object.assign(findings.find(f => f.id === id) || {}, fields);
   drawFindings();
@@ -1373,12 +1394,17 @@ function card(f) {
   }
   return h + '<div class="acts">' + acts + '</div></div>';
 }
+// A column draws 100 cards, then a button for the next 100. Drawing all 562 of
+// one project's cards — 300 pictures, 288 text boxes — on every click was most
+// of why a click took seconds to show.
+const shown = { pending: 100, accepted: 100, rejected: 100 };
 function drawFindings() {
   for (const col of ['pending', 'accepted', 'rejected']) {
     // folders and working titles first: accepting one is what fills the rest
     const rank = (f) => (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page' ? 0 : 1);
     const list = findings.filter(f => f.status === col || (col === 'accepted' && f.status === 'written')).sort((a, b) => rank(a) - rank(b));
-    $(col).innerHTML = list.map(card).join('');
+    const rest = list.length - shown[col];
+    $(col).innerHTML = list.slice(0, shown[col]).map(card).join('') + (rest > 0 ? '<button class="btn more" data-more="' + col + '">Show ' + Math.min(rest, 100) + ' more of ' + rest + '</button>' : '');
     const all = document.querySelector('[data-all="' + col + '"]');
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length || '';
@@ -1387,15 +1413,25 @@ function drawFindings() {
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
   bulkBar();
 }
+/* INSTANT: the card moves the moment it is clicked; the server is told after.
+   If the server refuses, the card goes back where it was and the reason shows
+   in the status line. The hairline at the top runs until the server answers. */
 $('review').addEventListener('click', async (e) => {
+  const more = e.target.closest('[data-more]');
+  if (more) { shown[more.dataset.more] += 100; drawFindings(); return; }
   const b = e.target.closest('[data-a]'); if (!b) return;
   const id = b.closest('.card').dataset.id;
   const f = findings.find(x => x.id === id);
+  const was = f.status;
+  f.status = b.dataset.a; picked.delete(id); drawFindings();
+  busy(1);
   try { await save(); Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked })); }
-  catch (err) { $('status').textContent = '⚠ ' + err.message; return; }
+  catch (err) { f.status = was; oops(err); }
+  finally { busy(-1); }
   drawFindings();
   if (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page') poll();
 });
+$('newcards').addEventListener('click', () => loadFindings());
 $('review').addEventListener('input', (e) => {
   const k = e.target.dataset.k; if (!k) return;
   const id = e.target.closest('.card').dataset.id;
@@ -1411,7 +1447,8 @@ $('nick').addEventListener('keydown', async (e) => {
   poll();
 });
 // errors show in the status line, not alert(): the desktop app's window has no browser to show an alert box
-const oops = (e) => { $('status').textContent = '⚠ ' + e.message; };
+function say(msg) { $('status').textContent = msg; say.at = Date.now(); }
+const oops = (e) => say('⚠ ' + e.message);
 $('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(oops));
 $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
 $('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
@@ -1431,17 +1468,34 @@ $('review').addEventListener('change', (e) => {
   if (t.dataset.all) { for (const c of $(t.dataset.all).querySelectorAll('.card')) { t.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); c.querySelector('.pick') && (c.querySelector('.pick').checked = t.checked); } bulkBar(); }
 });
 async function bulk(body) {
-  try { await save(); await api('/api/bulk', { ids: [...picked], ...body }); picked.clear(); await loadFindings(); poll(); }
-  catch (e) { oops(e); }
+  const ids = [...picked], n = ids.length;
+  const to = body.project && S.projects.find(p => p.slug === body.project);
+  // shown at once: moved cards leave this project, decided ones change column
+  for (const f of findings) if (picked.has(f.id)) { if (to) f.status = 'moving'; else f.status = body.status; }
+  if (to) findings = findings.filter(f => f.status !== 'moving');
+  picked.clear(); drawFindings();
+  say((to ? 'Moving ' + n + ' to ' + to.title : (body.status === 'accepted' ? 'Accepting ' : 'Rejecting ') + n) + '…');
+  busy(1);
+  try {
+    await save(); await api('/api/bulk', { ids, ...body });
+    say((to ? 'Moved ' + n + ' to ' + to.title : (body.status === 'accepted' ? 'Accepted ' : 'Rejected ') + n) + '.');
+  } catch (e) { oops(e); await loadFindings(); }   // put the cards back as the server has them
+  finally { busy(-1); }
+  poll();
 }
 document.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => bulk({ status: b.dataset.bulk })));
 $('moveto').addEventListener('change', (e) => { const to = e.target.value; e.target.value = ''; if (to) bulk({ project: to }); });
-$('clear').addEventListener('click', () => api('/api/clear', { project }).then(loadFindings).catch(oops));
+$('clear').addEventListener('click', async () => {
+  const kept = findings;
+  findings = findings.filter(f => f.status !== 'rejected'); drawFindings();
+  busy(1);
+  try { await api('/api/clear', { project }); } catch (e) { findings = kept; drawFindings(); oops(e); } finally { busy(-1); }
+});
 
 /* ---- publish, new project */
 $('publish').addEventListener('click', async () => {
-  $('publish').disabled = true; $('status').textContent = 'Publishing…';
-  try { await save(); $('status').textContent = (await api('/api/publish', {})).message; } catch (e) { oops(e); }
+  $('publish').disabled = true; say('Publishing…'); busy(1);
+  try { await save(); say((await api('/api/publish', {})).message); } catch (e) { oops(e); } finally { busy(-1); }
   poll();
 });
 $('newtitle').addEventListener('keydown', async (e) => {
@@ -1450,7 +1504,7 @@ $('newtitle').addEventListener('keydown', async (e) => {
     const d = await api('/api/newproject', { title: e.target.value, section: $('newsection').value });
     e.target.value = ''; await poll();
     document.querySelector('[data-s="' + d.slug + '"]')?.click();
-    $('status').textContent = 'Created as a draft. Add a grid icon in /keystatic before it can go live.';
+    say('Created as a draft. Add a grid icon in /keystatic before it can go live.');
   } catch (err) { oops(err); }
 });
 $('write').addEventListener('click', async () => {
