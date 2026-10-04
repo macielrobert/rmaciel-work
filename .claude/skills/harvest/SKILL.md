@@ -138,3 +138,6 @@ here marked removed, so this project's Save takes it off. A moved work lands
 first in a project never opened in Organize; reorder with the arrows.
 Collect: an accepted folder card counts the cards it brought in and has
 **Show what is inside**, which filters Pending to that folder's path.
+The folder tree also lists pictures and readable documents, each with **Add**
+(`/api/addfile`): a picture goes into the selected project accepted; a
+document is read as a job and its passages arrive pending (`from: 'manual'`).

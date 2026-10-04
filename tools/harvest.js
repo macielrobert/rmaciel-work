@@ -1391,8 +1391,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/ls') {
       const dir = path.resolve(url.searchParams.get('p') || HOME);
-      const dirs = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory() && !SKIP.test(e.name)).map(e => e.name);
-      return json({ path: dir, dirs: dirs.sort((a, b) => a.localeCompare(b)) });
+      const all = fs.readdirSync(dir, { withFileTypes: true }).filter(e => !SKIP.test(e.name));
+      const dirs = all.filter(e => e.isDirectory()).map(e => e.name);
+      // the files Harvest can use, so one can be added by hand (see /api/addfile)
+      const files = all.filter(e => e.isFile() && (IMAGE_EXT.has(ext(e.name)) || isDoc(ext(e.name), true))).map(e => e.name);
+      const az = (a, b) => a.localeCompare(b);
+      return json({ path: dir, dirs: dirs.sort(az), files: files.sort(az) });
     }
     if (p === '/api/organize' && req.method === 'GET') return json(await organize(url.searchParams.get('project')));
     if (p === '/api/findings') {
@@ -1470,6 +1474,31 @@ const server = http.createServer(async (req, res) => {
       if (!slugs.length) throw new Error('Pick a project to crawl for.');
       run('Reading the sitemap', () => crawlSite(url, slugs));
       return json({ ok: true });
+    }
+    // ADD BY HAND — one file the crawler missed, filed under a project. A
+    // picture arrives accepted (choosing it is the decision) and goes on to
+    // Organize. A document is read as a job and its passages arrive PENDING:
+    // a document holds more than the bit wanted, and accepting all of it
+    // would write every paragraph. `from: 'manual'` keeps a crawl's clean-up
+    // of that document's cards and this one's apart.
+    if (p === '/api/addfile') {
+      const file = path.resolve(String(b.path || ''));
+      if (!b.project || !fs.existsSync(path.join(PROJECTS, b.project + '.mdoc'))) throw new Error('Pick a project first.');
+      if (!fs.statSync(file, { throwIfNoEntry: false })?.isFile()) throw new Error('That file is gone.');
+      if (IMAGE_EXT.has(ext(file))) {
+        const f = { project: b.project, kind: 'image', path: file };
+        add(f);
+        const g = state.findings[f.id];
+        if (g.status !== 'written') { g.status = 'accepted'; delete g.cleared; rev++; }
+        await sizeImages();
+        persist();
+        return json({ kind: 'image', status: g.status });
+      }
+      if (!isDoc(ext(file), true)) throw new Error('Harvest cannot read that kind of file.');
+      run(`Reading ${path.basename(file)}`, async () => {
+        addTexts(file, await extract(file), (t) => t.trim() ? [b.project] : [], 'manual');
+      });
+      return json({ kind: 'text' });
     }
     if (p === '/api/link') {
       // Linking files EVERYTHING inside under one project. Fine for a project's
@@ -1616,6 +1645,10 @@ const PAGE = String.raw`<!doctype html>
   #tree li > span:hover { color:var(--ink); }
   #tree li > span.sel { color:var(--ink); }
   #tree li > span i { display:inline-block; width:12px; font-style:normal; }
+  #tree li.file { display:flex; gap:6px; align-items:center; padding-left:12px; color:var(--accent-dim); }
+  #tree li.file img { width:28px; height:28px; object-fit:contain; flex:none; }
+  #tree li.file span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:default; }
+  #tree li.file .btn { flex:none; }
   .tree-actions { margin:0 0 14px; display:grid; gap:6px; }
   #pages:not(:empty) { margin:0 0 14px; padding-bottom:10px; border-bottom:1px solid var(--accent-dim); }
   #pages span { display:block; cursor:pointer; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -1736,7 +1769,9 @@ const picked = new Set();   // ticked card ids, kept across redraws
 async function branch(li, p) {
   const d = await api('/api/ls?p=' + encodeURIComponent(p));
   const ul = document.createElement('ul');
-  ul.innerHTML = d.dirs.map(n => '<li><span data-p="' + esc(d.path + '/' + n) + '"><i>›</i>' + esc(n) + '</span></li>').join('');
+  ul.innerHTML = d.dirs.map(n => '<li><span data-p="' + esc(d.path + '/' + n) + '"><i>›</i>' + esc(n) + '</span></li>').join('') +
+    // files too, so anything the crawler missed can be added by hand
+    d.files.map(n => { const f = d.path + '/' + n; return '<li class="file" data-file="' + esc(f) + '" title="' + esc(n) + '">' + (/\.(jpe?g|png|webp|heic|heif|tiff?)$/i.test(n) ? thumb(f) : '') + '<span>' + esc(n) + '</span><button class="btn">Add</button></li>'; }).join('');
   li.appendChild(ul);
 }
 // pages from the last website crawl: picking one is like picking a folder, for Link
@@ -1750,6 +1785,20 @@ $('pages').addEventListener('click', (e) => {
   s.classList.add('sel'); folder = s.dataset.p; buttons();
 });
 $('tree').addEventListener('click', async (e) => {
+  const fl = e.target.closest('li.file');
+  if (fl) {
+    if (!e.target.closest('.btn')) return;
+    const pr = S.projects.find(p => p.slug === project);
+    if (!pr) return say('Pick a project first, then Add.');
+    const b = e.target.closest('.btn');
+    try {
+      const d = await api('/api/addfile', { project, path: fl.dataset.file });
+      b.textContent = 'Added'; b.disabled = true;
+      say(d.kind === 'image' ? 'Added to ' + pr.title + ' — accepted; it is in Organize.' : 'Reading it for ' + pr.title + ' — its passages arrive in Pending.');
+      poll();
+    } catch (err) { oops(err); }
+    return;
+  }
   const s = e.target.closest('span'); if (!s) return;
   document.querySelectorAll('#tree .sel, #pages .sel').forEach(x => x.classList.remove('sel'));
   s.classList.add('sel'); folder = s.dataset.p; buttons();
