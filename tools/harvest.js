@@ -1482,7 +1482,9 @@ async function write(slug) {
   // Text only. Pictures are written from Organize, where copies of one work
   // are stacked and one is kept; writing them here as well would put every
   // copy on the site.
-  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text');
+  // A passage used as a work's caption (Organize) is not ALSO the description:
+  // it stays accepted, and Organize's Save is what puts it on the site.
+  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text' && f.target !== 'caption');
   for (const f of acc) if (f.kind === 'image' && !String(f.alt || '').trim()) throw new Error(`${path.basename(f.path)} needs alt text before it can be written — the build refuses an image without it.`);
 
   data.images = data.images || [];

@@ -57,11 +57,13 @@
       <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
       <select id="orgmove" disabled></select>
       <button class="btn" id="orgsave" disabled>Save to project</button>
+      <button class="btn" id="textstoggle" title="The project's accepted text, to attach to works as captions">Text</button>
       <button class="btn" id="projtoggle" title="Every other field of this project: section, icon, description…">Project details</button>
       <span class="dim" id="orgmsg"></span>
     </div>
     <!-- PROJECT PANEL: every field Keystatic edits except the pictures, which
          are the works below. Filled by loadProj() in page.js. -->
+    <div id="orgbody"><div id="orgmain">
     <div id="proj" hidden>
       <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span></div>
       <div class="pgrid">
@@ -92,6 +94,7 @@
       <div class="pfoot"><button class="btn" id="psave">Save project</button><span class="dim" id="pmsg"></span></div>
     </div>
     <div id="stacks"></div>
+    </div><aside id="texts" hidden></aside></div>
   </section>
 </main>
 <script src="/page.js"></script>

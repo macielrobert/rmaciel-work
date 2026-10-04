@@ -167,3 +167,8 @@ this save is what broke the build. Icon/wordmark uploads wait in
 `.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
 Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.
+
+Organize → **Text**: the project's accepted passages in a column beside the
+works. Click one, then a work (list or grid): it is appended to that work's
+caption and the passage's target becomes `caption`, which Collect's Write
+skips (Organize's Save is what puts it on the site).

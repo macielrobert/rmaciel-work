@@ -41,7 +41,22 @@
   #org { display:none; padding:0; border-right:0; }
   main.organize { grid-template-columns:220px 1fr; }
   main.organize > section:first-child, main.organize #review { display:none; }
-  main.organize #org { display:block; }
+  /* Organize: a head, then the works (and project panel) beside the text
+     list, each scrolling on its own so a passage stays in view while the
+     works scroll under it */
+  main.organize #org { display:flex; flex-direction:column; overflow:hidden; }
+  #orgbody { flex:1; min-height:0; display:grid; grid-template-columns:1fr; }
+  #orgbody.two { grid-template-columns:1fr 300px; }
+  #orgmain { overflow:auto; min-height:0; }
+  #texts { overflow:auto; min-height:0; padding:var(--m); border-left:1px solid var(--accent-dim); }
+  .tblock { border-top:1px solid var(--accent-dim); padding:8px 0 10px; cursor:pointer; color:var(--accent); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .tblock small { display:block; font-size:10px; color:var(--accent-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tblock:hover, .tblock.on { color:var(--ink); }
+  .tblock.on { outline:1px solid var(--ink); outline-offset:4px; }
+  .tblock.used { opacity:.5; }
+  #textstoggle.on { color:var(--ink); }
+  body.arming .stack, body.arming .tile { cursor:copy; }
+  body.arming .stack:hover, body.arming .tile:hover .keep { outline:1px solid var(--ink); }
   .orghead { position:sticky; top:0; z-index:2; background:var(--bg); padding:var(--m); border-bottom:1px solid var(--accent-dim); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
   #stacks { padding:0 var(--m) var(--m); }
   .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }

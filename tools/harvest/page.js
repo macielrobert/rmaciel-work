@@ -176,7 +176,7 @@ function card(f) {
   }
   if (f.kind === 'text') {
     h += '<div class="src">' + label(f) + '</div><textarea data-k="edited">' + esc(f.edited ?? f.text) + '</textarea>';
-    if (f.status === 'accepted') h += '<select data-k="target">' + [['description','Add to description'],['detail','Add as detail lines'],['share','Use as share description']].map(([v,t]) => '<option value="' + v + '"' + ((f.target || 'description') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
+    if (f.status === 'accepted') h += '<select data-k="target">' + [['description','Add to description'],['detail','Add as detail lines'],['share','Use as share description'],['caption','Used as a caption (Organize)']].map(([v,t]) => '<option value="' + v + '"' + ((f.target || 'description') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
   }
   return h + '<div class="acts">' + acts + '</div></div>';
 }
@@ -220,7 +220,7 @@ function drawFindings() {
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length === every.length ? (list.length || '') : list.length + ' of ' + every.length;
   }
-  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text');
+  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text' && f.target !== 'caption');
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
   bulkBar();
 }
@@ -419,7 +419,7 @@ $('orgviews').addEventListener('click', (e) => {
 async function loadOrg() {
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
-  loadProj();
+  loadProj(); loadTexts();
   $('orgmsg').textContent = 'Grouping copies…'; busy(1);
   try { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); $('orgmsg').textContent = ''; }
   catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
@@ -468,6 +468,8 @@ async function orgOp(body, redraw = true) {
   finally { busy(-1); }
 }
 $('stacks').addEventListener('click', (e) => {
+  const work = armed && e.target.closest('.stack, .tile');
+  if (work) { e.preventDefault(); attach(work.dataset.id); return; }
   const tile = e.target.closest('.tile');
   if (tile && !e.target.classList.contains('spick')) {   // the whole tile is the tick box
     const id = tile.dataset.id, on = !opick.has(id);
@@ -586,6 +588,57 @@ $('write').addEventListener('click', async () => {
     loadFindings();
   } catch (e) { $('msg').textContent = '⚠ ' + e.message; }
 });
+
+/* ---- TEXT → CAPTION: the project's accepted passages beside the works.
+   Click a passage, then the work it describes: it is ADDED to that work's
+   caption (never replacing it, as a suggestion is). The passage is then marked
+   "used as a caption", so Collect's Write does not also put it in the
+   description; Collect's menu on the card can change that back. */
+let textsOpen = remember('textsOpen') === '1', armed = null, otexts = [];
+function textsLook() {
+  $('texts').hidden = !textsOpen; $('textstoggle').classList.toggle('on', textsOpen);
+  $('orgbody').classList.toggle('two', textsOpen);
+}
+$('textstoggle').addEventListener('click', () => { textsOpen = !textsOpen; remember('textsOpen', textsOpen ? '1' : '0'); disarm(); loadTexts(); });
+async function loadTexts() {
+  textsLook();
+  if (!textsOpen || !project) return;
+  const slug = project;
+  try {
+    const all = await api('/api/findings?project=' + encodeURIComponent(slug));
+    if (slug !== project) return;   // switched while it loaded
+    otexts = all.filter(f => f.kind === 'text' && f.status === 'accepted');
+  } catch (e) { $('texts').innerHTML = '<p class="dim">⚠ ' + esc(e.message) + '</p>'; return; }
+  drawTexts();
+}
+function drawTexts() {
+  const src = (f) => /^https?:/.test(f.path) ? new URL(f.path).pathname : f.path.split('/').pop();
+  $('texts').innerHTML = '<h2 class="cap">Text <span class="dim">— click one, then a work</span></h2>' + (otexts.length ? otexts.map(f =>
+    '<div class="tblock' + (armed === f.id ? ' on' : '') + (f.target === 'caption' ? ' used' : '') + '" data-passage="' + f.id + '">' +
+    '<small>' + esc(src(f)) + (f.target === 'caption' ? ' · used as a caption' : '') + '</small>' + esc(String(f.edited ?? f.text)) + '</div>').join('')
+    : '<p class="dim">No accepted text for this project. Accept passages in Collect and they appear here.</p>');
+}
+function disarm() { armed = null; document.body.classList.remove('arming'); if (otexts.length) drawTexts(); }
+$('texts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-passage]'); if (!b) return;
+  if (armed === b.dataset.passage) return disarm();
+  armed = b.dataset.passage; document.body.classList.add('arming'); drawTexts();
+  $('orgmsg').textContent = 'Now click the work this text describes — Esc to cancel.';
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && armed) { disarm(); $('orgmsg').textContent = ''; } });
+async function attach(stack) {
+  const f = otexts.find(x => x.id === armed), t = org.stacks.find(x => x.id === stack);
+  disarm();
+  if (!f || !t) return;
+  const text = String(f.edited ?? f.text).trim();
+  // the caption box may hold typing not yet sent: read it from the page if it is there
+  const box = document.querySelector('.stack[data-id="' + stack + '"] [data-f=caption]');
+  const cur = (box ? box.value : t.caption).trim();
+  await orgOp({ op: 'field', stack, field: 'caption', value: cur ? cur + '\n' + text : text });
+  try { await api('/api/finding', { id: f.id, target: 'caption' }); f.target = 'caption'; } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; return; }
+  drawTexts();
+  $('orgmsg').textContent = 'Added to the caption of work ' + t.n + '. Save to project when ready.';
+}
 
 /* ---- PROJECT PANEL: every field Keystatic edits, except the pictures (the works below).
    Save sends the whole form; the server writes it the way Keystatic would and
