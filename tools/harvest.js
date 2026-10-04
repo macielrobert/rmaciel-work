@@ -520,9 +520,21 @@ async function walk(root, visit, depth = 0) {
   }
 }
 
-async function crawl(root) {
+/* A crawl is FOR chosen projects, never all of them at once: matching every
+   title against a studio folder files the noise of thirty projects together,
+   and the review queue drowns. Only those projects' titles, working titles and
+   site pictures are looked for. Crawling the same folder again for another
+   project is quick — document text and picture fingerprints are cached. */
+function crawlTargets(slugs) {
+  const projs = projects().filter(p => slugs.includes(p.slug)).map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
+  if (!projs.length) throw new Error('Pick a project to crawl for.');
+  job.for = projs.map(p => p.title).join(', ');
+  return projs;
+}
+
+async function crawl(root, slugs) {
   const indesign = state.indesign;
-  const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
+  const projs = crawlTargets(slugs);
   const docs = [], imgs = [];
   await walk(root, (p, dir) => {
     job.done++;
@@ -864,8 +876,8 @@ async function readPage(pg) {
   return c;
 }
 
-async function crawlSite(start) {
-  const projs = projects().map(p => ({ ...p, m: matcher([p.title, ...p.nicknames]) }));
+async function crawlSite(start, slugs) {
+  const projs = crawlTargets(slugs);
   job.phase = 'Reading the sitemap';
   const pages = await sitePages(start);
   state.site = { start, pages: [] };
@@ -1101,8 +1113,10 @@ const server = http.createServer(async (req, res) => {
     if ('indesign' in b) state.indesign = !!b.indesign;   // read by every job, queued or not
     if (p === '/api/crawl') {
       if (!fs.statSync(b.root, { throwIfNoEntry: false })?.isDirectory()) throw new Error('That folder no longer exists.');
+      const slugs = [].concat(b.projects || []);
+      if (!slugs.length) throw new Error('Pick a project to crawl for.');
       state.root = b.root; persist();
-      run('Listing files', () => crawl(b.root));
+      run('Listing files', () => crawl(b.root, slugs));
       return json({ ok: true });
     }
     if (p === '/api/finding') {
@@ -1136,7 +1150,9 @@ const server = http.createServer(async (req, res) => {
       let url = String(b.url || '').trim();
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
       new URL(url);   // throws on nonsense, before anything is queued
-      run('Reading the sitemap', () => crawlSite(url));
+      const slugs = [].concat(b.projects || []);
+      if (!slugs.length) throw new Error('Pick a project to crawl for.');
+      run('Reading the sitemap', () => crawlSite(url, slugs));
       return json({ ok: true });
     }
     if (p === '/api/link') {
@@ -1392,8 +1408,12 @@ $('projects').addEventListener('click', (e) => {
 /* ---- status */
 function buttons() {
   // jobs queue on the server, so nothing here waits for a running one
-  $('crawl').disabled = !folder || /^https?:/.test(folder);   // a web page is crawled from its site, not on its own
   const pr = S && S.projects.find(p => p.slug === project);
+  // every crawl is for the selected project; without one there is nothing to look for
+  $('crawl').disabled = !folder || !pr || /^https?:/.test(folder);   // a web page is crawled from its site, not on its own
+  $('crawl').textContent = pr ? 'Crawl this folder for ' + pr.title : 'Pick a project to crawl for';
+  $('crawlsite').disabled = !pr;
+  $('crawlsite').textContent = pr ? 'Crawl website for ' + pr.title : 'Pick a project to crawl for';
   $('link').disabled = !folder || !project;
   if (!$('link').dataset.armed) $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';   // armed: keep the warning up
 }
@@ -1408,7 +1428,7 @@ async function poll() {
   // a message just shown to the user (moved, published, an error) stays put
   // for five seconds instead of being replaced by the next status check
   if (Date.now() - (say.at || 0) > 5000) $('status').textContent = j.error ? '⚠ ' + j.error
-    : j.running ? j.phase + (j.total ? ' ' + j.done + ' / ' + j.total : ' · ' + j.done) + ' · ' + j.added + ' found'
+    : j.running ? j.phase + (j.for ? ' for ' + j.for : '') + (j.total ? ' ' + j.done + ' / ' + j.total : ' · ' + j.done) + ' · ' + j.added + ' found'
     : j.phase === 'Done' ? 'Done · ' + j.added + ' new'
     : j.phase === 'Stopped' ? 'Stopped · ' + j.added + ' found before stopping' : '';
   $('stop').hidden = !j.running;
@@ -1574,8 +1594,8 @@ $('nick').addEventListener('keydown', async (e) => {
 // errors show in the status line, not alert(): the desktop app's window has no browser to show an alert box
 function say(msg) { $('status').textContent = msg; say.at = Date.now(); }
 const oops = (e) => say('⚠ ' + e.message);
-$('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(oops));
-$('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
+$('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work', projects: [project] }).then(poll).catch(oops));
+$('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, projects: [project], indesign: $('indesign').checked }).then(poll).catch(oops));
 $('link').addEventListener('click', async () => {
   const force = $('link').dataset.armed === folder;
   try {
