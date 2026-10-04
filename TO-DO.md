@@ -268,6 +268,11 @@ Robert does not want to upgrade.
 until then, no PR against this repo actually deploys once merged, including
 #22 and #23 below.
 
+**Update, 2026-10-04: deploys are running again.** `main` deploys to
+`rmaciel-work.netlify.app` normally; the pause above is history. The build
+cost below is still unfixed, which is why commits touching only `tools/` or
+docs end with `[skip ci]`.
+
 ### The measurement
 
 Taken in the build sandbox — ratios hold, absolute times will differ on
