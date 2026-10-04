@@ -409,6 +409,7 @@ let orgView = remember('orgView') || 'list', orgCell = remember('orgCell') || '1
 function orgPicks() {
   const n = opick.size;
   $('orgmerge').disabled = n < 2;
+  $('orgsplit').disabled = !(org && org.stacks.some(t => opick.has(t.id) && t.members.length > 1));
   $('orgmove').disabled = !n;
   const opts = '<option value="">' + (n ? 'Move ' + n + ' to project…' : 'Move to project…') + '</option>' + S.projects.filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
   if ($('orgmove').innerHTML !== opts) $('orgmove').innerHTML = opts;
@@ -459,7 +460,7 @@ function drawOrg() {
       '<div><div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
       '<div class="turns"><button class="btn" data-op="rotate" data-dir="-1" title="Turn left">↺</button><button class="btn" data-op="rotate" data-dir="1" title="Turn right">↻</button>' + (t.rotate ? '<span class="dim">turned ' + t.rotate + '° — applied on Save</span>' : '') + '</div>' +
       '<div class="meta">' + esc(info(k)) + '<br>' + esc(k.name) + (k.page ? '<br>from “' + esc(k.page.title) + '”' : '') + '</div>' +
-      (t.members.length > 1 ? '<div class="copies">' + t.members.map(m => '<div class="copy' + (m.key === t.keeper ? ' on' : '') + '" data-key="' + esc(m.key) + '" title="' + esc(m.name + ' — ' + info(m) + (m.key === t.keeper ? ' (kept)' : ' — click to keep this one')) + '">' + thumb(m.thumb) + '<small>' + esc(KIND_LABEL[m.kind]) + '</small>' + '<span class="btn x" data-split="' + esc(m.key) + '" title="Not this work: give it its own place">×</span></div>').join('') + '</div><div class="dim">' + t.members.length + ' copies — the outlined one is kept</div>' : '') +
+      (t.members.length > 1 ? '<div class="copies">' + t.members.map(m => '<div class="copy' + (m.key === t.keeper ? ' on' : '') + '" data-key="' + esc(m.key) + '" title="' + esc(m.name + ' — ' + info(m) + (m.key === t.keeper ? ' (kept)' : ' — click to keep this one')) + '">' + thumb(m.thumb) + '<small>' + esc(KIND_LABEL[m.kind]) + '</small>' + '<button class="btn sep" data-split="' + esc(m.key) + '" title="Not the same work: give this copy a place of its own">Separate</button></div>').join('') + '</div><div class="dim">' + t.members.length + ' copies — the outlined one is kept</div>' : '') +
       '</div><div>' +
       '<div class="top"><input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '><b>' + t.n + '</b>' +
       '<button class="btn" data-op="move" data-dir="-1" title="Earlier">↑</button><button class="btn" data-op="move" data-dir="1" title="Later">↓</button>' +
@@ -527,6 +528,15 @@ $('orgmerge').addEventListener('click', async () => {
   opick.clear();
   for (const other of ids.slice(1)) await orgOp({ op: 'merge', stack: ids[0], other }, false);
   loadOrg();
+});
+// the opposite of merge: each ticked work's copies go back to being works of their own
+$('orgsplit').addEventListener('click', async () => {
+  const ids = org.stacks.filter(t => opick.has(t.id) && t.members.length > 1).map(t => t.id);
+  const n = org.stacks.filter(t => ids.includes(t.id)).reduce((k, t) => k + t.members.length - 1, 0);
+  opick.clear();
+  for (const stack of ids) await orgOp({ op: 'unstack', stack }, false);
+  await loadOrg();
+  $('orgmsg').textContent = 'Separated ' + n + ' cop' + (n === 1 ? 'y' : 'ies') + ' into works of their own.';
 });
 $('orgmove').addEventListener('change', async (e) => {
   const to = e.target.value; e.target.value = ''; if (!to) return;

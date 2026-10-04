@@ -86,7 +86,7 @@
   .copy { width:96px; cursor:pointer; position:relative; }
   .copy img { width:96px; height:72px; object-fit:contain; display:block; outline:1px solid transparent; }
   .copy.on img { outline-color:var(--ink); }
-  .copy .x { position:absolute; top:0; right:0; background:var(--bg); padding:0 4px; }
+  .copy .sep { display:block; font-size:10px; letter-spacing:.1em; }
   .copy small { display:block; font-size:10px; color:var(--accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .chips { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
   .chip { text-align:left; text-transform:none; letter-spacing:.05em; }

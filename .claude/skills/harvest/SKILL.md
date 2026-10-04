@@ -144,7 +144,9 @@ Collect's Write now writes text only; pictures go through Organize.
 
 Added 2026-10-04: **Grid** view (S/M/L cells) showing each work's kept copy;
 click tiles to tick, double-click opens it in List. Ticked works can be
-merged ("Same work — merge": the alts the grouping missed) or moved to another
+merged ("Same work — merge": the alts the grouping missed) or separated
+("Separate copies", op `unstack`: every copy but the kept one becomes its own
+work, all marked apart; each copy in List also has its own **Separate**) or moved to another
 project with all copies, grouping, alt and caption. A moved copy that was on
 this project's site is copied to `.../Harvest/moved/` first and the work stays
 here marked removed, so this project's Save takes it off. A moved work lands

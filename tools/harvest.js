@@ -1389,6 +1389,18 @@ function organizeOp(slug, b) {
     (o.apart ||= []).push([t.id, o.stacks[at + 1].id]);
     if (t.keeper === b.key) delete t.chosen;
   }
+  // SEPARATE — undoing a stack wholesale: every copy but the kept one becomes
+  // a work of its own, right after this one, all of them marked apart from
+  // each other so "Same work as #N?" does not offer to put them back. For a
+  // grouping (or a merge) that was simply wrong; one copy at a time is split.
+  if (b.op === 'unstack') {
+    const keep = t.members.includes(t.keeper) ? t.keeper : t.members[0];
+    const made = t.members.filter(k => k !== keep).map(k => ({ id: id(slug, k, Date.now()), members: [k], alt: '', caption: '' }));
+    t.members = [keep];
+    o.stacks.splice(at + 1, 0, ...made);
+    const ids = [t.id, ...made.map(u => u.id)];
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) (o.apart ||= []).push([ids[i], ids[j]]);
+  }
   if (b.op === 'merge') {
     const u = o.stacks.find(x => x.id === b.other);
     if (u && u !== t) { t.members.push(...u.members); if (!t.alt) t.alt = u.alt; if (!t.caption) t.caption = u.caption; o.stacks = o.stacks.filter(x => x !== u); }
