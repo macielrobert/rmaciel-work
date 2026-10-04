@@ -17,8 +17,17 @@ rm -rf "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O tools/HarvestApp.swift -o "$APP/Contents/MacOS/Harvest"
 
-# ponytail: no icon yet, so the Dock shows the generic app icon. Add an .icns to
-# Contents/Resources and CFBundleIconFile below if it matters.
+# The icon: drawn at 1024 by tools/HarvestIcon.swift, then cut to every size
+# macOS asks for and packed into an .icns with iconutil.
+ICONSET="$OUT/Harvest.iconset"
+mkdir -p "$ICONSET"
+swift tools/HarvestIcon.swift "$OUT/icon-1024.png"
+for s in 16 32 128 256 512; do
+  sips -z $s $s "$OUT/icon-1024.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+  sips -z $((s * 2)) $((s * 2)) "$OUT/icon-1024.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Harvest.icns"
+rm -rf "$ICONSET"
 xml() { print -r -- "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,6 +37,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleIdentifier</key><string>work.rmaciel.harvest</string>
   <key>CFBundleName</key><string>Harvest</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>Harvest</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
