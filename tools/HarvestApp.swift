@@ -100,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     let a = NSAlert(); a.messageText = message; a.runModal(); completionHandler()
   }
 
+  @objc func reloadPage() { web.reload() }
+
   func page(_ msg: String) -> String {
     "<body style='background:#000;color:#8f8f99;font:13px -apple-system;padding:40px'>\(msg)</body>"
   }
@@ -115,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
         if t == "-" { m.addItem(.separator()); continue }
         let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
         i.keyEquivalentModifierMask = mods
+        // Reload is answered HERE, not passed down to whatever has focus: aimed
+        // at the web view through the focus chain, Cmd-R did nothing unless the
+        // page itself happened to have keyboard focus.
+        if sel == #selector(reloadPage) { i.target = self }
         m.addItem(i)
       }
       item.submenu = m
@@ -125,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
       ("Cut", #selector(NSText.cut(_:)), "x", .command), ("Copy", #selector(NSText.copy(_:)), "c", .command),
       ("Paste", #selector(NSText.paste(_:)), "v", .command), ("Select All", #selector(NSText.selectAll(_:)), "a", .command),
     ])
-    menu("View", [("Reload", #selector(WKWebView.reload(_:)), "r", .command)])
+    menu("View", [("Reload", #selector(reloadPage), "r", .command)])
     menu("Window", [("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m", .command)])
     NSApp.mainMenu = main
   }
