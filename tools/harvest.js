@@ -126,7 +126,15 @@ const MAX_FOLDER_IMAGES = 300;   // per accepted folder; past this it is a dump,
 
 const ext = (p) => path.extname(p).toLowerCase();
 const id = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
-const tick = () => new Promise(r => setImmediate(r));   // let the server answer between chunks of work
+// let the server answer between chunks of work — and notice a Stop
+const tick = () => new Promise(r => setImmediate(r)).then(alive);
+
+/* STOP — one flag, checked between every folder, file, page and picture
+   (walk, tick and pool all call alive()). A stopped job ends at the next
+   check, keeps what it already found, and says 'Stopped'. */
+let stopping = false;
+const STOPPED = new Error('stopped');
+function alive() { if (stopping) throw STOPPED; }
 // The exit code decides. stdout rides on the error, because sips exits non-zero
 // for a batch with one bad file in it and the rest of its answer is still good.
 const sh = (cmd, args) => new Promise((ok, no) =>
@@ -502,6 +510,7 @@ async function walk(root, visit, depth = 0) {
   let entries;
   try { entries = await fs.promises.readdir(root, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
+    alive();
     if (SKIP.test(e.name)) continue;
     const p = path.join(root, e.name);
     // the site's own images would match themselves and teach nothing
@@ -529,7 +538,9 @@ async function crawl(root) {
   persist();
   job.phase = 'Reading documents'; job.done = 0; job.total = docs.length;
   for (const d of docs) {
-    addTexts(d, await extract(d), (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
+    const units = await extract(d);
+    alive();   // a Stop during a long read must not still file that document
+    addTexts(d, units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
     job.done++;
     if (job.done % 10 === 0) persist();
     await tick();
@@ -550,7 +561,9 @@ async function expandFolder(f) {
   for (const p of imgs) job.added += add({ project: f.project, kind: 'image', path: p, from: f.id });
   job.total = docs.length;
   for (const d of docs) {
-    addTexts(d, await extract(d), (text) => text.length >= 40 ? [f.project] : [], f.id);
+    const units = await extract(d);
+    alive();   // an Undo of this folder mid-read must not let its cards back in
+    addTexts(d, units, (text) => text.length >= 40 ? [f.project] : [], f.id);
     job.done++;
     if (job.done % 10 === 0) persist();   // a big folder takes a while; a stop part-way keeps what was found
     await tick();
@@ -579,13 +592,31 @@ async function sizeImages() {
 // Jobs run one after another, and every job starts and ends the same way:
 // fresh counters; then image sizes measured and state saved, even on failure.
 let queue = Promise.resolve();
-function run(phase, fn) {
+let gen = 0;   // bumped by Stop: jobs queued before it are dropped when their turn comes
+function run(phase, fn, target) {
+  const mine = gen;
   queue = queue.then(async () => {
-    job = { running: true, phase, done: 0, total: 0, added: 0, error: null };
+    if (mine !== gen) return;
+    stopping = false;
+    job = { running: true, phase, done: 0, total: 0, added: 0, error: null, target };
     try { await fn(); await sizeImages(); job.phase = 'Done'; }
-    catch (e) { job.error = e.message; console.warn(e); }
+    catch (e) { if (e === STOPPED) job.phase = 'Stopped'; else { job.error = e.message; console.warn(e); } }
     finally { prune(); flush(); job.running = false; }
   });
+}
+
+// Stop everything: the running job ends at its next check, and the queue is
+// emptied. Folders that were waiting or mid-expansion are marked stopped, so
+// opening Harvest again does not quietly start them over (accepting one again
+// clears the mark). Before this, the only way to stop a 4,715-file folder
+// was to quit — and reopening resumed it.
+function stopAll() {
+  gen++;
+  if (job.running) stopping = true;
+  for (const fid of queued) if (state.findings[fid]) state.findings[fid].stopped = true;
+  if (job.running && state.findings[job.target]) state.findings[job.target].stopped = true;
+  queued.clear();
+  persist();
 }
 
 // A pending card whose file has been moved or deleted is dropped, so the count
@@ -602,12 +633,12 @@ function prune() {
 const queued = new Set();
 function drain() {
   for (const f of Object.values(state.findings)) {
-    if ((f.kind !== 'folder' && f.kind !== 'page') || f.status !== 'accepted' || f.expanded || queued.has(f.id)) continue;
+    if ((f.kind !== 'folder' && f.kind !== 'page') || f.status !== 'accepted' || f.expanded || f.stopped || queued.has(f.id)) continue;
     queued.add(f.id);
     run(`Reading ${f.title || path.basename(f.path)}`, async () => {
       // re-checked when its turn comes: it may have been undone while it waited
       try { if (f.status === 'accepted') await (f.kind === 'page' ? expandPage(f) : expandFolder(f)); } finally { queued.delete(f.id); }
-    });
+    }, f.id);
   }
 }
 
@@ -696,7 +727,7 @@ async function dhash(file) {
 
 async function pool(items, n, fn) {
   let i = 0;
-  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) await fn(items[i++]); }));
+  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { alive(); await fn(items[i++]); } }));
 }
 
 const FILING = /^(renders?|images?|imgs?|photos?|pictures?|pics|exports?|finals?|output|out|web|jpe?gs?|pngs?|tiffs?|heics?|selects?|edits?|edited|process|wip|archive|old|new|misc|assets|links|docs?|documentation|stills|(hi|lo|low)[ -]?res|print|social|instagram|desktop|documents|downloads|dropbox|google drive|icloud drive.*|creative cloud files.*|projects?|work|clients?|portfolio|unsorted|screenshots?|jobs?|others?|temp|tmp|stuff|untitled.*|new folder.*|(\w+ )?versions?|variants?|options?|alts?|alternates?|v ?\d+|r ?\d+|\d+)$/i;
@@ -889,11 +920,15 @@ async function expandPage(f) {
 // One card's decision, from the card or from the bulk bar.
 function decide(f, b) {
   for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
-  if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') drain();
+  // undoing the folder that is being expanded right now stops that expansion
+  // (first, so it cannot add cards after the clean-up below)
+  if (b.status && b.status !== 'accepted' && job.running && job.target === f.id) stopping = true;
+  if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') { delete f.stopped; drain(); }
   // Undoing or rejecting a folder (or page) takes back the cards it brought in
   // that are still undecided. Decided ones stay: they were a choice. Before
   // this, undoing a linked studio folder left its 1,950 cards behind.
-  if ((f.kind === 'folder' || f.kind === 'page') && b.status && b.status !== 'accepted' && f.expanded) {
+  // (finished or not: one undone mid-expansion has brought cards in too)
+  if ((f.kind === 'folder' || f.kind === 'page') && b.status && b.status !== 'accepted') {
     for (const [k, g] of Object.entries(state.findings)) if (g.from === f.id && g.status === 'pending') { delete state.findings[k]; rev++; }
     f.expanded = false;
   }
@@ -1095,6 +1130,7 @@ const server = http.createServer(async (req, res) => {
       return json({ ok: true });
     }
     if (p === '/api/publish') return json(await publish());
+    if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
     if (p === '/api/newproject') { const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
@@ -1256,6 +1292,7 @@ const PAGE = String.raw`<!doctype html>
   <span class="dim" id="rootline"></span>
   <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
   <span class="dim" id="status"></span>
+  <button class="btn" id="stop" hidden>Stop</button>
   <button class="btn" id="publish" disabled>Publish</button>
 </header>
 <main>
@@ -1372,7 +1409,9 @@ async function poll() {
   // for five seconds instead of being replaced by the next status check
   if (Date.now() - (say.at || 0) > 5000) $('status').textContent = j.error ? '⚠ ' + j.error
     : j.running ? j.phase + (j.total ? ' ' + j.done + ' / ' + j.total : ' · ' + j.done) + ' · ' + j.added + ' found'
-    : j.phase === 'Done' ? 'Done · ' + j.added + ' new' : '';
+    : j.phase === 'Done' ? 'Done · ' + j.added + ' new'
+    : j.phase === 'Stopped' ? 'Stopped · ' + j.added + ' found before stopping' : '';
+  $('stop').hidden = !j.running;
   // redrawn only when it changed: this runs every 1-4 seconds
   const pj = JSON.stringify(S.projects);
   if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); }
@@ -1503,6 +1542,11 @@ $('review').addEventListener('click', async (e) => {
   if (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page') poll();
 });
 $('newcards').addEventListener('click', () => loadFindings());
+$('stop').addEventListener('click', async () => {
+  $('stop').hidden = true; say('Stopping…'); busy(1);
+  try { await api('/api/stop', {}); } catch (e) { oops(e); } finally { busy(-1); }
+  poll();
+});
 // filtering is local and instant; paging restarts so the first matches show
 const refilter = () => { shown.pending = 100; drawFindings(); };
 $('pq').addEventListener('input', refilter);
