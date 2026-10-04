@@ -172,3 +172,8 @@ Organize → **Text**: the project's accepted passages in a column beside the
 works. Click one, then a work (list or grid): it is appended to that work's
 caption and the passage's target becomes `caption`, which Collect's Write
 skips (Organize's Save is what puts it on the site).
+
+The page no longer polls. It holds `/api/events` open (server-sent events);
+the server compares the state snapshot twice a second and writes only when it
+changed. `poll()` in page.js is now a one-shot refresh after the page's own
+actions.

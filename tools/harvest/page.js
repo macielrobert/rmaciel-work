@@ -82,12 +82,19 @@ function buttons() {
   $('link').disabled = !folder || !project;
   if (!$('link').dataset.armed) $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';   // armed: keep the warning up
 }
+/* The server says when something changed (/api/events — see EVENTS in
+   harvest.js); the page no longer asks every few seconds. poll() is kept for
+   the one case the stream cannot know about: right after this page's own
+   action, to show its result now rather than up to half a second later. */
 async function poll() {
-  // Always reschedules, even when a request fails: one bad answer used to stop
-  // polling for good, freezing the page on its last status.
-  clearTimeout(poll.t);
-  try { S = await api('/api/state'); }
-  catch (e) { $('status').textContent = '⚠ ' + e.message; poll.t = setTimeout(poll, 4000); return; }
+  try { show(await api('/api/state')); }
+  catch (e) { $('status').textContent = '⚠ ' + e.message; }
+}
+const events = new EventSource('/api/events');   // reconnects by itself if the connection drops
+events.onmessage = (e) => show(JSON.parse(e.data));
+events.onerror = () => { if (events.readyState !== EventSource.OPEN) $('status').textContent = '⚠ Lost touch with Harvest — reconnecting…'; };
+function show(state) {
+  S = state;
   const j = S.job;
   $('rootline').textContent = S.root ? 'Last crawl: ' + S.root : 'Pick a folder, then crawl it';
   // a message just shown to the user (moved, published, an error) stays put
@@ -97,7 +104,7 @@ async function poll() {
     : j.phase === 'Done' ? 'Done · ' + j.added + ' new'
     : j.phase === 'Stopped' ? 'Stopped · ' + j.added + ' found before stopping' : '';
   $('stop').hidden = !j.running;
-  // redrawn only when it changed: this runs every 1-4 seconds
+  // redrawn only when it changed: the state arrives whenever ANYTHING did
   const pj = JSON.stringify(S.projects);
   if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); }
   const sj = JSON.stringify(S.site);
@@ -114,8 +121,11 @@ async function poll() {
   const changed = project && S.rev !== loadedRev;
   const quiet = !editing() && !inflight;
   if (view === 'collect' && changed && quiet && (!j.running || !findings.length)) loadFindings();
+  // held back by typing or a save on its way: look again shortly. Polling
+  // used to come round on its own; the stream only speaks when something changes.
+  clearTimeout(show.t);
+  if (view === 'collect' && changed && !quiet) show.t = setTimeout(() => show(S), 1500);
   $('newcards').hidden = !(changed && j.running && findings.length);
-  poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
 
 /* ---- findings */

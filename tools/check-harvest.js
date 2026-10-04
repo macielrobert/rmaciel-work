@@ -16,7 +16,8 @@
        after it;
      • the page's script asking for an element id the page does not have
        ($('x') is null, and the first click on it throws);
-     • a server that starts but cannot serve the page or its state. */
+     • a server that starts but cannot serve the page, its state or the
+       event stream the page listens to. */
 
 'use strict';
 const fs = require('fs');
@@ -66,5 +67,12 @@ const wait = setInterval(async () => {
     try { const r = await fetch(m[1] + p); ok = r.ok && (await r.text()).length > 0; } catch {}
     check(ok, 'serves ' + p);
   }
+  // the event stream never ends: read its first message and let go
+  let first = '';
+  try {
+    const r = await fetch(m[1] + '/api/events');
+    first = new TextDecoder().decode((await r.body.getReader().read()).value || new Uint8Array());
+  } catch {}
+  check(first.startsWith('data: {'), 'event stream sends the state');
   done(fails.length ? 1 : 0);
 }, 200);

@@ -1518,6 +1518,38 @@ async function write(slug) {
   return { written: acc.length };
 }
 
+/* ------------------------------------------------------------- events */
+
+/* THE PAGE IS TOLD, NOT ASKING. It used to fetch /api/state every 1.2 s during
+   a crawl and every 4 s otherwise — a request, a parse and a redraw check,
+   for nothing most of the time (to-do 4; efficiency is Robert's stated
+   priority). Now it holds one open connection (/api/events, server-sent
+   events: built into every browser, nothing installed) and the server writes
+   to it only when what the page shows has changed. An idle Harvest sends
+   nothing at all.
+   ponytail: "changed" is found by comparing a snapshot twice a second (in
+   memory, about a millisecond), not by hooking every place state changes —
+   twenty-odd call sites that would each have to remember. Hooks if this
+   ever shows up in a profile. */
+const listeners = new Set();
+function stateView() {
+  const pending = {};
+  for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
+  return { root: state.root, home: HOME, job, rev, unpublished: [...unpublished],
+    site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
+    projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
+}
+let lastSent = '';
+setInterval(() => {
+  if (!listeners.size) return;
+  const s = JSON.stringify(stateView());
+  if (s === lastSent) return;
+  lastSent = s;
+  for (const res of listeners) res.write('data: ' + s + '\n\n');
+}, 500).unref();
+// a comment line now and then, so nothing between here and the page decides the connection is dead
+setInterval(() => { for (const res of listeners) res.write(': still here\n\n'); }, 25000).unref();
+
 /* ------------------------------------------------------------- server */
 
 let ORIGIN = '';
@@ -1536,12 +1568,13 @@ const server = http.createServer(async (req, res) => {
     const font = p.match(/^\/fonts\/([\w-]+\.woff2)$/);
     if (font) return send(200, 'font/woff2', fs.readFileSync(path.join(REPO, 'fonts', font[1])));
 
-    if (p === '/api/state') {
-      const pending = {};
-      for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
-      return json({ root: state.root, home: HOME, job, rev, unpublished: [...unpublished],
-        site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
-        projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) });
+    if (p === '/api/state') return json(stateView());
+    if (p === '/api/events') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+      res.write('data: ' + JSON.stringify(stateView()) + '\n\n');
+      listeners.add(res);
+      req.on('close', () => listeners.delete(res));
+      return;
     }
     if (p === '/api/ls') {
       const dir = path.resolve(url.searchParams.get('p') || HOME);
