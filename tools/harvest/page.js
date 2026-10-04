@@ -258,7 +258,7 @@ $('review').addEventListener('click', async (e) => {
   f.status = b.dataset.a; picked.delete(id); drawFindings();
   busy(1);
   try { await save(); Object.assign(f, await api('/api/finding', { id, status: b.dataset.a, indesign: $('indesign').checked })); }
-  catch (err) { f.status = was; oops(err); }
+  catch (err) { f.status = was; oops(err); if (/no longer there/.test(err.message)) loadFindings(); }
   finally { busy(-1); }
   drawFindings();
   if (f.kind === 'folder' || f.kind === 'nickname' || f.kind === 'page') poll();

@@ -640,8 +640,13 @@ let rev = 0;
 // text the document no longer contains are dropped; decided ones stay, as a
 // record of what was chosen. The clean-up only touches cards made by the same
 // kind of pass (`from`: none for a crawl's title mentions, the folder's id for
-// a folder's every-page cards) so the two cannot delete each other's.
-function addTexts(file, units, pick, from) {
+// a folder's every-page cards) so the two cannot delete each other's — and
+// only cards of the projects this pass was reading FOR (`scope`). Without
+// that, a crawl for one project found nothing for the others (it was not
+// looking) and deleted their waiting cards from the same documents: a card
+// still on screen was gone on the server, and deciding it said "Unknown
+// finding" — the loose end seen once in the 2026-10-04 handoff.
+function addTexts(file, units, pick, from, scope) {
   const live = new Set();
   units.forEach((text, i) => {
     const th = id(text);
@@ -651,7 +656,7 @@ function addTexts(file, units, pick, from) {
     }
   });
   for (const [k, f] of Object.entries(state.findings)) {
-    if (f.kind === 'text' && f.path === file && f.status === 'pending' && (f.from ?? null) === (from ?? null) && !live.has(f.project + f.th)) { delete state.findings[k]; rev++; }
+    if (f.kind === 'text' && f.path === file && f.status === 'pending' && (f.from ?? null) === (from ?? null) && scope.includes(f.project) && !live.has(f.project + f.th)) { delete state.findings[k]; rev++; }
   }
 }
 
@@ -705,7 +710,7 @@ async function crawl(root, slugs) {
   for (const d of docs) {
     const units = await extract(d);
     alive();   // a Stop during a long read must not still file that document
-    addTexts(d, units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
+    addTexts(d, units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug), undefined, projs.map(pr => pr.slug));
     job.done++;
     if (job.done % 10 === 0) persist();
     await tick();
@@ -728,7 +733,7 @@ async function expandFolder(f) {
   for (const d of docs) {
     const units = await extract(d);
     alive();   // an Undo of this folder mid-read must not let its cards back in
-    addTexts(d, units, (text) => text.length >= 40 ? [f.project] : [], f.id);
+    addTexts(d, units, (text) => text.length >= 40 ? [f.project] : [], f.id, [f.project]);
     job.done++;
     if (job.done % 10 === 0) persist();   // a big folder takes a while; a stop part-way keeps what was found
     await tick();
@@ -1046,7 +1051,7 @@ async function crawlSite(start, slugs) {
     for (const pr of projs) {
       if (pr.m.name(where) || (c.title && pr.m.name(c.title))) job.added += add({ project: pr.slug, kind: 'page', path: pg.url, title: c.title });
     }
-    addTexts(pg.url, c.units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug));
+    addTexts(pg.url, c.units, (text) => projs.filter(pr => pr.m.text.test(text)).map(pr => pr.slug), undefined, projs.map(pr => pr.slug));
     for (const u of c.images) pics.push({ url: u, page: pg.url, title: c.title });
     job.done++;
     await tick();
@@ -1084,7 +1089,7 @@ async function crawlSite(start, slugs) {
 async function expandPage(f) {
   const c = await readPage((state.site?.pages || []).find(p => p.url === f.path) || { url: f.path, images: [] });
   for (const u of c.images) job.added += add({ project: f.project, kind: 'image', path: u, from: f.id, status: 'accepted' });
-  addTexts(f.path, c.units, (text) => (text.length >= 40 ? [f.project] : []), f.id);
+  addTexts(f.path, c.units, (text) => (text.length >= 40 ? [f.project] : []), f.id, [f.project]);
   f.expanded = true;
 }
 
@@ -1624,7 +1629,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/finding') {
       const f = state.findings[b.id];
-      if (!f) throw new Error('Unknown finding.');
+      if (!f) { console.warn(`a decision for card ${b.id}, which is no longer there`); throw new Error('That card is no longer there — the list has been refreshed.'); }
       decide(f, b);
       persist();
       return json(f);
@@ -1696,7 +1701,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (!isDoc(ext(file), true)) throw new Error('Harvest cannot read that kind of file.');
       run(`Reading ${path.basename(file)}`, async () => {
-        addTexts(file, await extract(file), (t) => t.trim() ? [b.project] : [], 'manual');
+        addTexts(file, await extract(file), (t) => t.trim() ? [b.project] : [], 'manual', [b.project]);
       });
       return json({ kind: 'text' });
     }
