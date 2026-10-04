@@ -102,7 +102,8 @@ Never test against Robert's real state or repo content without reverting:
 Website pages become **page** cards. An accepted page's PICTURES arrive
 accepted (vetted when they were published; Robert, 2026-10-04); its text
 arrives pending. Accepted folder/page cards have **Unlink** (= reject: takes
-back its pending cards) and **Read again** (re-adds anything missing, e.g.
+back its pending cards, and a page's pictures still marked `auto`, i.e.
+accepted by that rule and not decided since) and **Read again** (re-adds anything missing, e.g.
 after a Clear; finishes a stopped one).
 
 Pages are matched by address/title, or because their pictures match ones
@@ -161,9 +162,12 @@ Organize → **Project details**: every field Keystatic edits except `images`
 icon_type/glyph/image, wordmark, share_description, nicknames, and the
 description body as Markdoc with toolbar buttons + a live preview rendered by
 the repo's @markdoc/markdoc with tags mirroring build.js). Save
-(`POST /api/project`) catches up with GitHub, runs `build.js` before and
-after the write, and puts the file (and any replaced icon/wordmark) back if
-this save is what broke the build. Icon/wordmark uploads wait in
+(`POST /api/project`) catches up with GitHub, then runs the real `build.js`
+on a throwaway copy of the site holding only this project and the projects
+tied to it by part_of (`checkAlone`), before and after; a save that adds a
+failure writes nothing. (Not the whole site: build.js stops at its first
+failure, so any broken project masked everything.) The page sends only the
+fields it changed, so newer edits from GitHub survive. Icon/wordmark uploads wait in
 `.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
 Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.

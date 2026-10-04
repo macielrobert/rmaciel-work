@@ -157,9 +157,9 @@ const imgRel = (slug, n) => `images/${slug}/images/${n}`;
 
 // Every write to a project goes through here, so the project list read below
 // can be kept between polls and dropped only when something actually changed.
+const mdocText = (data, body) => { body = String(body).trim(); return `---\n${JSON.stringify(data, null, 2)}\n---\n${body ? body + '\n' : ''}`; };
 function writeMdoc(file, data, body) {
-  body = body.trim();
-  fs.writeFileSync(file, `---\n${JSON.stringify(data, null, 2)}\n---\n${body ? body + '\n' : ''}`);
+  fs.writeFileSync(file, mdocText(data, body));
   projectsCache = null;
   unpublished.add(path.basename(file, '.mdoc'));
 }
@@ -241,19 +241,39 @@ function newProject(title, section) {
    file names follow what Keystatic writes, so either editor can open what
    the other saved.
 
-   VALIDATION IS build.js ITSELF, not a copy of its rules. The build runs
-   before and after the write (0.1 s each). If this save turns a site that
-   built into one that does not, the file — and any icon or wordmark it
-   replaced — is put back exactly as it was, and the build's own message is
-   shown. A failure that was already there, caused by another project, is
-   reported but does not block: refusing every save over someone else's
-   mistake would make the panel useless until that was found.
+   VALIDATION IS build.js ITSELF, not a copy of its rules — run on a small
+   copy of the site holding only this project and the projects tied to it by
+   "Sub-project of" (checkAlone below), once as the file is and once as the
+   save would leave it. If the save adds a failure, nothing is written and
+   the build's own message is shown. Not the whole site: build.js stops at
+   the FIRST failure, so one broken project anywhere hid every problem this
+   save could cause (review, 2026-10-04). A failure this project already had
+   does not block a save that leaves it the same — refusing would stop it
+   being fixed a field at a time. The whole site is built once afterwards,
+   only to say whether it currently builds.
+
+   ONLY WHAT WAS CHANGED IS SENT. The page sends the fields that differ from
+   what it loaded, and the rest are left as the file has them now — which,
+   after the catch-up with GitHub, may be newer than the form: an edit made
+   in Keystatic on the phone while the panel was open survives a save here.
 
    ICON AND WORDMARK FILES are uploaded to Harvest's own folder first and
    only copied into images/<slug>/ on Save, named as Keystatic names them
    (<field>.<ext>). Uploading alone changes nothing on the site. */
 const UPLOADS = path.join(STORE, 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
+const MOVED = path.join(STORE, 'moved');   // site pictures moved to another project, until that project's Save (organizeOp)
+fs.mkdirSync(MOVED, { recursive: true });
+// Harvest's own temporary copies, swept at every start. A moved picture is
+// needed only while a card still points at it — once its project's Save has
+// copied it in (or it was rejected), it is done. An upload a day old was
+// abandoned: a Save copies its upload in and deletes it the same moment.
+function sweep() {
+  const live = new Set(Object.values(state.findings).filter(f => f.status === 'pending' || f.status === 'accepted').map(f => f.path));
+  for (const n of fs.readdirSync(MOVED)) if (!live.has(path.join(MOVED, n))) fs.rmSync(path.join(MOVED, n), { force: true });
+  for (const n of fs.readdirSync(UPLOADS)) { const f = path.join(UPLOADS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5) fs.rmSync(f, { force: true }); }
+  for (const n of fs.readdirSync(STORE)) if (n.startsWith('check-')) fs.rmSync(path.join(STORE, n), { recursive: true, force: true });   // a check cut short by a quit
+}
 const MARK_EXT = new Set(['.png', '.svg']);   // alpha is the shape: build.js refuses anything else for an icon
 const buildError = () => sh(process.execPath, [path.join(REPO, 'build.js')])
   .then(() => null, e => String(e.message).trim().split('\n').pop().trim());
@@ -270,71 +290,121 @@ function projectData(slug) {
   return { slug, data: rest, body };
 }
 
+// The projects a save of `slug` can affect through "Sub-project of": its lead
+// (old and new), the projects that name it, and theirs, all the way round —
+// the only way build.js judges one project by another.
+function tiedTo(slug, leads) {
+  const all = projects(), set = new Set([slug, ...leads.filter(Boolean)]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const p of all) {
+      const before = set.size;
+      if (p.part_of && set.has(p.part_of)) set.add(p.slug);
+      if (set.has(p.slug) && p.part_of) set.add(p.part_of);
+      if (set.size > before) grew = true;
+    }
+  }
+  return [...set].filter(k => fs.existsSync(path.join(PROJECTS, k + '.mdoc')));
+}
+
+// build.js run on a throwaway copy of the site: the real build.js, index.html,
+// fonts and singletons (linked, not copied), the tied projects, and `text` as
+// this project's file. Pictures are linked, and build.js copies only real
+// files, so nothing is duplicated. `uploads` stand in for files a save would
+// put in images/<slug>/. Returns the build's message, or null if it built.
+async function checkAlone(slug, text, uploads, tied) {
+  const root = fs.mkdtempSync(path.join(STORE, 'check-'));
+  try {
+    fs.copyFileSync(path.join(REPO, 'build.js'), path.join(root, 'build.js'));
+    for (const n of ['index.html', 'fonts', 'node_modules']) fs.symlinkSync(path.join(REPO, n), path.join(root, n));
+    fs.mkdirSync(path.join(root, 'content', 'projects'), { recursive: true });
+    const content = path.join(REPO, 'content');
+    for (const n of ['about.mdoc', 'contact.json', 'site.json']) if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
+    fs.mkdirSync(path.join(root, 'images', slug), { recursive: true });
+    for (const k of tied) {
+      fs.writeFileSync(path.join(root, 'content', 'projects', k + '.mdoc'), k === slug ? text : fs.readFileSync(path.join(PROJECTS, k + '.mdoc')));
+      const dir = path.join(REPO, 'images', k);
+      if (k !== slug) { if (fs.existsSync(dir)) fs.symlinkSync(dir, path.join(root, 'images', k)); continue; }
+      const replaced = new Set(uploads.map(([, rel]) => path.basename(rel)));
+      if (fs.existsSync(dir)) for (const n of fs.readdirSync(dir)) if (!replaced.has(n)) fs.symlinkSync(path.join(dir, n), path.join(root, 'images', k, n));
+    }
+    for (const [from, rel] of uploads) fs.symlinkSync(from, path.join(root, rel));
+    return await sh(process.execPath, [path.join(root, 'build.js')]).then(() => null, e => String(e.message).trim().split('\n').pop().trim());
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
 async function saveProject(slug, v, newBody) {
   await catchUp();
   const file = projectFile(slug);
-  const before = await buildError();
-  const old = fs.readFileSync(file), waiting = unpublished.has(slug);
+  const old = fs.readFileSync(file, 'utf8');
   const { data, body } = readMdoc(file);
   const next = { ...data };
   const str = (x) => String(x ?? '').trim();
   const optional = (k, val) => { if (val === '' || val === null || (Array.isArray(val) && !val.length)) delete next[k]; else next[k] = val; };
+  // one rule per field; a field the page did not send is left as the file has it
+  const set = {
+    title: (x) => { if (!str(x)) throw new Error('A project needs a title.'); next.title = str(x); },
+    section: (x) => { if (!['build', 'design', 'art'].includes(x)) throw new Error('Pick a section.'); next.section = x; },
+    order: (x) => { const n = Number(x); if (str(x) === '' || !Number.isFinite(n)) throw new Error('Position in grid must be a number.'); next.order = Math.round(n); },
+    draft: (x) => { next.draft = !!x; },
+    part_of: (x) => optional('part_of', str(x)),
+    client: (x) => optional('client', str(x)),
+    details: (x) => { next.details = lines(x); },   // Keystatic always writes the list, even empty
+    layout: (x) => { if (!['standard', 'grid', 'text'].includes(x)) throw new Error('Pick a layout.'); next.layout = x; },
+    expand: (x) => { next.expand = !!x; },
+    icon_type: (x) => { if (!['glyph', 'image'].includes(x)) throw new Error('Pick a kind of grid icon.'); next.icon_type = x; },
+    icon_glyph: (x) => optional('icon_glyph', str(x)),
+    share_description: (x) => optional('share_description', str(x)),
+    nicknames: (x) => optional('nicknames', lines(x)),
+  };
+  for (const [k, apply] of Object.entries(set)) if (k in v) apply(v[k]);
+  const uploads = [], gone = [];
+  for (const k of ['icon_image', 'wordmark']) {
+    if (!(k in v)) continue;
+    const val = v[k];
+    if (val && typeof val === 'object' && val.upload) {
+      const from = path.resolve(String(val.upload));
+      if (!from.startsWith(UPLOADS + path.sep) || !fs.existsSync(from)) throw new Error('That upload is gone — choose the file again.');
+      const rel = `images/${slug}/${k}${ext(from)}`;
+      uploads.push([from, rel]);
+      next[k] = '/' + rel;
+    } else optional(k, str(val));
+    // a mark replaced by one of another kind (.png by .svg) or removed: its
+    // old file goes, because build.js ships everything under images/
+    if (data[k] && data[k] !== next[k]) gone.push(data[k]);
+  }
+  const text = mdocText(next, newBody === undefined ? body : newBody);
+  if (text === old && !uploads.length) return { warning: null, unchanged: true };
 
-  next.title = str(v.title);
-  if (!next.title) throw new Error('A project needs a title.');
-  if (!['build', 'design', 'art'].includes(v.section)) throw new Error('Pick a section.');
-  next.section = v.section;
-  const order = Number(v.order);
-  if (str(v.order) === '' || !Number.isFinite(order)) throw new Error('Position in grid must be a number.');
-  next.order = Math.round(order);
-  next.draft = !!v.draft;
-  optional('part_of', str(v.part_of));
-  optional('client', str(v.client));
-  next.details = lines(v.details);   // Keystatic always writes the list, even empty
-  if (!['standard', 'grid', 'text'].includes(v.layout)) throw new Error('Pick a layout.');
-  next.layout = v.layout;
-  next.expand = !!v.expand;
-  if (!['glyph', 'image'].includes(v.icon_type)) throw new Error('Pick a kind of grid icon.');
-  next.icon_type = v.icon_type;
-  optional('icon_glyph', str(v.icon_glyph));
-  optional('share_description', str(v.share_description));
-  optional('nicknames', lines(v.nicknames));
+  const tied = tiedTo(slug, [data.part_of, next.part_of]);
+  const [before, after] = await Promise.all([checkAlone(slug, old, [], tied), checkAlone(slug, text, uploads, tied)]);
+  if (after && after !== before) throw new Error('Not saved — the site would not build: ' + after);
 
-  const backups = [], gone = [];
+  // the checks passed: now for real. Marks first, so a project file never
+  // names one that is not there yet; a failed copy puts back what it replaced.
+  const backups = [];
   try {
-    for (const k of ['icon_image', 'wordmark']) {
-      const val = v[k];
-      if (val && typeof val === 'object' && val.upload) {
-        const from = path.resolve(String(val.upload));
-        if (!from.startsWith(UPLOADS + path.sep) || !fs.existsSync(from)) throw new Error('That upload is gone — choose the file again.');
-        const rel = `images/${slug}/${k}${ext(from)}`, to = path.join(REPO, rel);
-        backups.push([to, fs.existsSync(to) ? fs.readFileSync(to) : null]);
-        fs.mkdirSync(path.dirname(to), { recursive: true });
-        fs.copyFileSync(from, to);
-        next[k] = '/' + rel;
-      } else optional(k, str(val));
-      // a mark replaced by one of another kind (.png by .svg) or removed: its
-      // old file goes, because build.js ships everything under images/
-      if (data[k] && data[k] !== next[k]) gone.push(data[k]);
+    for (const [from, rel] of uploads) {
+      const to = path.join(REPO, rel);
+      backups.push([to, fs.existsSync(to) ? fs.readFileSync(to) : null]);
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(from, to);
     }
-    writeMdoc(file, next, newBody === undefined ? body : String(newBody));
-    const after = await buildError();
-    if (after && after !== before) throw new Error('Not saved — the site would not build: ' + after);
+    writeMdoc(file, next, newBody === undefined ? body : newBody);
   } catch (e) {
-    fs.writeFileSync(file, old);
     for (const [f, bytes] of backups) if (bytes) fs.writeFileSync(f, bytes); else fs.rmSync(f, { force: true });
+    fs.writeFileSync(file, old);
     projectsCache = null;
     throw e;
   }
-  // a save that changed nothing is not something waiting to go live
-  if (!waiting && !backups.length && fs.readFileSync(file).equals(old)) unpublished.delete(slug);
+  for (const [from] of uploads) fs.rmSync(from, { force: true });   // copied in: the waiting copy is done with
   const mine = path.join(REPO, 'images', slug) + path.sep;
   const used = new Set([next.icon_image, next.wordmark, ...(next.images || []).map(i => i.src)].filter(Boolean));
   for (const src of gone) {
     const f = path.join(REPO, String(src).replace(/^\/+/, ''));
     if (f.startsWith(mine) && !used.has(src)) fs.rmSync(f, { force: true });
   }
-  return { warning: before };
+  return { warning: await buildError() };   // the whole site, for information only
 }
 
 function upload(name, b64) {
@@ -1088,7 +1158,9 @@ async function crawlSite(start, slugs) {
 // A picture already decided keeps that decision (add() leaves it alone).
 async function expandPage(f) {
   const c = await readPage((state.site?.pages || []).find(p => p.url === f.path) || { url: f.path, images: [] });
-  for (const u of c.images) job.added += add({ project: f.project, kind: 'image', path: u, from: f.id, status: 'accepted' });
+  // `auto`: accepted by this rule, not by Robert. Unlinking the page takes
+  // these back with it, as it does its pending cards; deciding one clears it.
+  for (const u of c.images) job.added += add({ project: f.project, kind: 'image', path: u, from: f.id, status: 'accepted', auto: true });
   addTexts(f.path, c.units, (text) => (text.length >= 40 ? [f.project] : []), f.id, [f.project]);
   f.expanded = true;
 }
@@ -1096,6 +1168,7 @@ async function expandPage(f) {
 // One card's decision, from the card or from the bulk bar.
 function decide(f, b) {
   for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
+  if ('status' in b) delete f.auto;   // decided now: a page's Unlink leaves it alone
   // READ AGAIN — an accepted folder or page is read once. This reads it again,
   // adding only what is missing: cards cleared since come back, decided ones
   // are untouched. Also how a stopped one is finished.
@@ -1109,7 +1182,8 @@ function decide(f, b) {
   // this, undoing a linked studio folder left its 1,950 cards behind.
   // (finished or not: one undone mid-expansion has brought cards in too)
   if ((f.kind === 'folder' || f.kind === 'page') && b.status && b.status !== 'accepted') {
-    for (const [k, g] of Object.entries(state.findings)) if (g.from === f.id && g.status === 'pending') { delete state.findings[k]; rev++; }
+    // and the pictures it accepted by itself (old-site pages), which no one has decided since
+    for (const [k, g] of Object.entries(state.findings)) if (g.from === f.id && (g.status === 'pending' || (g.auto && g.status === 'accepted'))) { delete state.findings[k]; rev++; }
     f.expanded = false;
   }
   // An accepted working title is written to the project at once (it is what
@@ -1128,7 +1202,7 @@ function decide(f, b) {
 // next crawl, which files it by the same rule, put it back where it was.
 function moveFinding(f, project) {
   if (f.project === project || f.status === 'written') return null;
-  const { id: _old, status: _s, cleared: _c, expanded: _e, from: _f, ...rest } = f;
+  const { id: _old, status: _s, cleared: _c, expanded: _e, from: _f, auto: _a, ...rest } = f;
   const g = { ...rest, project };
   add(g);
   decide(state.findings[g.id], { status: 'accepted' });
@@ -1329,8 +1403,6 @@ function organizeOp(slug, b) {
   // here marked removed, so that Save takes it off.
   if (b.op === 'moveto') {
     if (!b.to || b.to === slug || !fs.existsSync(path.join(PROJECTS, b.to + '.mdoc'))) throw new Error('Pick a project to move it to.');
-    const MOVED = path.join(STORE, 'moved');
-    fs.mkdirSync(MOVED, { recursive: true });
     const map = new Map();
     for (const k of t.members) {
       if (k.startsWith('site:')) {
@@ -1586,7 +1658,9 @@ const server = http.createServer(async (req, res) => {
       const all = fs.readdirSync(dir, { withFileTypes: true }).filter(e => !SKIP.test(e.name));
       const dirs = all.filter(e => e.isDirectory()).map(e => e.name);
       // the files Harvest can use, so one can be added by hand (see /api/addfile)
-      const files = all.filter(e => e.isFile() && (IMAGE_EXT.has(ext(e.name)) || isDoc(ext(e.name), true))).map(e => e.name);
+      // .indd only with "Read InDesign files" ticked: reading one opens InDesign (~3 min cold)
+      const indd = url.searchParams.get('indesign') === '1';
+      const files = all.filter(e => e.isFile() && (IMAGE_EXT.has(ext(e.name)) || isDoc(ext(e.name), indd))).map(e => e.name);
       const az = (a, b) => a.localeCompare(b);
       return json({ path: dir, dirs: dirs.sort(az), files: files.sort(az) });
     }
@@ -1604,6 +1678,9 @@ const server = http.createServer(async (req, res) => {
       const ok = (abs.startsWith(path.join(REPO, 'images') + path.sep) || abs.startsWith(UPLOADS + path.sep)) && fs.existsSync(abs);
       const type = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext(abs)];
       if (!ok || !type) return send(404, 'text/plain', 'not found');
+      // sandboxed: an SVG is a document that can carry script, and from this
+      // address that script could call the API — opened directly, it must not run
+      res.setHeader('content-security-policy', 'sandbox; default-src \'none\'; img-src \'self\' data:; style-src \'unsafe-inline\'');
       return send(200, type, fs.readFileSync(abs));
     }
     if (p === '/thumb') {
@@ -1699,7 +1776,7 @@ const server = http.createServer(async (req, res) => {
         persist();
         return json({ kind: 'image', status: g.status });
       }
-      if (!isDoc(ext(file), true)) throw new Error('Harvest cannot read that kind of file.');
+      if (!isDoc(ext(file), !!b.indesign)) throw new Error(ext(file) === '.indd' ? 'Tick "Read InDesign files" first — it opens InDesign, which is slow.' : 'Harvest cannot read that kind of file.');
       run(`Reading ${path.basename(file)}`, async () => {
         addTexts(file, await extract(file), (t) => t.trim() ? [b.project] : [], 'manual', [b.project]);
       });
@@ -1747,6 +1824,7 @@ server.listen(0, '127.0.0.1', () => {
   console.log(`Harvest is open at ${ORIGIN}/\nClose this window (or press Ctrl-C) when you are done.`);
   if (!process.env.HARVEST_NO_OPEN) execFile('open', [ORIGIN + '/']);
   prune();
+  try { sweep(); } catch (e) { console.warn('could not tidy Harvest\'s temporary copies: ' + e.message); }
   drain();   // folders accepted last time but never expanded
 });
 

@@ -11,7 +11,7 @@ const picked = new Set();   // ticked card ids, kept across redraws
 
 /* ---- tree: lazy, one level per click */
 async function branch(li, p) {
-  const d = await api('/api/ls?p=' + encodeURIComponent(p));
+  const d = await api('/api/ls?p=' + encodeURIComponent(p) + '&indesign=' + ($('indesign').checked ? 1 : 0));
   const ul = document.createElement('ul');
   ul.innerHTML = d.dirs.map(n => '<li><span data-p="' + esc(d.path + '/' + n) + '"><i>›</i>' + esc(n) + '</span></li>').join('') +
     // files too, so anything the crawler missed can be added by hand
@@ -36,7 +36,7 @@ $('tree').addEventListener('click', async (e) => {
     if (!pr) return say('Pick a project first, then Add.');
     const b = e.target.closest('.btn');
     try {
-      const d = await api('/api/addfile', { project, path: fl.dataset.file });
+      const d = await api('/api/addfile', { project, path: fl.dataset.file, indesign: $('indesign').checked });
       b.textContent = 'Added'; b.disabled = true;
       say(d.kind === 'image' ? 'Added to ' + pr.title + ' — accepted; it is in Organize.' : 'Reading it for ' + pr.title + ' — its passages arrive in Pending.');
       poll();
@@ -160,7 +160,7 @@ function card(f) {
     // a linked folder or page is UNLINKED, not undone: "Undo" on it was not
     // found when it was needed. Unlinking rejects it, which takes back its
     // undecided cards and keeps a later crawl from offering it again.
-    : (f.status === 'accepted' && (f.kind === 'folder' || f.kind === 'page')) ? '<button class="btn" data-a="rejected" title="Take this ' + f.kind + ' off the project, and the cards from it still waiting in Pending. Cards already accepted stay.">Unlink</button><button class="btn" data-reread="1" title="Read it again: anything missing comes back. Decided cards are left alone.">Read again</button>'
+    : (f.status === 'accepted' && (f.kind === 'folder' || f.kind === 'page')) ? '<button class="btn" data-a="rejected" title="Take this ' + f.kind + ' off the project, with the cards from it still waiting in Pending and, for a web page, the pictures it brought in that you have not decided on. Cards you accepted yourself stay.">Unlink</button><button class="btn" data-reread="1" title="Read it again: anything missing comes back. Decided cards are left alone.">Read again</button>'
     : '<button class="btn" data-a="pending">Undo</button>' + (f.status === 'rejected' ? '<button class="btn" data-forget="1" title="Forget this rejection: a later crawl may suggest it again">Forget</button>' : '');
   let h = '<div class="card" data-id="' + f.id + '">' + (f.status === 'written' ? '' : '<input type="checkbox" class="pick"' + (picked.has(f.id) ? ' checked' : '') + '>');
   if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
@@ -643,6 +643,7 @@ async function attach(stack) {
   const text = String(f.edited ?? f.text).trim();
   // the caption box may hold typing not yet sent: read it from the page if it is there
   const box = document.querySelector('.stack[data-id="' + stack + '"] [data-f=caption]');
+  if (box) { clearTimeout(box._t); box._t = null; }   // its pending save would land after this one and drop the passage
   const cur = (box ? box.value : t.caption).trim();
   await orgOp({ op: 'field', stack, field: 'caption', value: cur ? cur + '\n' + text : text });
   try { await api('/api/finding', { id: f.id, target: 'caption' }); f.target = 'caption'; } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; return; }
@@ -660,8 +661,11 @@ const marks = {};   // icon_image / wordmark: a site path, '' for none, or { upl
 let projOpen = remember('projOpen') === '1';
 function projLook() { $('proj').hidden = !projOpen; $('projtoggle').classList.toggle('on', projOpen); }
 $('projtoggle').addEventListener('click', () => { projOpen = !projOpen; remember('projOpen', projOpen ? '1' : '0'); projLook(); loadProj(); });
-function partOfOptions(section) {
-  const sel = document.querySelector('#proj [data-p=part_of]'), keep = sel.value || (pd && pd.data.part_of) || '';
+// `keep` is said by the caller: the file's value when a project is loaded,
+// the menu's own when only the section changed. Reading it off the menu on
+// load carried one project's lead into the next one opened (review, 2026-10-04).
+function partOfOptions(section, keep) {
+  const sel = document.querySelector('#proj [data-p=part_of]');
   // the same section, not itself, and not a sub-project: build.js refuses the rest
   const ok = S.projects.filter(p => p.section === section && p.slug !== pd.slug && !p.part_of);
   sel.innerHTML = '<option value="">— none: a project of its own —</option>' + ok.map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('') +
@@ -685,7 +689,7 @@ function fillProj() {
     if (el.type === 'checkbox') el.checked = !!v[k];
     else el.value = Array.isArray(v[k]) ? v[k].join('\n') : (v[k] ?? '');
   }
-  partOfOptions(v.section);
+  partOfOptions(v.section, d.part_of || '');
   marks.icon_image = d.icon_image || ''; marks.wordmark = d.wordmark || '';
   drawMarks();
   $('pbody').value = pd.body || '';
@@ -693,7 +697,14 @@ function fillProj() {
   $('paddr').textContent = 'Address #' + v.section + '/' + pd.slug + ' — permanent, it does not change with the title';
   $('pmsg').textContent = '';
   pdDirty = false;
+  // what the form showed when loaded: Save sends only what differs from it
+  pd.shown = formValues(); pd.shownBody = $('pbody').value;
   showDesc();
+}
+function formValues() {
+  const out = { icon_image: marks.icon_image, wordmark: marks.wordmark };
+  for (const el of document.querySelectorAll('#proj [data-p]')) out[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
+  return out;
 }
 function drawMarks() {
   const glyph = document.querySelector('#proj [data-p=icon_type]').value === 'glyph';
@@ -710,7 +721,7 @@ function drawMarks() {
 }
 $('proj').addEventListener('input', (e) => {
   pdDirty = true;
-  if (e.target.dataset.p === 'section') partOfOptions(e.target.value);
+  if (e.target.dataset.p === 'section') partOfOptions(e.target.value, document.querySelector('#proj [data-p=part_of]').value);
   if (e.target.dataset.p === 'icon_type') drawMarks();
   if (e.target.id === 'pbody') { clearTimeout(showDesc.t); showDesc.t = setTimeout(showDesc, 300); }
 });
@@ -748,16 +759,20 @@ async function showDesc() {
 }
 $('psave').addEventListener('click', async () => {
   if (!pd) return;
-  const data = { icon_image: marks.icon_image, wordmark: marks.wordmark };
-  for (const el of document.querySelectorAll('#proj [data-p]')) data[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
+  // Only the fields changed here are sent; the server leaves the rest as the
+  // file has them — which may be newer than this form (an edit from the phone).
+  const now = formValues(), data = {};
+  for (const k in now) if (JSON.stringify(now[k]) !== JSON.stringify(pd.shown[k])) data[k] = now[k];
+  const body = $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
+  if (!Object.keys(data).length && body === undefined) { $('pmsg').textContent = 'Nothing changed.'; return; }
   $('pmsg').textContent = 'Saving — checking the site still builds…'; busy(1);
   try {
-    const r = await api('/api/project', { project: pd.slug, data, body: $('pbody').value });
+    const r = await api('/api/project', { project: pd.slug, data, body });
     const slug = pd.slug; pd = null; pdDirty = false;
     await poll();
     await loadProj();   // whichever project is selected now: the one just saved, or the one switched to while it held unsaved edits
     if (project) $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
-    $('pmsg').textContent = 'Saved. Not live yet — Publish (top right) when ready.' + (r.warning ? ' Note: the site already fails to build because of something else — ' + r.warning : '');
+    $('pmsg').textContent = r.unchanged ? 'Nothing changed.' : 'Saved. Not live yet — Publish (top right) when ready.' + (r.warning ? ' Note: the site does not build right now — ' + r.warning : '');
   } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
   finally { busy(-1); }
 });
