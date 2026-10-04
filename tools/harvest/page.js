@@ -410,6 +410,10 @@ function orgPicks() {
   const n = opick.size;
   $('orgmerge').disabled = n < 2;
   $('orgsplit').disabled = !(org && org.stacks.some(t => opick.has(t.id) && t.members.length > 1));
+  // Restore when everything ticked is already removed, Remove otherwise
+  const ticked = org ? org.stacks.filter(t => opick.has(t.id)) : [];
+  $('orgremove').disabled = !ticked.length;
+  $('orgremove').textContent = ticked.length && ticked.every(t => t.removed) ? 'Restore' : 'Remove from project';
   $('orgmove').disabled = !n;
   const opts = '<option value="">' + (n ? 'Move ' + n + ' to project…' : 'Move to project…') + '</option>' + S.projects.filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
   if ($('orgmove').innerHTML !== opts) $('orgmove').innerHTML = opts;
@@ -528,6 +532,13 @@ $('orgmerge').addEventListener('click', async () => {
   opick.clear();
   for (const other of ids.slice(1)) await orgOp({ op: 'merge', stack: ids[0], other }, false);
   loadOrg();
+});
+$('orgremove').addEventListener('click', async () => {
+  const ticked = org.stacks.filter(t => opick.has(t.id)), value = !ticked.every(t => t.removed);
+  opick.clear();
+  for (const t of ticked) await orgOp({ op: 'remove', stack: t.id, value }, false);
+  await loadOrg();
+  $('orgmsg').textContent = (value ? 'Removed ' : 'Restored ') + ticked.length + ' work' + (ticked.length === 1 ? '' : 's') + (value ? '. Save to project takes them off the site; Restore brings them back before then.' : '.');
 });
 // the opposite of merge: each ticked work's copies go back to being works of their own
 $('orgsplit').addEventListener('click', async () => {

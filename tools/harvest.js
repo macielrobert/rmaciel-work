@@ -1440,7 +1440,9 @@ function organizeOp(slug, b) {
     rev++;
   }
   if (b.op === 'field' && (b.field === 'alt' || b.field === 'caption')) t[b.field] = String(b.value ?? '');
-  if (b.op === 'remove') t.removed = !t.removed;
+  // a work's own button flips it; the header's says which way, so a mixed
+  // selection of removed and kept works all lands the same way
+  if (b.op === 'remove') t.removed = 'value' in b ? !!b.value : !t.removed;
   persist();
 }
 
