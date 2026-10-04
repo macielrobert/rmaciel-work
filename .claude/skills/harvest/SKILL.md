@@ -153,3 +153,17 @@ Collect: an accepted folder card counts the cards it brought in and has
 The folder tree also lists pictures and readable documents, each with **Add**
 (`/api/addfile`): a picture goes into the selected project accepted; a
 document is read as a job and its passages arrive pending (`from: 'manual'`).
+
+## The Project panel (built 2026-10-04)
+
+Organize → **Project details**: every field Keystatic edits except `images`
+(title, section, order, draft, part_of, client, details, layout, expand,
+icon_type/glyph/image, wordmark, share_description, nicknames, and the
+description body as Markdoc with toolbar buttons + a live preview rendered by
+the repo's @markdoc/markdoc with tags mirroring build.js). Save
+(`POST /api/project`) catches up with GitHub, runs `build.js` before and
+after the write, and puts the file (and any replaced icon/wordmark) back if
+this save is what broke the build. Icon/wordmark uploads wait in
+`.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
+Save; a replaced or removed one's old file is deleted. The file chooser and
+confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.

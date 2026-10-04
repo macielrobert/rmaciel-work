@@ -232,6 +232,133 @@ function newProject(title, section) {
   return slug;
 }
 
+/* ------------------------------------------------------------- project panel */
+
+/* THE PROJECT PANEL — every field Keystatic edits except the pictures, which
+   are Organize's. Harvest is the editor now (Robert, 2026-10-04: he does not
+   want to edit in Keystatic on his phone); Keystatic stays the fallback and
+   keystatic.config.tsx the schema of record. Field names, value shapes and
+   file names follow what Keystatic writes, so either editor can open what
+   the other saved.
+
+   VALIDATION IS build.js ITSELF, not a copy of its rules. The build runs
+   before and after the write (0.1 s each). If this save turns a site that
+   built into one that does not, the file — and any icon or wordmark it
+   replaced — is put back exactly as it was, and the build's own message is
+   shown. A failure that was already there, caused by another project, is
+   reported but does not block: refusing every save over someone else's
+   mistake would make the panel useless until that was found.
+
+   ICON AND WORDMARK FILES are uploaded to Harvest's own folder first and
+   only copied into images/<slug>/ on Save, named as Keystatic names them
+   (<field>.<ext>). Uploading alone changes nothing on the site. */
+const UPLOADS = path.join(STORE, 'uploads');
+fs.mkdirSync(UPLOADS, { recursive: true });
+const MARK_EXT = new Set(['.png', '.svg']);   // alpha is the shape: build.js refuses anything else for an icon
+const buildError = () => sh(process.execPath, [path.join(REPO, 'build.js')])
+  .then(() => null, e => String(e.message).trim().split('\n').pop().trim());
+const lines = (v) => String(v ?? '').split('\n').map(x => x.trim()).filter(Boolean);
+
+function projectFile(slug) {
+  const file = path.join(PROJECTS, String(slug) + '.mdoc');
+  if (!/^[a-z0-9-]+$/.test(String(slug)) || !fs.existsSync(file)) throw new Error('No such project.');
+  return file;
+}
+function projectData(slug) {
+  const { data, body } = readMdoc(projectFile(slug));
+  const { images, ...rest } = data;
+  return { slug, data: rest, body };
+}
+
+async function saveProject(slug, v, newBody) {
+  await catchUp();
+  const file = projectFile(slug);
+  const before = await buildError();
+  const old = fs.readFileSync(file), waiting = unpublished.has(slug);
+  const { data, body } = readMdoc(file);
+  const next = { ...data };
+  const str = (x) => String(x ?? '').trim();
+  const optional = (k, val) => { if (val === '' || val === null || (Array.isArray(val) && !val.length)) delete next[k]; else next[k] = val; };
+
+  next.title = str(v.title);
+  if (!next.title) throw new Error('A project needs a title.');
+  if (!['build', 'design', 'art'].includes(v.section)) throw new Error('Pick a section.');
+  next.section = v.section;
+  const order = Number(v.order);
+  if (str(v.order) === '' || !Number.isFinite(order)) throw new Error('Position in grid must be a number.');
+  next.order = Math.round(order);
+  next.draft = !!v.draft;
+  optional('part_of', str(v.part_of));
+  optional('client', str(v.client));
+  next.details = lines(v.details);   // Keystatic always writes the list, even empty
+  if (!['standard', 'grid', 'text'].includes(v.layout)) throw new Error('Pick a layout.');
+  next.layout = v.layout;
+  next.expand = !!v.expand;
+  if (!['glyph', 'image'].includes(v.icon_type)) throw new Error('Pick a kind of grid icon.');
+  next.icon_type = v.icon_type;
+  optional('icon_glyph', str(v.icon_glyph));
+  optional('share_description', str(v.share_description));
+  optional('nicknames', lines(v.nicknames));
+
+  const backups = [], gone = [];
+  try {
+    for (const k of ['icon_image', 'wordmark']) {
+      const val = v[k];
+      if (val && typeof val === 'object' && val.upload) {
+        const from = path.resolve(String(val.upload));
+        if (!from.startsWith(UPLOADS + path.sep) || !fs.existsSync(from)) throw new Error('That upload is gone — choose the file again.');
+        const rel = `images/${slug}/${k}${ext(from)}`, to = path.join(REPO, rel);
+        backups.push([to, fs.existsSync(to) ? fs.readFileSync(to) : null]);
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+        next[k] = '/' + rel;
+      } else optional(k, str(val));
+      // a mark replaced by one of another kind (.png by .svg) or removed: its
+      // old file goes, because build.js ships everything under images/
+      if (data[k] && data[k] !== next[k]) gone.push(data[k]);
+    }
+    writeMdoc(file, next, newBody === undefined ? body : String(newBody));
+    const after = await buildError();
+    if (after && after !== before) throw new Error('Not saved — the site would not build: ' + after);
+  } catch (e) {
+    fs.writeFileSync(file, old);
+    for (const [f, bytes] of backups) if (bytes) fs.writeFileSync(f, bytes); else fs.rmSync(f, { force: true });
+    projectsCache = null;
+    throw e;
+  }
+  // a save that changed nothing is not something waiting to go live
+  if (!waiting && !backups.length && fs.readFileSync(file).equals(old)) unpublished.delete(slug);
+  const mine = path.join(REPO, 'images', slug) + path.sep;
+  const used = new Set([next.icon_image, next.wordmark, ...(next.images || []).map(i => i.src)].filter(Boolean));
+  for (const src of gone) {
+    const f = path.join(REPO, String(src).replace(/^\/+/, ''));
+    if (f.startsWith(mine) && !used.has(src)) fs.rmSync(f, { force: true });
+  }
+  return { warning: before };
+}
+
+function upload(name, b64) {
+  const e = ext(String(name || ''));
+  if (!MARK_EXT.has(e)) throw new Error('A grid icon or wordmark must be a PNG or SVG with a transparent background — the transparency is the shape.');
+  const out = path.join(UPLOADS, id(name, Date.now()) + e);
+  fs.writeFileSync(out, Buffer.from(String(b64 || ''), 'base64'));
+  return out;
+}
+
+/* PREVIEW of a description, with the site's own parser (the repo's
+   @markdoc/markdoc, installed for build.js). The tags below MIRROR
+   markdocTags() in build.js — they only shape this preview; what reaches the
+   site is decided by build.js, which Save runs. Change one, change both. */
+let Markdoc = null;
+function preview(src) {
+  Markdoc ||= require(path.join(REPO, 'node_modules', '@markdoc', 'markdoc'));
+  const M = Markdoc;
+  const wrap = (el, cls) => ({ render: el, attributes: {}, transform: (node, config) => new M.Tag(el, cls ? { class: cls } : {}, node.transformChildren(config)) });
+  const tags = { light: wrap('span', 'w-l'), small: wrap('span', 't-s'), large: wrap('span', 't-l'), underline: wrap('u', null) };
+  const nodes = { softbreak: { transform: () => new M.Tag('br') } };
+  return M.renderers.html(M.transform(M.parse(String(src || '')), { tags, nodes }));
+}
+
 // Kept, not re-read: the page asks for this on every poll, and parsing every
 // project each time is wasted. Harvest's own writes clear it (writeMdoc); edits
 // made elsewhere while it runs appear after a restart — the launcher pulls first.
@@ -241,7 +368,7 @@ function projects() {
     const { data } = readMdoc(path.join(PROJECTS, f));
     return {
       slug: f.slice(0, -5), title: data.title || f, section: data.section, order: data.order ?? 10,
-      draft: !!data.draft, nicknames: data.nicknames || [],
+      draft: !!data.draft, nicknames: data.nicknames || [], part_of: data.part_of || null,
       siteImages: (data.images || []).map(i => path.join(REPO, String(i.src || '').replace(/^\/+/, ''))),
     };
   }).sort((a, b) => (a.section || '').localeCompare(b.section || '') || a.order - b.order || a.title.localeCompare(b.title));
@@ -1429,6 +1556,16 @@ const server = http.createServer(async (req, res) => {
       const hidden = url.searchParams.get('hidden') === '1';
       return json(Object.values(state.findings).filter(f => f.project === slug && (hidden || !f.cleared) && present(f.path)));
     }
+    if (p === '/api/project' && req.method === 'GET') return json(projectData(url.searchParams.get('project')));
+    // a mark as it is, transparency and all: the site's own icons and wordmarks, and uploads waiting for Save
+    if (p === '/raw') {
+      const q = url.searchParams.get('p') || '';
+      const abs = q.startsWith('/images/') ? path.join(REPO, q) : path.resolve(q);   // a site path, as the project file stores it
+      const ok = (abs.startsWith(path.join(REPO, 'images') + path.sep) || abs.startsWith(UPLOADS + path.sep)) && fs.existsSync(abs);
+      const type = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext(abs)];
+      if (!ok || !type) return send(404, 'text/plain', 'not found');
+      return send(200, type, fs.readFileSync(abs));
+    }
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
       if (!IMAGE_EXT.has(ext(abs)) || !fs.existsSync(abs)) return send(404, 'text/plain', 'not found');
@@ -1490,6 +1627,9 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
     if (p === '/api/organize') { organizeOp(b.project, b); return json({ ok: true }); }
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
+    if (p === '/api/project') return json(await saveProject(b.project, b.data || {}, b.body));
+    if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
+    if (p === '/api/preview') { try { return json({ html: preview(b.body) }); } catch (e) { return json({ html: '', error: 'No preview: ' + e.message.split('\n')[0] }); } }
     if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
@@ -1548,7 +1688,8 @@ const server = http.createServer(async (req, res) => {
 function body(req) {
   return new Promise((ok, no) => {
     let s = '';
-    req.on('data', c => { s += c; if (s.length > 4e6) req.destroy(); });
+    // 40 MB: an icon or wordmark arrives base64-encoded
+    req.on('data', c => { s += c; if (s.length > 40e6) req.destroy(); });
     req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { no(e); } });
   });
 }

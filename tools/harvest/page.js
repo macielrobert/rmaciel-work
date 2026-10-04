@@ -419,6 +419,7 @@ $('orgviews').addEventListener('click', (e) => {
 async function loadOrg() {
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
+  loadProj();
   $('orgmsg').textContent = 'Grouping copies…'; busy(1);
   try { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); $('orgmsg').textContent = ''; }
   catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
@@ -584,6 +585,118 @@ $('write').addEventListener('click', async () => {
     $('msg').textContent = d.written + ' written into the project. Not live yet — Publish (top right) when ready.';
     loadFindings();
   } catch (e) { $('msg').textContent = '⚠ ' + e.message; }
+});
+
+/* ---- PROJECT PANEL: every field Keystatic edits, except the pictures (the works below).
+   Save sends the whole form; the server writes it the way Keystatic would and
+   runs build.js before and after — a save that would break the site is put back.
+   The panel remembers WHICH project it holds (pd.slug), and Save goes there,
+   never to whatever project is selected now. */
+let pd = null, pdDirty = false;
+const marks = {};   // icon_image / wordmark: a site path, '' for none, or { upload, name } waiting for Save
+let projOpen = remember('projOpen') === '1';
+function projLook() { $('proj').hidden = !projOpen; $('projtoggle').classList.toggle('on', projOpen); }
+$('projtoggle').addEventListener('click', () => { projOpen = !projOpen; remember('projOpen', projOpen ? '1' : '0'); projLook(); loadProj(); });
+function partOfOptions(section) {
+  const sel = document.querySelector('#proj [data-p=part_of]'), keep = sel.value || (pd && pd.data.part_of) || '';
+  // the same section, not itself, and not a sub-project: build.js refuses the rest
+  const ok = S.projects.filter(p => p.section === section && p.slug !== pd.slug && !p.part_of);
+  sel.innerHTML = '<option value="">— none: a project of its own —</option>' + ok.map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('') +
+    (keep && !ok.some(p => p.slug === keep) ? '<option value="' + esc(keep) + '">' + esc(keep) + ' (not allowed here)</option>' : '');
+  sel.value = keep;
+}
+async function loadProj() {
+  projLook();
+  if (!projOpen || !project || (pd && pd.slug === project)) return;
+  if (pdDirty && !confirm('Discard the unsaved project details for ' + $('ptitle').textContent + '?')) return;
+  try { pd = await api('/api/project?project=' + encodeURIComponent(project)); } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; return; }
+  fillProj();
+}
+function fillProj() {
+  const d = pd.data;
+  // Keystatic's defaults, for a field the file does not have yet
+  const v = { section: 'build', order: 10, layout: 'standard', icon_type: 'glyph', ...d, expand: d.expand !== false };
+  for (const el of document.querySelectorAll('#proj [data-p]')) {
+    const k = el.dataset.p;
+    if (k === 'part_of') continue;
+    if (el.type === 'checkbox') el.checked = !!v[k];
+    else el.value = Array.isArray(v[k]) ? v[k].join('\n') : (v[k] ?? '');
+  }
+  partOfOptions(v.section);
+  marks.icon_image = d.icon_image || ''; marks.wordmark = d.wordmark || '';
+  drawMarks();
+  $('pbody').value = pd.body || '';
+  $('ptitle').textContent = d.title || pd.slug;
+  $('paddr').textContent = 'Address #' + v.section + '/' + pd.slug + ' — permanent, it does not change with the title';
+  $('pmsg').textContent = '';
+  pdDirty = false;
+  showDesc();
+}
+function drawMarks() {
+  const glyph = document.querySelector('#proj [data-p=icon_type]').value === 'glyph';
+  document.querySelector('#proj [data-p=icon_glyph]').hidden = !glyph;
+  document.querySelector('[data-mark=icon_image]').hidden = glyph;
+  for (const box of document.querySelectorAll('#proj [data-mark]')) {
+    const k = box.dataset.mark, m = marks[k];
+    const src = !m ? '' : typeof m === 'object' ? m.upload : m;
+    box.innerHTML = (src ? '<div class="tile"><img src="/raw?p=' + encodeURIComponent(src) + '"></div>' : '') +
+      '<span>' + (typeof m === 'object' ? esc(m.name) + ' — saved with the project' : src ? esc(src.split('/').pop()) : 'None') + '</span>' +
+      '<label class="btn">Choose file…<input type="file" accept=".png,.svg,image/png,image/svg+xml" hidden></label>' +
+      (k === 'wordmark' && m ? '<button class="btn" data-unmark>Remove</button>' : '');
+  }
+}
+$('proj').addEventListener('input', (e) => {
+  pdDirty = true;
+  if (e.target.dataset.p === 'section') partOfOptions(e.target.value);
+  if (e.target.dataset.p === 'icon_type') drawMarks();
+  if (e.target.id === 'pbody') { clearTimeout(showDesc.t); showDesc.t = setTimeout(showDesc, 300); }
+});
+$('proj').addEventListener('change', async (e) => {
+  if (e.target.type !== 'file' || !e.target.files[0]) return;
+  const k = e.target.closest('[data-mark]').dataset.mark, f = e.target.files[0];
+  const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
+  busy(1);
+  try { marks[k] = { upload: (await api('/api/project/upload', { name: f.name, data })).upload, name: f.name }; pdDirty = true; drawMarks(); }
+  catch (err) { $('pmsg').textContent = '⚠ ' + err.message; }
+  finally { busy(-1); }
+});
+$('proj').addEventListener('click', (e) => {
+  if (e.target.closest('[data-unmark]')) { marks[e.target.closest('[data-mark]').dataset.mark] = ''; pdDirty = true; drawMarks(); }
+  const b = e.target.closest('[data-md]'); if (b) markup(b.dataset.md);
+});
+// The description is Markdoc, as Keystatic writes it. The buttons put the
+// marks in for you; the preview shows what the site will make of them.
+const WRAP = { bold: ['**', '**'], italic: ['_', '_'], strike: ['~~', '~~'], underline: ['{% underline %}', '{% /underline %}'],
+  light: ['{% light %}', '{% /light %}'], small: ['{% small %}', '{% /small %}'], large: ['{% large %}', '{% /large %}'], link: ['[', '](https://)'] };
+const PREFIX = { list: () => '- ', numbered: (i) => (i + 1) + '. ', quote: () => '> ' };
+function markup(kind) {
+  const t = $('pbody'); let a = t.selectionStart, b = t.selectionEnd;
+  if (WRAP[kind]) t.setRangeText(WRAP[kind][0] + t.value.slice(a, b) + WRAP[kind][1], a, b, 'select');
+  else if (PREFIX[kind]) {   // whole lines: from the start of the first to the end of the last
+    a = t.value.lastIndexOf('\n', a - 1) + 1;
+    const e = t.value.indexOf('\n', b); b = e < 0 ? t.value.length : e;
+    t.setRangeText(t.value.slice(a, b).split('\n').map((l, i) => PREFIX[kind](i) + l).join('\n'), a, b, 'select');
+  } else if (kind === 'divider') t.setRangeText('\n\n---\n\n', b, b, 'end');
+  t.focus(); pdDirty = true; showDesc();
+}
+async function showDesc() {
+  try { const d = await api('/api/preview', { body: $('pbody').value }); $('ppreview').innerHTML = d.error ? '<span class="dim">' + esc(d.error) + '</span>' : d.html; }
+  catch { /* a preview is a convenience; Save is what checks */ }
+}
+$('psave').addEventListener('click', async () => {
+  if (!pd) return;
+  const data = { icon_image: marks.icon_image, wordmark: marks.wordmark };
+  for (const el of document.querySelectorAll('#proj [data-p]')) data[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
+  $('pmsg').textContent = 'Saving — checking the site still builds…'; busy(1);
+  try {
+    const r = await api('/api/project', { project: pd.slug, data, body: $('pbody').value });
+    const slug = pd.slug; pd = null; pdDirty = false;
+    await poll();
+    await loadProj();   // whichever project is selected now: the one just saved, or the one switched to while it held unsaved edits
+    if (project) $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
+    $('pmsg').textContent = 'Saved. Not live yet — Publish (top right) when ready.' + (r.warning ? ' Note: the site already fails to build because of something else — ' + r.warning : '');
+  } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
+  finally { busy(-1); }
 });
 
 (async () => {

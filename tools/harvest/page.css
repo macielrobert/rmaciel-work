@@ -7,6 +7,8 @@
           --accent:rgba(var(--accent-rgb),.9); --accent-dim:rgba(var(--accent-rgb),.5); --m:20px; }
   @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
   * { box-sizing:border-box }
+  /* hidden means hidden: the display:block given to every input below would otherwise win over it */
+  [hidden] { display:none !important; }
   /* the columns scroll; the window never does */
   html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); }
   body { font:300 11px/1.7 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.05em; display:grid; grid-template-rows:auto 1fr; }
@@ -140,3 +142,29 @@
   ::placeholder { color:var(--accent-dim); }
   #write { margin:0 0 12px; }
   #msg { color:var(--ink); }
+  /* project panel */
+  #proj { padding:var(--m); border-bottom:1px solid var(--accent-dim); }
+  #projtoggle.on { color:var(--ink); }
+  .phead { display:flex; gap:16px; align-items:baseline; margin-bottom:10px; }
+  .pgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px 24px; align-items:start; }
+  #proj label, #proj .field { display:block; color:var(--accent); }
+  #proj label.chk { display:flex; gap:8px; align-items:center; padding-top:18px; }
+  #proj label.chk input { width:auto; margin:0; accent-color:var(--ink); }
+  #proj textarea[data-p] { min-height:60px; }
+  #proj .field { margin-top:14px; }
+  .pgrid .field { margin-top:0; }
+  /* marks are white-on-transparent: shown on grey so they read in either theme */
+  .mark { display:flex; gap:12px; align-items:center; margin-top:8px; }
+  .mark .tile { width:64px; height:64px; background:var(--accent-dim); display:flex; align-items:center; justify-content:center; flex:none; }
+  .mark .tile img { max-width:52px; max-height:52px; }
+  #mdbar { display:flex; flex-wrap:wrap; gap:14px; margin:8px 0 4px; }
+  #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:12px; }
+  .pdesc { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  #pbody { min-height:220px; }
+  /* the site's body copy and its three custom marks (values mirror index.html, as keystatic.config.tsx's do) */
+  #ppreview { font-size:13px; font-weight:400; letter-spacing:0; line-height:1.5; color:var(--ink); max-width:33em; padding-top:6px; }
+  #ppreview p { margin:0 0 1em; }
+  #ppreview .w-l { font-weight:300; } #ppreview .t-s { font-size:.85em; } #ppreview .t-l { font-size:1.27em; }
+  #ppreview a { color:inherit; }
+  .pfoot { display:flex; gap:16px; align-items:baseline; margin-top:14px; }
+  #pmsg { color:var(--ink); }

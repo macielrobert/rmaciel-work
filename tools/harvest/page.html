@@ -57,7 +57,39 @@
       <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
       <select id="orgmove" disabled></select>
       <button class="btn" id="orgsave" disabled>Save to project</button>
+      <button class="btn" id="projtoggle" title="Every other field of this project: section, icon, description…">Project details</button>
       <span class="dim" id="orgmsg"></span>
+    </div>
+    <!-- PROJECT PANEL: every field Keystatic edits except the pictures, which
+         are the works below. Filled by loadProj() in page.js. -->
+    <div id="proj" hidden>
+      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span></div>
+      <div class="pgrid">
+        <label>Title<input data-p="title"></label>
+        <label>Section<select data-p="section"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select></label>
+        <label>Position in grid<input data-p="order" type="number" step="1" placeholder="Low numbers first: 10, 20, 30"></label>
+        <label class="chk"><input type="checkbox" data-p="draft">Hold back (do not publish)</label>
+        <label>Sub-project of<select data-p="part_of"></select></label>
+        <label>Client name<input data-p="client" placeholder="Only for a project with sub-projects: the heading over them"></label>
+        <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
+        <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
+        <div class="field">Grid icon
+          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Uploaded mark</option></select>
+          <input data-p="icon_glyph" placeholder="One character">
+          <div class="mark" data-mark="icon_image"></div>
+        </div>
+        <div class="field">Wordmark / hero mark <span class="dim">(optional)</span>
+          <div class="mark" data-mark="wordmark"></div>
+        </div>
+        <label>Detail lines <span class="dim">one per line</span><textarea data-p="details"></textarea></label>
+        <label>Share description <span class="dim">plain text, for link previews</span><textarea data-p="share_description"></textarea></label>
+        <label>Working titles <span class="dim">one per line — only Harvest uses these</span><textarea data-p="nicknames"></textarea></label>
+      </div>
+      <div class="field">Description
+        <div id="mdbar"><button class="btn" data-md="bold"><b>B</b></button><button class="btn" data-md="italic"><i>I</i></button><button class="btn" data-md="underline"><u>U</u></button><button class="btn" data-md="strike"><s>S</s></button><button class="btn" data-md="light">Lighter</button><button class="btn" data-md="small">Smaller</button><button class="btn" data-md="large">Larger</button><button class="btn" data-md="link">Link</button><button class="btn" data-md="list">• List</button><button class="btn" data-md="numbered">1. List</button><button class="btn" data-md="quote">Quote</button><button class="btn" data-md="divider">Divider</button></div>
+        <div class="pdesc"><textarea id="pbody" placeholder="Select words, then a button above. The preview on the right is how the site will set it."></textarea><div id="ppreview"></div></div>
+      </div>
+      <div class="pfoot"><button class="btn" id="psave">Save project</button><span class="dim" id="pmsg"></span></div>
     </div>
     <div id="stacks"></div>
   </section>

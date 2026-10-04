@@ -100,6 +100,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     let a = NSAlert(); a.messageText = message; a.runModal(); completionHandler()
   }
 
+  // Nor any confirm box: without this, confirm() answers "no" without asking.
+  func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+    let a = NSAlert(); a.messageText = message
+    a.addButton(withTitle: "OK"); a.addButton(withTitle: "Cancel")
+    completionHandler(a.runModal() == .alertFirstButtonReturn)
+  }
+
+  // Nor a file chooser: <input type="file"> does nothing until the host opens
+  // the panel. Used by the Project panel's icon and wordmark uploads.
+  func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+    let p = NSOpenPanel()
+    p.canChooseFiles = true
+    p.canChooseDirectories = false
+    p.allowsMultipleSelection = parameters.allowsMultipleSelection
+    p.beginSheetModal(for: window) { r in completionHandler(r == .OK ? p.urls : nil) }
+  }
+
   @objc func reloadPage() { web.reload() }
 
   func page(_ msg: String) -> String {
