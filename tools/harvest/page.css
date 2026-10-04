@@ -67,10 +67,12 @@
   #stacks.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--cell, 160px), 1fr)); gap:12px; padding-top:var(--m); }
   .tile { cursor:pointer; position:relative; }
   .tile .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; outline:1px solid transparent; }
-  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); }
+  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
   .tile.on .keep { outline-color:var(--ink); }
   .tile.removed { opacity:.35; }
-  .tile small { display:block; font-size:10px; color:var(--accent); margin-top:4px; }
+  .tile .under { display:flex; gap:10px; align-items:baseline; margin-top:4px; }
+  .tile small { flex:1; font-size:10px; color:var(--accent); }
+  .tile .under .btn { font-size:13px; letter-spacing:0; }
   .tile .spick { position:absolute; top:4px; right:4px; width:auto; margin:0; accent-color:var(--ink); }
   #orgviews .btn.on { color:var(--ink); }
   #orgmove { width:auto; margin:0; }

@@ -453,7 +453,8 @@ function drawOrg() {
       return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
-        '<small>' + t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + '</small></div>';
+        '<div class="under"><small>' + t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '') + '</small>' +
+        '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div></div>';
     }).join('');
     return;
   }
@@ -486,6 +487,17 @@ $('stacks').addEventListener('click', (e) => {
   const work = armed && e.target.closest('.stack, .tile');
   if (work) { e.preventDefault(); attach(work.dataset.id); return; }
   const tile = e.target.closest('.tile');
+  // TURN, in grid: shown at once and sent without a redraw, so the grid does
+  // not jump; the server keeps the same quarter-turn count as List's buttons
+  const turn = tile && e.target.closest('[data-turn]');
+  if (turn) {
+    const t = org.stacks.find(x => x.id === tile.dataset.id), dir = +turn.dataset.turn;
+    t.rotate = ((t.rotate || 0) + (dir > 0 ? 90 : 270)) % 360;
+    tile.querySelector('.keep').style.setProperty('--turn', t.rotate + 'deg');
+    tile.querySelector('small').textContent = t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
+    orgOp({ op: 'rotate', stack: t.id, dir }, false);
+    return;
+  }
   if (tile && !e.target.classList.contains('spick')) {   // the whole tile is the tick box
     const id = tile.dataset.id, on = !opick.has(id);
     on ? opick.add(id) : opick.delete(id);
@@ -516,7 +528,7 @@ $('stacks').addEventListener('change', (e) => {
 });
 // double-click a tile: the same work in List, where its copies, alt and caption are
 $('stacks').addEventListener('dblclick', (e) => {
-  const tile = e.target.closest('.tile'); if (!tile) return;
+  const tile = e.target.closest('.tile'); if (!tile || e.target.closest('[data-turn]')) return;   // two quick turns are not a double-click to open
   remember('orgView', orgView = 'list'); drawOrg();
   document.querySelector('.stack[data-id="' + tile.dataset.id + '"]')?.scrollIntoView({ block: 'start' });
 });
