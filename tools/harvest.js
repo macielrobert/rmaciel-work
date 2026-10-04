@@ -348,6 +348,19 @@ func ocr(_ img: CGImage) -> String {
   return (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\\n")
 }
 let args = CommandLine.arguments
+// --prints a.jpg b.png ... : one feature vector per picture, for grouping copies
+if args.count > 1 && args[1] == "--prints" {
+  var out: [Any] = []
+  for p in args.dropFirst(2) {
+    let req = VNGenerateImageFeaturePrintRequest()
+    guard (try? VNImageRequestHandler(url: URL(fileURLWithPath: p), options: [:]).perform([req])) != nil,
+          let o = req.results?.first as? VNFeaturePrintObservation, o.elementType == .float
+    else { out.append(NSNull()); continue }
+    out.append(o.data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }.map { Double($0) })
+  }
+  FileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: out))
+  exit(0)
+}
 let want = Set(args.dropFirst(2).compactMap { Int($0) })
 var pages: [String] = []
 if let doc = PDFDocument(url: URL(fileURLWithPath: args[1])) {
@@ -369,7 +382,7 @@ function ocrTool() {
     if (fs.existsSync(OCR_BIN) && fs.existsSync(src) && fs.readFileSync(src, 'utf8') === OCR_SRC) return OCR_BIN;
     fs.writeFileSync(src, OCR_SRC);
     const was = job.phase;
-    job.phase = 'Preparing text recognition (first time only, about a minute)';
+    job.phase = "Preparing Apple's image tools (first time only, about a minute)";
     try { await sh('swiftc', ['-O', src, '-o', OCR_BIN]); return OCR_BIN; }
     catch (e) { console.warn(`text recognition unavailable — compiling it failed: ${e.message.split('\n')[0]}`); return null; }
     finally { job.phase = was; }
@@ -975,6 +988,238 @@ function addNickname(slug, name) {
   writeMdoc(file, data, body);
 }
 
+/* ------------------------------------------------------------- organize */
+
+/* ORGANIZE — the second step. Collect gathers; this audits one project at a
+   time, working on WORKS rather than files. Its members are the pictures
+   already on the site plus every picture accepted in Collect. Copies of one
+   work are stacked; one is kept; it gets its alt text and caption; the stacks
+   are put in order; Save rewrites the project's picture list to exactly that.
+
+   SAME WORK — two measures, because neither alone is enough (measured on BUS
+   STOP's renders, 2026-10-04):
+     • the difference hash already used for look-alikes catches re-exports,
+       resizes and recompressions (0-6 bits), which Vision scores oddly far
+       apart (a 600 px recompressed copy: 0.59);
+     • Apple Vision's feature print catches crops and edits the hash cannot
+       (70 % centre crop 0.26, rotated 0.21, PNG copy 0.04).
+   Different views of one project score 0.40-0.57 — overlapping a heavy corner
+   crop (0.50). So: at or under 0.30 is stacked automatically; 0.30-0.60 is
+   offered as "Same work as #4?" for one click, never merged unasked.
+
+   WHICH COPY IS KEPT — a copy already on the site or from the old website
+   wins: it was vetted when it was published (Robert, 2026-10-04). Otherwise
+   the largest with a real name (not IMG_1234). Choosing one by hand sticks.
+   Only one copy per work is kept; no record of the others is (also his call). */
+
+const PRINTS = path.join(STORE, 'prints');
+fs.mkdirSync(PRINTS, { recursive: true });
+const SAME_WORK = 0.30, MAYBE_SAME = 0.60;
+const CAMERA_NAME = /^(img|dsc|dscf|dscn|_mg|_dsc|p\d|pxl|image|photo|screenshot|screen shot|untitled|scan)[\s_-]*\d*$/i;
+const stem = (n) => n.replace(/\.[a-z0-9]+$/i, '').replace(/\+/g, ' ');
+const realName = (n) => !CAMERA_NAME.test(stem(n).trim());
+
+async function printsOf(files) {
+  const out = new Array(files.length).fill(null), todo = [];
+  for (const [i, f] of files.entries()) {
+    try {
+      const st = await fs.promises.stat(f);
+      const c = path.join(PRINTS, id(f, st.size, st.mtimeMs) + '.json');
+      if (fs.existsSync(c)) out[i] = JSON.parse(await fs.promises.readFile(c, 'utf8')); else todo.push([i, f, c]);
+    } catch { /* gone or unreadable: no print, so it only stacks by hand */ }
+  }
+  const bin = todo.length ? await ocrTool() : null;
+  for (let k = 0; bin && k < todo.length; k += 40) {
+    const batch = todo.slice(k, k + 40);
+    let res = [];
+    try { res = JSON.parse(await sh(bin, ['--prints', ...batch.map(b => b[1])])); }
+    catch (e) { console.warn(`no image prints for ${batch.length} pictures: ${e.message.split('\n')[0]}`); }
+    batch.forEach(([i, , c], j) => { if (res[j]) { out[i] = res[j]; writeAtomic(c, JSON.stringify(res[j])); } });
+  }
+  return out;
+}
+const fpDist = (a, b) => { let t = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; t += d * d; } return Math.sqrt(t); };
+
+// Everything that is a candidate picture for a project, in one shape.
+async function members(slug) {
+  const { data } = readMdoc(path.join(PROJECTS, slug + '.mdoc'));
+  const out = [];
+  for (const im of data.images || []) {
+    const file = path.join(REPO, String(im.src || '').replace(/^\/+/, ''));
+    if (!fs.existsSync(file)) continue;
+    out.push({ key: 'site:' + im.src, kind: 'site', src: im.src, file, thumb: file, name: im.alt || path.basename(file), alt: im.alt || '', caption: im.caption || '' });
+  }
+  const WEB = path.join(STORE, 'web');
+  fs.mkdirSync(WEB, { recursive: true });
+  for (const f of Object.values(state.findings)) {
+    if (f.project !== slug || f.kind !== 'image' || f.status !== 'accepted') continue;
+    const remote = isRemote(f.path);
+    let file = f.path;
+    if (remote) { file = path.join(WEB, id(f.path) + '.jpg'); try { await download(sized(f.path, 300), file); } catch { continue; } }
+    else if (!fs.existsSync(f.path)) continue;
+    const from = f.from && state.findings[f.from];
+    out.push({
+      key: f.id, kind: remote ? 'web' : 'file', path: f.path, file, thumb: f.path,
+      name: remote ? decodeURIComponent(new URL(f.path).pathname.split('/').pop()) : path.basename(f.path),
+      w: f.w, h: f.h, taken: f.taken, alt: f.alt || '', caption: f.caption || '',
+      page: from && from.kind === 'page' ? { url: from.path, title: from.title || '' } : null,
+    });
+  }
+  return out;
+}
+
+function pickKeeper(ms) {
+  return (ms.find(m => m.kind === 'site') || ms.find(m => m.kind === 'web')
+    || [...ms].sort((a, b) => (realName(b.name) - realName(a.name)) || ((b.w || 0) * (b.h || 0) - (a.w || 0) * (a.h || 0)))[0]).key;
+}
+
+// Details others have written about a work: its page's text, documents that
+// name its file, the date it was taken, what the site already says.
+function suggestions(slug, ms) {
+  const out = [];
+  const add = (from, text) => { text = String(text || '').trim(); if (text && !out.some(x => x.text === text)) out.push({ from, text }); };
+  for (const m of ms) { if (m.kind === 'site') add('On the site now', m.caption); if (m.taken) add('Taken', m.taken.slice(0, 4)); }
+  const stems = [...new Set(ms.map(m => stem(m.name)).filter(n => n.length >= 4 && realName(n)))];
+  const pages = new Map(ms.filter(m => m.page).map(m => [m.page.url, m.page.title]));
+  for (const f of Object.values(state.findings)) {
+    if (f.project !== slug || f.kind !== 'text' || f.status === 'rejected') continue;
+    const t = String(f.edited ?? f.text).replace(/\s+/g, ' ').trim();
+    if (pages.has(f.path)) { add('From the page “' + (pages.get(f.path) || 'old site') + '”', t.slice(0, 280)); continue; }
+    const hit = stems.find(n => t.toLowerCase().includes(n.toLowerCase()));
+    if (hit) { const at = t.toLowerCase().indexOf(hit.toLowerCase()); add('Mentions ' + hit + ' — ' + (isRemote(f.path) ? 'web page' : path.basename(f.path)), t.slice(Math.max(0, at - 80), at + 200)); }
+  }
+  return out.slice(0, 6);
+}
+
+async function organize(slug) {
+  const ms = await members(slug);
+  const byKey = new Map(ms.map(m => [m.key, m]));
+  const o = ((state.organize ||= {})[slug] ||= { stacks: [], apart: [] });
+  // members that have left the project leave their stacks
+  for (const t of o.stacks) t.members = t.members.filter(k => byKey.has(k));
+  o.stacks = o.stacks.filter(t => t.members.length);
+
+  const prints = await printsOf(ms.map(m => m.file));
+  const hashes = await Promise.all(ms.map(m => dhash(m.file)));
+  const P = new Map(ms.map((m, i) => [m.key, prints[i]])), Hh = new Map(ms.map((m, i) => [m.key, hashes[i]]));
+  const near = (a, b) => { const pa = P.get(a), pb = P.get(b); return pa && pb ? fpDist(pa, pb) : Infinity; };
+  const same = (a, b) => {
+    const ha = Hh.get(a), hb = Hh.get(b);
+    if (useful(ha) && useful(hb)) { const x = BigInt('0x' + ha), y = BigInt('0x' + hb); if (pop(x ^ y) <= tolerance(x, y)) return true; }
+    return near(a, b) <= SAME_WORK;
+  };
+
+  // Only NEW members are grouped automatically; a stack Robert has split or
+  // merged by hand is left as he made it.
+  const placed = new Set(o.stacks.flatMap(t => t.members));
+  for (const m of ms) {
+    if (placed.has(m.key)) continue;
+    const t = o.stacks.find(t => t.members.some(k => same(k, m.key)));
+    if (t) t.members.push(m.key);
+    else o.stacks.push({ id: id(slug, m.key), members: [m.key], alt: '', caption: '' });
+    placed.add(m.key);
+  }
+  for (const t of o.stacks) {
+    if (!t.chosen || !t.members.includes(t.keeper)) t.keeper = pickKeeper(t.members.map(k => byKey.get(k)));
+    const keeper = byKey.get(t.keeper);
+    if (!t.alt && keeper.alt && realName(keeper.alt)) t.alt = keeper.alt;   // never a filename as alt text
+    if (!t.caption && keeper.caption) t.caption = keeper.caption;
+  }
+
+  // "Same work as #4?" — the closest other stacks in the maybe band
+  const apart = new Set((o.apart || []).map(([a, b]) => [a, b].sort().join('|')));
+  const maybe = (t) => o.stacks.filter(u => u !== t && !apart.has([t.id, u.id].sort().join('|')))
+    .map(u => ({ id: u.id, d: Math.min(...t.members.flatMap(a => u.members.map(b => near(a, b)))) }))
+    .filter(x => x.d > SAME_WORK && x.d <= MAYBE_SAME).sort((a, b) => a.d - b.d).slice(0, 2).map(x => x.id);
+
+  persist();
+  const view = (m) => ({ key: m.key, kind: m.kind, thumb: m.thumb, name: m.name, w: m.w, h: m.h, taken: m.taken, page: m.page });
+  return {
+    stacks: o.stacks.map((t, i) => ({
+      id: t.id, n: i + 1, keeper: t.keeper, alt: t.alt, caption: t.caption, removed: !!t.removed,
+      members: t.members.map(k => view(byKey.get(k))),
+      maybe: maybe(t).map(x => ({ id: x, n: o.stacks.findIndex(u => u.id === x) + 1 })),
+      suggest: suggestions(slug, t.members.map(k => byKey.get(k))),
+    })),
+  };
+}
+
+function organizeOp(slug, b) {
+  const o = state.organize?.[slug];
+  if (!o) throw new Error('Open the project in Organize first.');
+  const at = o.stacks.findIndex(t => t.id === b.stack), t = o.stacks[at];
+  if (!t) throw new Error('That work is no longer here — reload.');
+  if (b.op === 'keeper') { t.keeper = b.key; t.chosen = true; }
+  if (b.op === 'split') {   // "not this work": out into a stack of its own, right after
+    t.members = t.members.filter(k => k !== b.key);
+    o.stacks.splice(at + 1, 0, { id: id(slug, b.key, Date.now()), members: [b.key], alt: '', caption: '' });
+    (o.apart ||= []).push([t.id, o.stacks[at + 1].id]);
+    if (t.keeper === b.key) delete t.chosen;
+  }
+  if (b.op === 'merge') {
+    const u = o.stacks.find(x => x.id === b.other);
+    if (u && u !== t) { t.members.push(...u.members); if (!t.alt) t.alt = u.alt; if (!t.caption) t.caption = u.caption; o.stacks = o.stacks.filter(x => x !== u); }
+  }
+  if (b.op === 'apart') (o.apart ||= []).push([t.id, b.other]);
+  if (b.op === 'move') { const to = at + b.dir; if (to >= 0 && to < o.stacks.length) [o.stacks[at], o.stacks[to]] = [o.stacks[to], t]; }
+  if (b.op === 'field' && (b.field === 'alt' || b.field === 'caption')) t[b.field] = String(b.value ?? '');
+  if (b.op === 'remove') t.removed = !t.removed;
+  persist();
+}
+
+/* SAVE — the project's picture list becomes exactly the kept copies, in order.
+   A kept copy already on the site keeps its file; a new one is imported as at
+   Write. A picture now on the site whose work was removed, or that lost to
+   another copy, is taken off — and its file deleted, because build.js ships
+   everything under images/. That is the one destructive step, so it needs a
+   second click when anything would go. All or nothing: a failed import removes
+   what this save had copied and changes nothing else. */
+async function saveOrganize(slug, confirmed) {
+  const o = state.organize?.[slug];
+  if (!o) throw new Error('Open the project in Organize first.');
+  const ms = await members(slug), byKey = new Map(ms.map(m => [m.key, m]));
+  const keep = o.stacks.filter(t => !t.removed && byKey.has(t.keeper));
+  const missing = keep.findIndex(t => !String(t.alt || '').trim() || !realName(t.alt.trim()));
+  if (missing >= 0) throw new Error(`Work ${o.stacks.indexOf(keep[missing]) + 1} needs alt text — what is in the picture, in words, not a filename.`);
+  const file = path.join(PROJECTS, slug + '.mdoc');
+  const { data, body } = readMdoc(file);
+  const keptSite = new Set(keep.map(t => byKey.get(t.keeper)).filter(m => m.kind === 'site').map(m => m.src));
+  const dropped = (data.images || []).map(i => i.src).filter(src => !keptSite.has(src));
+  if (dropped.length && !confirmed) return { confirm: dropped.length };
+
+  const images = [], copied = [];
+  try {
+    for (const t of keep) {
+      const m = byKey.get(t.keeper);
+      let src = m.src;
+      if (m.kind !== 'site') {
+        let n = 0;
+        while (fs.existsSync(path.join(REPO, imgRel(slug, n)))) n++;
+        copied.push(path.join(REPO, imgRel(slug, n)));
+        src = await importImage(m.path, slug, n, m.w, m.h);
+      }
+      const rec = { src, alt: t.alt.trim() };
+      if (String(t.caption || '').trim()) rec.caption = t.caption.trim();
+      images.push(rec);
+    }
+  } catch (e) { for (const d of copied) fs.rmSync(d, { recursive: true, force: true }); throw e; }
+
+  data.images = images;
+  writeMdoc(file, data, body);
+  const imagesDir = path.join(REPO, 'images', slug) + path.sep;
+  for (const src of dropped) {
+    const d = path.dirname(path.join(REPO, String(src).replace(/^\/+/, '')));
+    if ((d + path.sep).startsWith(imagesDir)) fs.rmSync(d, { recursive: true, force: true });
+  }
+  // every accepted copy has now been dealt with; Collect stops listing them
+  for (const t of o.stacks) for (const k of t.members) if (state.findings[k]) state.findings[k].status = t.removed ? 'rejected' : 'written';
+  o.stacks = keep.map((t, i) => ({ ...t, members: ['site:' + images[i].src], keeper: 'site:' + images[i].src, chosen: false }));
+  o.apart = [];
+  rev++;
+  persist();
+  return { saved: images.length, dropped: dropped.length };
+}
+
 /* ------------------------------------------------------------- writing */
 
 async function importImage(src, slug, n, w, h) {
@@ -1030,7 +1275,10 @@ async function write(slug) {
   const { data, body } = readMdoc(file);
   // only cards that carry content: folders, pages and working titles are
   // pointers, and treating an accepted page as text wrote "undefined" in
-  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
+  // Text only. Pictures are written from Organize, where copies of one work
+  // are stacked and one is kept; writing them here as well would put every
+  // copy on the site.
+  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text');
   for (const f of acc) if (f.kind === 'image' && !String(f.alt || '').trim()) throw new Error(`${path.basename(f.path)} needs alt text before it can be written — the build refuses an image without it.`);
 
   data.images = data.images || [];
@@ -1094,6 +1342,7 @@ const server = http.createServer(async (req, res) => {
       const dirs = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory() && !SKIP.test(e.name)).map(e => e.name);
       return json({ path: dir, dirs: dirs.sort((a, b) => a.localeCompare(b)) });
     }
+    if (p === '/api/organize' && req.method === 'GET') return json(await organize(url.searchParams.get('project')));
     if (p === '/api/findings') {
       const slug = url.searchParams.get('project');
       return json(Object.values(state.findings).filter(f => f.project === slug && !f.cleared && present(f.path)));
@@ -1145,6 +1394,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/publish') return json(await publish());
     if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
+    if (p === '/api/organize') { organizeOp(b.project, b); return json({ ok: true }); }
+    if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
     if (p === '/api/newproject') { const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
@@ -1239,7 +1490,32 @@ const PAGE = String.raw`<!doctype html>
   #newcards { margin-left:10px; color:var(--ink); }
   main { display:grid; grid-template-columns:260px 220px 1fr; min-height:0; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
-  main > section:last-child { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
+  #review { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
+  /* two pages: Collect (folders, projects, review) and Organize (projects, works) */
+  #tabs { display:flex; gap:16px; }
+  #tabs .btn.on { color:var(--ink); }
+  #org { display:none; padding:0; border-right:0; }
+  main.organize { grid-template-columns:220px 1fr; }
+  main.organize > section:first-child, main.organize #review { display:none; }
+  main.organize #org { display:block; }
+  .orghead { position:sticky; top:0; z-index:2; background:var(--bg); padding:var(--m); border-bottom:1px solid var(--accent-dim); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
+  #stacks { padding:0 var(--m) var(--m); }
+  .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }
+  .stack.removed { opacity:.35; }
+  .stack .keep img { width:100%; max-height:360px; object-fit:contain; display:block; }
+  .stack .meta { color:var(--accent); margin-top:6px; overflow-wrap:anywhere; }
+  .stack .top { display:flex; gap:14px; align-items:baseline; margin-bottom:8px; }
+  .stack .top b { font-weight:400; font-size:13px; color:var(--ink); }
+  .stack .top input { width:auto; margin:0; accent-color:var(--ink); }
+  .copies { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+  .copy { width:96px; cursor:pointer; position:relative; }
+  .copy img { width:96px; height:72px; object-fit:contain; display:block; outline:1px solid transparent; }
+  .copy.on img { outline-color:var(--ink); }
+  .copy .x { position:absolute; top:0; right:0; background:var(--bg); padding:0 4px; }
+  .copy small { display:block; font-size:10px; color:var(--accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chips { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .chip { text-align:left; text-transform:none; letter-spacing:.05em; }
+  .chip i { font-style:normal; color:var(--accent-dim); display:block; }
   #bulk { grid-column:1 / -1; display:flex; gap:18px; align-items:baseline; padding:10px var(--m); border-bottom:1px solid var(--accent-dim); }
   #bulk select { width:auto; margin:0; }
   .card { position:relative; }
@@ -1305,6 +1581,7 @@ const PAGE = String.raw`<!doctype html>
 </style>
 <header>
   <h1>HARVEST</h1>
+  <nav id="tabs"><button class="btn on" data-view="collect">Collect</button><button class="btn" data-view="organize">Organize</button></nav>
   <span class="dim" id="rootline"></span>
   <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
   <span class="dim" id="status"></span>
@@ -1345,8 +1622,18 @@ const PAGE = String.raw`<!doctype html>
     <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2>
       <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
       <div id="pending"></div></div>
-    <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div></div><div id="accepted"></div></div>
+    <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
     <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2></div><div id="rejected"></div></div>
+  </section>
+  <section id="org">
+    <div class="orghead">
+      <span id="orgtitle" class="cap">Pick a project</span>
+      <span class="dim" id="orgcount"></span>
+      <button class="btn" id="orgmerge" disabled>Merge selected</button>
+      <button class="btn" id="orgsave" disabled>Save to project</button>
+      <span class="dim" id="orgmsg"></span>
+    </div>
+    <div id="stacks"></div>
   </section>
 </main>
 <script>
@@ -1402,7 +1689,8 @@ $('projects').addEventListener('click', (e) => {
   project = d.dataset.s; $('msg').textContent = '';
   shown.pending = shown.accepted = shown.rejected = 100;
   $('psrc').value = '';   // sources differ per project; the search text carries over
-  $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons(); loadFindings();
+  $('nick').hidden = false; $('nick').placeholder = 'Add a working title to ' + S.projects.find(p => p.slug === project).title; drawProjects(); buttons();
+  if (view === 'organize') loadOrg(); else loadFindings();
 });
 
 /* ---- status */
@@ -1448,7 +1736,7 @@ async function poll() {
   // rather than redrawing the column under the pointer every second.
   const changed = project && S.rev !== loadedRev;
   const quiet = !editing() && !inflight;
-  if (changed && quiet && (!j.running || !findings.length)) loadFindings();
+  if (view === 'collect' && changed && quiet && (!j.running || !findings.length)) loadFindings();
   $('newcards').hidden = !(changed && j.running && findings.length);
   poll.t = setTimeout(poll, j.running ? 1200 : 4000);
 }
@@ -1491,7 +1779,7 @@ function card(f) {
   if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + tilde(f.path) + '</div>';
   if (f.kind === 'image') {
     h += thumb(f.path) + '<div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
-    if (f.status === 'accepted') h += '<input data-k="alt" placeholder="Alt text — what is in the picture (required)" value="' + esc(f.alt) + '"><input data-k="caption" placeholder="Caption (optional)" value="' + esc(f.caption) + '">';
+    if (f.status === 'accepted') h += '<div class="dim">Next: Organize — copies are stacked there and one is kept</div>';
   }
   if (f.kind === 'text') {
     h += '<div class="src">' + label(f) + '</div><textarea data-k="edited">' + esc(f.edited ?? f.text) + '</textarea>';
@@ -1539,7 +1827,7 @@ function drawFindings() {
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length === every.length ? (list.length || '') : list.length + ' of ' + every.length;
   }
-  $('write').disabled = !findings.some(f => f.status === 'accepted' && (f.kind === 'image' || f.kind === 'text'));
+  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text');
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
   bulkBar();
 }
@@ -1651,6 +1939,103 @@ $('clear').addEventListener('click', async () => {
   busy(1);
   try { await api('/api/clear', { project }); } catch (e) { findings = kept; drawFindings(); oops(e); } finally { busy(-1); }
 });
+
+/* ---- ORGANIZE: one project's works — copies stacked, one kept, in order */
+let view = 'collect', org = null;
+$('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-view]'); if (!b) return;
+  view = b.dataset.view;
+  document.querySelectorAll('#tabs .btn').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelector('main').classList.toggle('organize', view === 'organize');
+  if (view === 'organize') loadOrg(); else if (project) loadFindings();
+});
+const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
+async function loadOrg() {
+  if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; return; }
+  $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
+  $('orgmsg').textContent = 'Grouping copies…'; busy(1);
+  try { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); $('orgmsg').textContent = ''; }
+  catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+  finally { busy(-1); }
+}
+function drawOrg() {
+  const live = org.stacks.filter(t => !t.removed);
+  const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
+  $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
+  $('orgsave').disabled = !org.stacks.length;
+  $('stacks').innerHTML = org.stacks.length ? org.stacks.map(t => {
+    const k = t.members.find(m => m.key === t.keeper) || t.members[0];
+    const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
+    return '<div class="stack' + (t.removed ? ' removed' : '') + '" data-id="' + t.id + '">' +
+      '<div><div class="keep">' + thumb(k.thumb) + '</div><div class="meta">' + esc(info(k)) + '<br>' + esc(k.name) + (k.page ? '<br>from “' + esc(k.page.title) + '”' : '') + '</div>' +
+      (t.members.length > 1 ? '<div class="copies">' + t.members.map(m => '<div class="copy' + (m.key === t.keeper ? ' on' : '') + '" data-key="' + esc(m.key) + '" title="' + esc(m.name + ' — ' + info(m) + (m.key === t.keeper ? ' (kept)' : ' — click to keep this one')) + '">' + thumb(m.thumb) + '<small>' + esc(KIND_LABEL[m.kind]) + '</small>' + '<span class="btn x" data-split="' + esc(m.key) + '" title="Not this work: give it its own place">×</span></div>').join('') + '</div><div class="dim">' + t.members.length + ' copies — the outlined one is kept</div>' : '') +
+      '</div><div>' +
+      '<div class="top"><input type="checkbox" class="spick"><b>' + t.n + '</b>' +
+      '<button class="btn" data-op="move" data-dir="-1" title="Earlier">↑</button><button class="btn" data-op="move" data-dir="1" title="Later">↓</button>' +
+      '<button class="btn" data-op="remove">' + (t.removed ? 'Restore' : 'Remove from project') + '</button></div>' +
+      '<input data-f="alt" placeholder="Alt text — what is in the picture (required)" value="' + esc(t.alt) + '">' +
+      '<textarea data-f="caption" placeholder="Caption — title, year, medium, size…">' + esc(t.caption) + '</textarea>' +
+      (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
+      (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
+      '</div></div>';
+  }).join('') : '<p class="dim">No pictures yet. Accept some in Collect, or add them to the project in Keystatic.</p>';
+  $('orgmerge').disabled = document.querySelectorAll('.spick:checked').length < 2;
+}
+async function orgOp(body, redraw = true) {
+  busy(1);
+  try { await api('/api/organize', { project, ...body }); if (redraw) { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); } }
+  catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+  finally { busy(-1); }
+}
+$('stacks').addEventListener('click', (e) => {
+  const st = e.target.closest('.stack'); if (!st) return;
+  const stack = st.dataset.id, t = e.target;
+  if (t.dataset.split) return orgOp({ op: 'split', stack, key: t.dataset.split });
+  if (t.closest('.copy')) return orgOp({ op: 'keeper', stack, key: t.closest('.copy').dataset.key });
+  if (t.dataset.op === 'move') return orgOp({ op: 'move', stack, dir: +t.dataset.dir });
+  if (t.dataset.op === 'remove') return orgOp({ op: 'remove', stack });
+  if (t.dataset.merge) return orgOp({ op: 'merge', stack, other: t.dataset.merge });
+  if (t.dataset.apart) return orgOp({ op: 'apart', stack, other: t.dataset.apart });
+  const chip = t.closest('[data-sug]');
+  if (chip) {   // a suggestion is added to the caption, never replaces it
+    const box = st.querySelector('[data-f=caption]');
+    box.value = box.value.trim() ? box.value.trim() + '\n' + chip.dataset.sug : chip.dataset.sug;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+$('stacks').addEventListener('change', (e) => { if (e.target.classList.contains('spick')) $('orgmerge').disabled = document.querySelectorAll('.spick:checked').length < 2; });
+// typing saves after a pause, without redrawing under the cursor
+$('stacks').addEventListener('input', (e) => {
+  const f = e.target.dataset.f; if (!f) return;
+  const stack = e.target.closest('.stack').dataset.id, value = e.target.value;
+  const t = org.stacks.find(x => x.id === stack); t[f] = value;
+  clearTimeout(e.target._t); e.target._t = setTimeout(() => orgOp({ op: 'field', stack, field: f, value }, false), 400);
+});
+$('orgmerge').addEventListener('click', async () => {
+  const ids = [...document.querySelectorAll('.spick:checked')].map(c => c.closest('.stack').dataset.id);
+  for (const other of ids.slice(1)) await orgOp({ op: 'merge', stack: ids[0], other }, false);
+  loadOrg();
+});
+$('orgsave').addEventListener('click', async () => {
+  // fields still waiting on their pause are sent first
+  for (const el of document.querySelectorAll('#stacks [data-f]')) if (el._t) { clearTimeout(el._t); el._t = null; await orgOp({ op: 'field', stack: el.closest('.stack').dataset.id, field: el.dataset.f, value: el.value }, false); }
+  const confirm = $('orgsave').dataset.armed === project;
+  busy(1);
+  try {
+    const d = await api('/api/organize/save', { project, confirm });
+    if (d.confirm) {
+      $('orgsave').dataset.armed = project;
+      $('orgsave').textContent = 'Takes ' + d.confirm + ' picture' + (d.confirm === 1 ? '' : 's') + ' off the site — click again';
+      clearTimeout(orgsave.t); orgsave.t = setTimeout(() => { delete $('orgsave').dataset.armed; $('orgsave').textContent = 'Save to project'; }, 8000);
+      return;
+    }
+    delete $('orgsave').dataset.armed; $('orgsave').textContent = 'Save to project';
+    await loadOrg(); poll();   // first: reloading clears the message line
+    $('orgmsg').textContent = 'Saved ' + d.saved + ' work' + (d.saved === 1 ? '' : 's') + (d.dropped ? ', took ' + d.dropped + ' off' : '') + '. Not live yet — Publish (top right) when ready.';
+  } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+  finally { busy(-1); }
+});
+const orgsave = {};
 
 /* ---- publish, new project */
 $('publish').addEventListener('click', async () => {

@@ -108,7 +108,7 @@ see PUNCH-LIST §4.
 - Illustrator text only if saved PDF-compatible; scanned PDFs have no text.
 - Look-alike inference finds the same photo re-exported, not a crop or another shot.
 
-## Next: the Organize page (agreed 2026-10-04, not built yet)
+## The Organize page (built 2026-10-04)
 
 A second page after Collect, one project at a time, working on WORKS not files:
 copies of one drawing (crops, edits, resolutions, IMG_1234 names) are grouped
@@ -120,3 +120,11 @@ crawler's dHash does not. Per stack Robert's decisions so far:
 - Details (title, year, medium, size, caption, alt) suggested from Squarespace
   image titles/captions, PDF pages naming the file or title, and EXIF.
 - Stacks are ordered by drag; Write/Publish as today.
+
+Built as described. Same-work test: dHash within tolerance OR Vision feature
+print distance <= 0.30 stacks automatically; 0.30-0.60 is offered as "Same work
+as #N?". Measured on BUS STOP: crops 0.21-0.26 (70 %), corner crop 0.50,
+different renders of one project 0.40-0.57 — hence the maybe band. Save rewrites
+the project's `images` to the kept copies in order and DELETES the files of
+site pictures it drops (build.js ships all of images/), after a second click.
+Collect's Write now writes text only; pictures go through Organize.
