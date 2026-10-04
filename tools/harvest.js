@@ -1133,7 +1133,8 @@ const PAGE = String.raw`<!doctype html>
           --accent:rgba(var(--accent-rgb),.9); --accent-dim:rgba(var(--accent-rgb),.5); --m:20px; }
   @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
   * { box-sizing:border-box }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); }
+  /* the columns scroll; the window never does */
+  html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); }
   body { font:300 11px/1.7 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.05em; display:grid; grid-template-rows:auto 1fr; }
   .cap { text-transform:uppercase; letter-spacing:.15em; }
   .dim { color:var(--accent); }
@@ -1165,6 +1166,7 @@ const PAGE = String.raw`<!doctype html>
   .col h2 .btn { margin-left:10px; font-size:inherit; }
   #newp { display:grid; grid-template-columns:1fr auto; gap:6px; margin:0 0 14px; }
   #newp select { width:auto; }
+  #newp #newgo { grid-column:1 / -1; }
   h2 { font-size:11px; font-weight:400; margin:0 0 12px; color:var(--accent); }
 
   /* tree */
@@ -1235,6 +1237,7 @@ const PAGE = String.raw`<!doctype html>
     <div id="newp">
       <input id="newtitle" placeholder="New project title">
       <select id="newsection"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select>
+      <button class="btn" id="newgo" disabled>Create project</button>
     </div>
     <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
@@ -1498,15 +1501,33 @@ $('publish').addEventListener('click', async () => {
   try { await save(); say((await api('/api/publish', {})).message); } catch (e) { oops(e); } finally { busy(-1); }
   poll();
 });
-$('newtitle').addEventListener('keydown', async (e) => {
-  if (e.key !== 'Enter' || !e.target.value.trim()) return;
+// A button, not only Return: with nothing to press, the form looked inert.
+// Return still works. The button names the title, and lights once there is one.
+async function createProject() {
+  const title = $('newtitle').value.trim();
+  if (!title) return;
+  $('newgo').disabled = true; say('Creating ' + title + '…'); busy(1);
   try {
-    const d = await api('/api/newproject', { title: e.target.value, section: $('newsection').value });
-    e.target.value = ''; await poll();
+    const d = await api('/api/newproject', { title, section: $('newsection').value });
+    $('newtitle').value = ''; newLabel();
+    await poll();
     document.querySelector('[data-s="' + d.slug + '"]')?.click();
-    say('Created as a draft. Add a grid icon in /keystatic before it can go live.');
-  } catch (err) { oops(err); }
-});
+    // scroll the Projects column only: scrollIntoView also moved the whole window
+    const el = document.querySelector('[data-s="' + d.slug + '"]'), col = el && el.closest('section');
+    if (col) col.scrollTop = el.offsetTop - col.offsetTop - col.clientHeight / 2;
+    say('Created ' + title + ' as a draft — it is selected below. Add a grid icon in /keystatic before it can go live.');
+  } catch (err) { oops(err); newLabel(); }
+  finally { busy(-1); }
+}
+function newLabel() {
+  const t = $('newtitle').value.trim();
+  $('newgo').disabled = !t;
+  $('newgo').textContent = t ? 'Create “' + t + '” in ' + $('newsection').selectedOptions[0].text : 'Create project';
+}
+$('newtitle').addEventListener('input', newLabel);
+$('newsection').addEventListener('change', newLabel);
+$('newtitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProject(); });
+$('newgo').addEventListener('click', createProject);
 $('write').addEventListener('click', async () => {
   try {
     await save();
