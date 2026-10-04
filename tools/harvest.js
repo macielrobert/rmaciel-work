@@ -1136,7 +1136,7 @@ async function organize(slug) {
   const view = (m) => ({ key: m.key, kind: m.kind, thumb: m.thumb, name: m.name, w: m.w, h: m.h, taken: m.taken, page: m.page });
   return {
     stacks: o.stacks.map((t, i) => ({
-      id: t.id, n: i + 1, keeper: t.keeper, alt: t.alt, caption: t.caption, removed: !!t.removed,
+      id: t.id, n: i + 1, keeper: t.keeper, alt: t.alt, caption: t.caption, removed: !!t.removed, rotate: t.rotate || 0,
       members: t.members.map(k => view(byKey.get(k))),
       maybe: maybe(t).map(x => ({ id: x, n: o.stacks.findIndex(u => u.id === x) + 1 })),
       suggest: suggestions(slug, t.members.map(k => byKey.get(k))),
@@ -1149,7 +1149,10 @@ function organizeOp(slug, b) {
   if (!o) throw new Error('Open the project in Organize first.');
   const at = o.stacks.findIndex(t => t.id === b.stack), t = o.stacks[at];
   if (!t) throw new Error('That work is no longer here — reload.');
-  if (b.op === 'keeper') { t.keeper = b.key; t.chosen = true; }
+  if (b.op === 'keeper') { t.keeper = b.key; t.chosen = true; t.rotate = 0; }   // a turn belongs to the copy it was made for
+  // ROTATE — kept as a quarter-turn count and shown at once; applied to the
+  // file itself only on Save (sips turns it), so trying it out changes nothing
+  if (b.op === 'rotate') t.rotate = (((t.rotate || 0) + (b.dir > 0 ? 90 : 270)) % 360);
   if (b.op === 'split') {   // "not this work": out into a stack of its own, right after
     t.members = t.members.filter(k => k !== b.key);
     o.stacks.splice(at + 1, 0, { id: id(slug, b.key, Date.now()), members: [b.key], alt: '', caption: '' });
@@ -1174,6 +1177,18 @@ function organizeOp(slug, b) {
    everything under images/. That is the one destructive step, so it needs a
    second click when anything would go. All or nothing: a failed import removes
    what this save had copied and changes nothing else. */
+// Turns a picture in the repo by quarter turns, clockwise. sips cannot write
+// WebP, so a WebP comes out as a JPEG beside it and the old file goes. Width
+// and height swap in the file header, which is where build.js reads them.
+async function turn(src, deg) {
+  const abs = path.join(REPO, String(src).replace(/^\/+/, ''));
+  if (ext(abs) !== '.webp') { await sh('sips', ['-r', String(deg), abs]); return src; }
+  const out = abs.replace(/\.webp$/i, '.jpg');
+  await sh('sips', ['-r', String(deg), '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', abs, '--out', out]);
+  fs.rmSync(abs);
+  return src.replace(/\.webp$/i, '.jpg');
+}
+
 async function saveOrganize(slug, confirmed) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Organize first.');
@@ -1198,6 +1213,7 @@ async function saveOrganize(slug, confirmed) {
         copied.push(path.join(REPO, imgRel(slug, n)));
         src = await importImage(m.path, slug, n, m.w, m.h);
       }
+      if (t.rotate) src = await turn(src, t.rotate);
       const rec = { src, alt: t.alt.trim() };
       if (String(t.caption || '').trim()) rec.caption = t.caption.trim();
       images.push(rec);
@@ -1213,7 +1229,8 @@ async function saveOrganize(slug, confirmed) {
   }
   // every accepted copy has now been dealt with; Collect stops listing them
   for (const t of o.stacks) for (const k of t.members) if (state.findings[k]) state.findings[k].status = t.removed ? 'rejected' : 'written';
-  o.stacks = keep.map((t, i) => ({ ...t, members: ['site:' + images[i].src], keeper: 'site:' + images[i].src, chosen: false }));
+  // rotate back to 0: the turn is in the file now, and keeping it would turn it again on the next Save
+  o.stacks = keep.map((t, i) => ({ ...t, members: ['site:' + images[i].src], keeper: 'site:' + images[i].src, chosen: false, rotate: 0 }));
   o.apart = [];
   rev++;
   persist();
@@ -1515,7 +1532,10 @@ const PAGE = String.raw`<!doctype html>
   #stacks { padding:0 var(--m) var(--m); }
   .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }
   .stack.removed { opacity:.35; }
-  .stack .keep img { width:100%; max-height:360px; object-fit:contain; display:block; }
+  .stack .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  /* square frame so a quarter turn never spills out of it */
+  .stack .keep img { max-width:100%; max-height:100%; object-fit:contain; display:block; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
+  .turns { display:flex; gap:12px; align-items:baseline; margin-top:6px; }
   .stack .meta { color:var(--accent); margin-top:6px; overflow-wrap:anywhere; }
   .stack .top { display:flex; gap:14px; align-items:baseline; margin-bottom:8px; }
   .stack .top b { font-weight:400; font-size:13px; color:var(--ink); }
@@ -2023,7 +2043,9 @@ function drawOrg() {
     const k = t.members.find(m => m.key === t.keeper) || t.members[0];
     const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
     return '<div class="stack' + (t.removed ? ' removed' : '') + '" data-id="' + t.id + '">' +
-      '<div><div class="keep">' + thumb(k.thumb) + '</div><div class="meta">' + esc(info(k)) + '<br>' + esc(k.name) + (k.page ? '<br>from “' + esc(k.page.title) + '”' : '') + '</div>' +
+      '<div><div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
+      '<div class="turns"><button class="btn" data-op="rotate" data-dir="-1" title="Turn left">↺</button><button class="btn" data-op="rotate" data-dir="1" title="Turn right">↻</button>' + (t.rotate ? '<span class="dim">turned ' + t.rotate + '° — applied on Save</span>' : '') + '</div>' +
+      '<div class="meta">' + esc(info(k)) + '<br>' + esc(k.name) + (k.page ? '<br>from “' + esc(k.page.title) + '”' : '') + '</div>' +
       (t.members.length > 1 ? '<div class="copies">' + t.members.map(m => '<div class="copy' + (m.key === t.keeper ? ' on' : '') + '" data-key="' + esc(m.key) + '" title="' + esc(m.name + ' — ' + info(m) + (m.key === t.keeper ? ' (kept)' : ' — click to keep this one')) + '">' + thumb(m.thumb) + '<small>' + esc(KIND_LABEL[m.kind]) + '</small>' + '<span class="btn x" data-split="' + esc(m.key) + '" title="Not this work: give it its own place">×</span></div>').join('') + '</div><div class="dim">' + t.members.length + ' copies — the outlined one is kept</div>' : '') +
       '</div><div>' +
       '<div class="top"><input type="checkbox" class="spick"><b>' + t.n + '</b>' +
@@ -2050,6 +2072,7 @@ $('stacks').addEventListener('click', (e) => {
   if (t.closest('.copy')) return orgOp({ op: 'keeper', stack, key: t.closest('.copy').dataset.key });
   if (t.dataset.op === 'move') return orgOp({ op: 'move', stack, dir: +t.dataset.dir });
   if (t.dataset.op === 'remove') return orgOp({ op: 'remove', stack });
+  if (t.dataset.op === 'rotate') return orgOp({ op: 'rotate', stack, dir: +t.dataset.dir });
   if (t.dataset.merge) return orgOp({ op: 'merge', stack, other: t.dataset.merge });
   if (t.dataset.apart) return orgOp({ op: 'apart', stack, other: t.dataset.apart });
   const chip = t.closest('[data-sug]');
