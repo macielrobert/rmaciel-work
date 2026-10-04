@@ -972,12 +972,13 @@ function decide(f, b) {
 // original is kept as rejected and hidden. Simply relabelling it would let the
 // next crawl, which files it by the same rule, put it back where it was.
 function moveFinding(f, project) {
-  if (f.project === project || f.status === 'written') return;
+  if (f.project === project || f.status === 'written') return null;
   const { id: _old, status: _s, cleared: _c, expanded: _e, from: _f, ...rest } = f;
   const g = { ...rest, project };
   add(g);
   decide(state.findings[g.id], { status: 'accepted' });
   f.status = 'rejected'; f.cleared = true; f.movedTo = project;
+  return g.id;
 }
 
 function addNickname(slug, name) {
@@ -1165,6 +1166,40 @@ function organizeOp(slug, b) {
   }
   if (b.op === 'apart') (o.apart ||= []).push([t.id, b.other]);
   if (b.op === 'move') { const to = at + b.dir; if (to >= 0 && to < o.stacks.length) [o.stacks[at], o.stacks[to]] = [o.stacks[to], t]; }
+  // MOVE TO PROJECT — a work filed under the wrong project goes, all its
+  // copies together, as ONE work in the other: its grouping, kept copy, turn,
+  // alt and caption travel with it. Accepted copies move as Collect's Move
+  // does. A copy already on THIS project's site is copied out of the repo
+  // first, because this project's next Save deletes its file — the work stays
+  // here marked removed, so that Save takes it off.
+  if (b.op === 'moveto') {
+    if (!b.to || b.to === slug || !fs.existsSync(path.join(PROJECTS, b.to + '.mdoc'))) throw new Error('Pick a project to move it to.');
+    const MOVED = path.join(STORE, 'moved');
+    fs.mkdirSync(MOVED, { recursive: true });
+    const map = new Map();
+    for (const k of t.members) {
+      if (k.startsWith('site:')) {
+        const from = path.join(REPO, k.slice(5).replace(/^\/+/, ''));
+        if (!fs.existsSync(from)) continue;
+        const to = path.join(MOVED, id(slug, k) + ext(from));
+        fs.copyFileSync(from, to);
+        const g = { project: b.to, kind: 'image', path: to, alt: t.alt || '', caption: t.caption || '' };
+        add(g);
+        state.findings[g.id].status = 'accepted';
+        map.set(k, g.id);
+      } else if (state.findings[k]) { const n = moveFinding(state.findings[k], b.to); if (n) map.set(k, n); }
+    }
+    if (map.size) {
+      const ot = ((state.organize ||= {})[b.to] ||= { stacks: [], apart: [] });
+      const taken = new Set(ot.stacks.flatMap(u => u.members));
+      const keys = [...map.values()].filter(k => !taken.has(k));
+      if (keys.length) ot.stacks.push({ id: id(b.to, keys[0], Date.now()), members: keys, alt: t.alt || '', caption: t.caption || '',
+        keeper: map.get(t.keeper), chosen: keys.includes(map.get(t.keeper)), rotate: t.rotate || 0 });
+    }
+    t.members = t.members.filter(k => k.startsWith('site:'));
+    if (t.members.length) t.removed = true; else o.stacks.splice(at, 1);
+    rev++;
+  }
   if (b.op === 'field' && (b.field === 'alt' || b.field === 'caption')) t[b.field] = String(b.value ?? '');
   if (b.op === 'remove') t.removed = !t.removed;
   persist();
@@ -1532,6 +1567,19 @@ const PAGE = String.raw`<!doctype html>
   #stacks { padding:0 var(--m) var(--m); }
   .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }
   .stack.removed { opacity:.35; }
+  /* GRID — every work at once, as its kept copy, so copies the grouping
+     missed can be seen side by side and ticked together. Three fixed sizes,
+     not a slider: the count per row adapts, the cell does not. */
+  #stacks.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--cell, 160px), 1fr)); gap:12px; padding-top:var(--m); }
+  .tile { cursor:pointer; position:relative; }
+  .tile .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; outline:1px solid transparent; }
+  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); }
+  .tile.on .keep { outline-color:var(--ink); }
+  .tile.removed { opacity:.35; }
+  .tile small { display:block; font-size:10px; color:var(--accent); margin-top:4px; }
+  .tile .spick { position:absolute; top:4px; right:4px; width:auto; margin:0; accent-color:var(--ink); }
+  #orgviews .btn.on { color:var(--ink); }
+  #orgmove { width:auto; margin:0; }
   .stack .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
   /* square frame so a quarter turn never spills out of it */
   .stack .keep img { max-width:100%; max-height:100%; object-fit:contain; display:block; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
@@ -1663,7 +1711,9 @@ const PAGE = String.raw`<!doctype html>
     <div class="orghead">
       <span id="orgtitle" class="cap">Pick a project</span>
       <span class="dim" id="orgcount"></span>
-      <button class="btn" id="orgmerge" disabled>Merge selected</button>
+      <span id="orgviews"><button class="btn" data-ov="list">List</button> <button class="btn" data-ov="grid">Grid</button> <span id="orgsizes"><button class="btn" data-cell="100">S</button> <button class="btn" data-cell="170">M</button> <button class="btn" data-cell="280">L</button></span></span>
+      <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
+      <select id="orgmove" disabled></select>
       <button class="btn" id="orgsave" disabled>Save to project</button>
       <span class="dim" id="orgmsg"></span>
     </div>
@@ -1811,7 +1861,18 @@ function card(f) {
     '<div class="dim">On the site · found in ' + tilde(f.path) + (f.count > 4 ? ' (' + f.count + ' matches)' : '') + '</div>';
   if (f.kind === 'page') h += '<div class="cap dim">Web page' + (f.linked ? ' · linked' : '') + '</div><div>' + esc(f.title || '') + '</div><div class="src">' + esc(f.path) + '</div>' +
     (f.pairs ? '<div class="pairs">' + f.pairs.map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div><div class="dim">Pictures on this page match the site' + (f.count > 4 ? ' (' + f.count + ')' : '') + '</div>' : '');
-  if (f.kind === 'folder') h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + tilde(f.path) + '</div>';
+  if (f.kind === 'folder') {
+    h += '<div class="cap dim">Folder' + (f.linked ? ' · linked' : '') + '</div><div>' + tilde(f.path) + '</div>';
+    // An accepted folder's contents arrive as Pending cards. Said here, with a
+    // way to see just those: the card used to say only "linked", and nothing
+    // led from it to the hundreds of cards it had made.
+    if (f.status === 'accepted') {
+      const mine = findings.filter(g => g.from === f.id), wait = mine.filter(g => g.status === 'pending').length;
+      h += '<div class="dim">' + (f.stopped ? 'Stopped part-way — Undo, then Accept, to finish reading it. ' : !f.expanded ? 'Reading it… its pictures and documents appear in Pending as they are found. ' : '') +
+        mine.length + ' card' + (mine.length === 1 ? '' : 's') + ' from inside it, ' + wait + ' waiting in Pending</div>' +
+        (wait ? '<button class="btn" data-inside="' + esc(f.path) + '">Show what is inside</button>' : '');
+    }
+  }
   if (f.kind === 'image') {
     h += thumb(f.path) + '<div class="src">' + label(f) + '</div><div class="dim">' + [f.w && f.w + '×' + f.h, f.camera, f.taken].filter(Boolean).map(esc).join(' · ') + '</div>';
     if (f.status === 'accepted') h += '<div class="dim">Next: Organize — copies are stacked there and one is kept</div>';
@@ -1872,6 +1933,12 @@ function drawFindings() {
 $('review').addEventListener('click', async (e) => {
   const more = e.target.closest('[data-more]');
   if (more) { shown[more.dataset.more] += 100; drawFindings(); return; }
+  const inside = e.target.closest('[data-inside]');
+  if (inside) {   // Pending, filtered to everything under that folder: the search box matches the path
+    $('pq').value = (inside.dataset.inside + '/').replace(/\/+/g, '/'); $('psrc').value = '';
+    document.querySelectorAll('#ptype .btn').forEach(x => x.classList.toggle('on', !x.dataset.t));
+    shown.pending = 100; drawFindings(); $('pending').closest('.col').scrollTop = 0; return;
+  }
   const fg = e.target.closest('[data-forget]');
   if (fg) return forget([fg.closest('.card').dataset.id]);
   const b = e.target.closest('[data-a]'); if (!b) return;
@@ -2026,6 +2093,29 @@ $('tabs').addEventListener('click', (e) => {
   if (view === 'organize') loadOrg(); else if (project) loadFindings();
 });
 const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
+const opick = new Set();   // ticked works, kept across redraws and between List and Grid
+const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+let orgView = remember('orgView') || 'list', orgCell = remember('orgCell') || '170';
+function orgPicks() {
+  const n = opick.size;
+  $('orgmerge').disabled = n < 2;
+  $('orgmove').disabled = !n;
+  const opts = '<option value="">' + (n ? 'Move ' + n + ' to project…' : 'Move to project…') + '</option>' + S.projects.filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
+  if ($('orgmove').innerHTML !== opts) $('orgmove').innerHTML = opts;
+}
+function orgLook() {
+  document.querySelectorAll('#orgviews [data-ov]').forEach(b => b.classList.toggle('on', b.dataset.ov === orgView));
+  document.querySelectorAll('#orgsizes [data-cell]').forEach(b => b.classList.toggle('on', b.dataset.cell === orgCell));
+  $('orgsizes').hidden = orgView !== 'grid';
+  $('stacks').classList.toggle('grid', orgView === 'grid');
+  $('stacks').style.setProperty('--cell', orgCell + 'px');
+}
+$('orgviews').addEventListener('click', (e) => {
+  const b = e.target.closest('.btn'); if (!b) return;
+  if (b.dataset.ov) remember('orgView', orgView = b.dataset.ov);
+  if (b.dataset.cell) remember('orgCell', orgCell = b.dataset.cell);
+  if (org) drawOrg(); else orgLook();
+});
 async function loadOrg() {
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
@@ -2039,6 +2129,18 @@ function drawOrg() {
   const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
   $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
   $('orgsave').disabled = !org.stacks.length;
+  for (const k of [...opick]) if (!org.stacks.some(t => t.id === k)) opick.delete(k);
+  orgLook(); orgPicks();
+  if (orgView === 'grid' && org.stacks.length) {
+    $('stacks').innerHTML = org.stacks.map(t => {
+      const k = t.members.find(m => m.key === t.keeper) || t.members[0];
+      return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open">' +
+        '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
+        '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
+        '<small>' + t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + '</small></div>';
+    }).join('');
+    return;
+  }
   $('stacks').innerHTML = org.stacks.length ? org.stacks.map(t => {
     const k = t.members.find(m => m.key === t.keeper) || t.members[0];
     const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
@@ -2048,7 +2150,7 @@ function drawOrg() {
       '<div class="meta">' + esc(info(k)) + '<br>' + esc(k.name) + (k.page ? '<br>from “' + esc(k.page.title) + '”' : '') + '</div>' +
       (t.members.length > 1 ? '<div class="copies">' + t.members.map(m => '<div class="copy' + (m.key === t.keeper ? ' on' : '') + '" data-key="' + esc(m.key) + '" title="' + esc(m.name + ' — ' + info(m) + (m.key === t.keeper ? ' (kept)' : ' — click to keep this one')) + '">' + thumb(m.thumb) + '<small>' + esc(KIND_LABEL[m.kind]) + '</small>' + '<span class="btn x" data-split="' + esc(m.key) + '" title="Not this work: give it its own place">×</span></div>').join('') + '</div><div class="dim">' + t.members.length + ' copies — the outlined one is kept</div>' : '') +
       '</div><div>' +
-      '<div class="top"><input type="checkbox" class="spick"><b>' + t.n + '</b>' +
+      '<div class="top"><input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '><b>' + t.n + '</b>' +
       '<button class="btn" data-op="move" data-dir="-1" title="Earlier">↑</button><button class="btn" data-op="move" data-dir="1" title="Later">↓</button>' +
       '<button class="btn" data-op="remove">' + (t.removed ? 'Restore' : 'Remove from project') + '</button></div>' +
       '<input data-f="alt" placeholder="Alt text — what is in the picture (required)" value="' + esc(t.alt) + '">' +
@@ -2057,7 +2159,6 @@ function drawOrg() {
       (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
       '</div></div>';
   }).join('') : '<p class="dim">No pictures yet. Accept some in Collect, or add them to the project in Keystatic.</p>';
-  $('orgmerge').disabled = document.querySelectorAll('.spick:checked').length < 2;
 }
 async function orgOp(body, redraw = true) {
   busy(1);
@@ -2066,6 +2167,13 @@ async function orgOp(body, redraw = true) {
   finally { busy(-1); }
 }
 $('stacks').addEventListener('click', (e) => {
+  const tile = e.target.closest('.tile');
+  if (tile && !e.target.classList.contains('spick')) {   // the whole tile is the tick box
+    const id = tile.dataset.id, on = !opick.has(id);
+    on ? opick.add(id) : opick.delete(id);
+    tile.classList.toggle('on', on); tile.querySelector('.spick').checked = on; orgPicks();
+    return;
+  }
   const st = e.target.closest('.stack'); if (!st) return;
   const stack = st.dataset.id, t = e.target;
   if (t.dataset.split) return orgOp({ op: 'split', stack, key: t.dataset.split });
@@ -2082,7 +2190,18 @@ $('stacks').addEventListener('click', (e) => {
     box.dispatchEvent(new Event('input', { bubbles: true }));
   }
 });
-$('stacks').addEventListener('change', (e) => { if (e.target.classList.contains('spick')) $('orgmerge').disabled = document.querySelectorAll('.spick:checked').length < 2; });
+$('stacks').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('spick')) return;
+  const el = e.target.closest('[data-id]'), id = el.dataset.id;
+  e.target.checked ? opick.add(id) : opick.delete(id);
+  el.classList.toggle('on', e.target.checked && el.classList.contains('tile')); orgPicks();
+});
+// double-click a tile: the same work in List, where its copies, alt and caption are
+$('stacks').addEventListener('dblclick', (e) => {
+  const tile = e.target.closest('.tile'); if (!tile) return;
+  remember('orgView', orgView = 'list'); drawOrg();
+  document.querySelector('.stack[data-id="' + tile.dataset.id + '"]')?.scrollIntoView({ block: 'start' });
+});
 // typing saves after a pause, without redrawing under the cursor
 $('stacks').addEventListener('input', (e) => {
   const f = e.target.dataset.f; if (!f) return;
@@ -2091,9 +2210,18 @@ $('stacks').addEventListener('input', (e) => {
   clearTimeout(e.target._t); e.target._t = setTimeout(() => orgOp({ op: 'field', stack, field: f, value }, false), 400);
 });
 $('orgmerge').addEventListener('click', async () => {
-  const ids = [...document.querySelectorAll('.spick:checked')].map(c => c.closest('.stack').dataset.id);
+  const ids = org.stacks.filter(t => opick.has(t.id)).map(t => t.id);   // in order: the first one ticked by position takes the others in
+  opick.clear();
   for (const other of ids.slice(1)) await orgOp({ op: 'merge', stack: ids[0], other }, false);
   loadOrg();
+});
+$('orgmove').addEventListener('change', async (e) => {
+  const to = e.target.value; e.target.value = ''; if (!to) return;
+  const ids = org.stacks.filter(t => opick.has(t.id)).map(t => t.id), title = S.projects.find(p => p.slug === to).title;
+  opick.clear();
+  for (const stack of ids) await orgOp({ op: 'moveto', stack, to }, false);
+  await loadOrg();
+  $('orgmsg').textContent = 'Moved ' + ids.length + ' work' + (ids.length === 1 ? '' : 's') + ' to ' + title + '. Any already on this site are marked removed — Save takes them off.';
 });
 $('orgsave').addEventListener('click', async () => {
   // fields still waiting on their pause are sent first

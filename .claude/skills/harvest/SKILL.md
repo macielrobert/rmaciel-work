@@ -128,3 +128,13 @@ different renders of one project 0.40-0.57 — hence the maybe band. Save rewrit
 the project's `images` to the kept copies in order and DELETES the files of
 site pictures it drops (build.js ships all of images/), after a second click.
 Collect's Write now writes text only; pictures go through Organize.
+
+Added 2026-10-04: **Grid** view (S/M/L cells) showing each work's kept copy;
+click tiles to tick, double-click opens it in List. Ticked works can be
+merged ("Same work — merge": the alts the grouping missed) or moved to another
+project with all copies, grouping, alt and caption. A moved copy that was on
+this project's site is copied to `.../Harvest/moved/` first and the work stays
+here marked removed, so this project's Save takes it off. A moved work lands
+first in a project never opened in Organize; reorder with the arrows.
+Collect: an accepted folder card counts the cards it brought in and has
+**Show what is inside**, which filters Pending to that folder's path.
