@@ -179,6 +179,19 @@ function writeMdoc(file, data, body) {
 const git = (...a) => sh('git', ['-C', REPO, ...a]);
 const unpublished = new Set();
 const changedProjects = (porcelain) => porcelain.split('\n').map(l => (l.slice(3).match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/) || []).slice(1).find(Boolean)).filter(Boolean);
+// CATCH UP — the latest from GitHub immediately before anything is written
+// into the repo (Write, Organize's Save, a new project), not only at launch:
+// Keystatic saves from the phone land on GitHub, and writing onto an old copy
+// is how a Publish ends in a clash. Fast-forward only, as at launch. Offline,
+// or with this Mac's unpublished edits in the way of an incoming one, it is
+// skipped and logged — a rebase there would leave conflict marks inside a
+// project file, which is worse than the clash it was meant to prevent.
+const catchUp = () => new Promise((ok) => execFile('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000 }, (e, out, err) => {
+  if (e) console.warn('not caught up with GitHub before writing: ' + String(err || e.message).trim().split('\n')[0]);
+  projectsCache = null;   // the pull may have changed any project
+  ok();
+}));
+
 async function publish() {
   const changed = await git('status', '--porcelain', '--', 'content', 'images');
   if (!changed.trim()) { unpublished.clear(); return { message: 'Nothing new to publish.' }; }
@@ -1237,6 +1250,7 @@ async function turn(src, deg) {
 async function saveOrganize(slug, confirmed) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Organize first.');
+  await catchUp();
   const ms = await members(slug), byKey = new Map(ms.map(m => [m.key, m]));
   const keep = o.stacks.filter(t => !t.removed && byKey.has(t.keeper));
   const missing = keep.findIndex(t => !String(t.alt || '').trim() || !realName(t.alt.trim()));
@@ -1333,6 +1347,7 @@ const mdEscape = (t) => t
   .replace(/^(\s*\d+)\./gm, '$1\\.');
 
 async function write(slug) {
+  await catchUp();
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
   // only cards that carry content: folders, pages and working titles are
@@ -1475,7 +1490,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
     if (p === '/api/organize') { organizeOp(b.project, b); return json({ ok: true }); }
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
-    if (p === '/api/newproject') { const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
+    if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
