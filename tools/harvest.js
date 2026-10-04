@@ -611,6 +611,17 @@ function drain() {
   }
 }
 
+// Counts files under a folder, stopping once past `limit`: only "is it big?"
+// matters, and a full count of a studio folder takes a while.
+async function countFiles(dir, limit) {
+  let n = 0;
+  const stop = {};
+  try {
+    await walk(dir, (p, isDir) => { if (!isDir && ++n > limit) throw stop; });
+  } catch (e) { if (e !== stop) throw e; }
+  return n;
+}
+
 // Pointing at a folder — by hand, or by accepting a working title — is the
 // same as accepting a match for it.
 function acceptFolder(project, p, extra) {
@@ -726,7 +737,11 @@ async function lookalikes(projs, imgs, root) {
     const hb = BigInt('0x' + h);
     for (const s of site) {
       if (pop(hb ^ s.h) > tolerance(hb, s.h)) continue;
-      if (s.pr.m.name(img)) continue;   // the path already names the project: nothing to learn
+      // A copy of a picture already on the site belongs to that project
+      // whatever it is called: a card for it, as well as any working title
+      // its folder suggests. These were found and then dropped before.
+      job.added += add({ project: s.pr.slug, kind: 'image', path: img, copyOf: s.f });
+      if (s.pr.m.name(img)) continue;   // the path already names the project: no working title to learn
       const folder = namingFolder(img, root);
       ((hits[s.pr.slug + '|' + folder] ||= { pr: s.pr, folder, pairs: [] }).pairs).push([img, s.f]);
     }
@@ -875,6 +890,13 @@ async function expandPage(f) {
 function decide(f, b) {
   for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
   if ((f.kind === 'folder' || f.kind === 'page') && b.status === 'accepted') drain();
+  // Undoing or rejecting a folder (or page) takes back the cards it brought in
+  // that are still undecided. Decided ones stay: they were a choice. Before
+  // this, undoing a linked studio folder left its 1,950 cards behind.
+  if ((f.kind === 'folder' || f.kind === 'page') && b.status && b.status !== 'accepted' && f.expanded) {
+    for (const [k, g] of Object.entries(state.findings)) if (g.from === f.id && g.status === 'pending') { delete state.findings[k]; rev++; }
+    f.expanded = false;
+  }
   // An accepted working title is written to the project at once (it is what
   // the NEXT crawl matches on), and its folder is taken as the work's.
   if (f.kind === 'nickname' && b.status === 'accepted') {
@@ -1082,6 +1104,13 @@ const server = http.createServer(async (req, res) => {
       return json({ ok: true });
     }
     if (p === '/api/link') {
+      // Linking files EVERYTHING inside under one project. Fine for a project's
+      // own folder; a disaster for a studio folder (that is how Daily Shapes
+      // got 2,357 cards). Past 300 files it asks for a second click instead.
+      if (!b.force && !isRemote(b.path)) {
+        const n = await countFiles(b.path, 300);
+        if (n > 300) return json({ confirm: true });
+      }
       const f = acceptFolder(b.project, b.path, { linked: true });
       persist();
       return json(f);
@@ -1195,7 +1224,11 @@ const PAGE = String.raw`<!doctype html>
   #projects .sec { color:var(--accent-dim); margin-top:12px; cursor:default; }
 
   /* review columns */
-  .col { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
+  .col { overflow:auto; padding:0 var(--m) var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
+  /* the column's title, filter and actions stay pinned while its cards scroll;
+     the column has no top padding so the pinned head sits flush, and carries
+     the gap itself */
+  .colhead { position:sticky; top:0; z-index:2; background:var(--bg); padding-top:var(--m); border-bottom:1px solid var(--accent-dim); margin-bottom:4px; }
   .col:last-child { border-right:0; }
   .col.rejected .card { opacity:.45; }
   .card { border-top:1px solid var(--accent-dim); padding:12px 0 16px; }
@@ -1207,7 +1240,12 @@ const PAGE = String.raw`<!doctype html>
     font:inherit; letter-spacing:inherit; padding:4px 0 5px; margin-top:6px; }
   textarea { min-height:120px; resize:vertical; }
   textarea:focus, input:focus, select:focus { border-bottom-color:var(--ink); }
-  select { appearance:none; cursor:pointer; color:var(--accent); }
+  /* a drawn chevron, so a menu reads as a menu: appearance:none removed the arrow */
+  select { appearance:none; cursor:pointer; color:var(--accent); padding-right:16px;
+    background:linear-gradient(45deg, transparent 50%, var(--accent) 50%) right 6px center / 5px 5px no-repeat,
+               linear-gradient(-45deg, transparent 50%, var(--accent) 50%) right 1px center / 5px 5px no-repeat; }
+  #ptype { display:flex; gap:14px; }
+  #ptype .btn.on { color:var(--ink); }
   option { background:var(--bg); }
   ::placeholder { color:var(--accent-dim); }
   #write { margin:0 0 12px; }
@@ -1251,11 +1289,11 @@ const PAGE = String.raw`<!doctype html>
       <button class="btn" data-bulk="rejected" disabled>Reject</button>
       <select id="moveto" disabled><option value="">Move to project…</option></select>
     </div>
-    <div class="col"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2>
-      <div id="pfilter"><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div>
+    <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2>
+      <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
       <div id="pending"></div></div>
-    <div class="col"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div><div id="accepted"></div></div>
-    <div class="col rejected"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2><div id="rejected"></div></div>
+    <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write to project</button><div id="msg"></div></div><div id="accepted"></div></div>
+    <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2></div><div id="rejected"></div></div>
   </section>
 </main>
 <script>
@@ -1320,7 +1358,7 @@ function buttons() {
   $('crawl').disabled = !folder || /^https?:/.test(folder);   // a web page is crawled from its site, not on its own
   const pr = S && S.projects.find(p => p.slug === project);
   $('link').disabled = !folder || !project;
-  $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';
+  if (!$('link').dataset.armed) $('link').textContent = pr ? 'Link to ' + pr.title : 'Link to project';   // armed: keep the warning up
 }
 async function poll() {
   // Always reschedules, even when a request fails: one bad answer used to stop
@@ -1415,14 +1453,16 @@ const shown = { pending: 100, accepted: 100, rejected: 100 };
 const sourceOf = (f) => (/^https?:/.test(f.path) ? new URL(f.path).host : (f.kind === 'folder' ? f.path : f.path.replace(/\/[^/]*$/, '')).replace(S.home, '~'));
 const KIND_ORDER = { folder: 0, page: 1, nickname: 2, text: 3, image: 4 };
 function pendingView(list) {
+  const t0 = document.querySelector('#ptype .on').dataset.t;
   const counts = {};
-  for (const f of list) counts[sourceOf(f)] = (counts[sourceOf(f)] || 0) + 1;
+  for (const f of list) if (!t0 || (t0 === 'web') === /^https?:/.test(f.path)) counts[sourceOf(f)] = (counts[sourceOf(f)] || 0) + 1;
   const keep = $('psrc').value;
-  const opts = '<option value="">All sources (' + list.length + ')</option>' + Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const opts = '<option value="">All ' + (t0 === 'web' ? 'websites' : t0 === 'files' ? 'folders' : 'sources') + ' (' + Object.values(counts).reduce((a, b) => a + b, 0) + ')</option>' + Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([k, n]) => '<option value="' + esc(k) + '"' + (k === keep ? ' selected' : '') + '>' + esc(k) + ' (' + n + ')</option>').join('');
   if ($('psrc').innerHTML !== opts) $('psrc').innerHTML = opts;   // rebuilding while open would close the menu
   const src = $('psrc').value, q = $('pq').value.trim().toLowerCase();
-  let out = list.filter(f => (!src || sourceOf(f) === src) && (!q || [f.path, f.title, f.text, f.edited].some(x => x && String(x).toLowerCase().includes(q))));
+  const t = document.querySelector('#ptype .on').dataset.t;
+  let out = list.filter(f => (!t || (t === 'web') === /^https?:/.test(f.path)) && (!src || sourceOf(f) === src) && (!q || [f.path, f.title, f.text, f.edited].some(x => x && String(x).toLowerCase().includes(q))));
   const sort = $('psort').value;
   if (sort === 'source') out = out.sort((a, b) => sourceOf(a).localeCompare(sourceOf(b)) || a.path.localeCompare(b.path));
   if (sort === 'kind') out = out.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.path.localeCompare(b.path));
@@ -1466,6 +1506,11 @@ $('newcards').addEventListener('click', () => loadFindings());
 // filtering is local and instant; paging restarts so the first matches show
 const refilter = () => { shown.pending = 100; drawFindings(); };
 $('pq').addEventListener('input', refilter);
+$('ptype').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-t]'); if (!b) return;
+  document.querySelectorAll('#ptype .btn').forEach(x => x.classList.toggle('on', x === b));
+  $('psrc').value = ''; refilter();
+});
 $('psrc').addEventListener('change', refilter);
 $('psort').addEventListener('change', refilter);
 $('review').addEventListener('input', (e) => {
@@ -1487,7 +1532,22 @@ function say(msg) { $('status').textContent = msg; say.at = Date.now(); }
 const oops = (e) => say('⚠ ' + e.message);
 $('crawlsite').addEventListener('click', () => api('/api/crawlsite', { url: $('site').value || 'rmaciel.work' }).then(poll).catch(oops));
 $('crawl').addEventListener('click', () => api('/api/crawl', { root: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
-$('link').addEventListener('click', () => api('/api/link', { project, path: folder, indesign: $('indesign').checked }).then(poll).catch(oops));
+$('link').addEventListener('click', async () => {
+  const force = $('link').dataset.armed === folder;
+  try {
+    const d = await api('/api/link', { project, path: folder, force, indesign: $('indesign').checked });
+    if (d.confirm) {
+      // armed: the next click on the same folder within 8 s really links it
+      $('link').dataset.armed = folder;
+      $('link').textContent = 'Over 300 files — click again to file ALL under ' + S.projects.find(p => p.slug === project).title;
+      say('That folder holds over 300 files. Linking files every one under this project. To sort them by project instead, use Crawl this folder.');
+      clearTimeout(link.t); link.t = setTimeout(() => { delete $('link').dataset.armed; buttons(); }, 8000);
+      return;
+    }
+    delete $('link').dataset.armed; buttons(); poll();
+  } catch (e) { oops(e); }
+});
+const link = {};
 
 /* ---- selection: tick cards, then act on all of them */
 function bulkBar() {
