@@ -1345,7 +1345,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/organize' && req.method === 'GET') return json(await organize(url.searchParams.get('project')));
     if (p === '/api/findings') {
       const slug = url.searchParams.get('project');
-      return json(Object.values(state.findings).filter(f => f.project === slug && !f.cleared && present(f.path)));
+      const hidden = url.searchParams.get('hidden') === '1';
+      return json(Object.values(state.findings).filter(f => f.project === slug && (hidden || !f.cleared) && present(f.path)));
     }
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
@@ -1387,6 +1388,18 @@ const server = http.createServer(async (req, res) => {
     }
     // Rejected cards are hidden, not forgotten: they keep status 'rejected', so
     // add() still finds their id and a re-crawl cannot suggest them again.
+    // FORGET — a card is deleted, not decided: nothing remembers it, so a later
+    // crawl may suggest it again. Only undecided or rejected cards can be
+    // forgotten; accepted and written ones are choices with consequences.
+    if (p === '/api/forget') {
+      let n = 0;
+      for (const fid of [].concat(b.ids || [])) {
+        const f = state.findings[fid];
+        if (f && (f.status === 'pending' || f.status === 'rejected')) { delete state.findings[fid]; n++; }
+      }
+      if (n) { rev++; persist(); }
+      return json({ forgotten: n });
+    }
     if (p === '/api/clear') {
       for (const f of Object.values(state.findings)) if (f.project === b.project && f.status === 'rejected') f.cleared = true;
       persist();
@@ -1617,13 +1630,14 @@ const PAGE = String.raw`<!doctype html>
       <span class="dim" id="n-sel">Tick cards to select</span>
       <button class="btn" data-bulk="accepted" disabled>Accept</button>
       <button class="btn" data-bulk="rejected" disabled>Reject</button>
+      <button class="btn" id="bforget" disabled title="Delete the ticked pending or rejected cards without deciding them; a later crawl may suggest them again">Forget</button>
       <select id="moveto" disabled><option value="">Move to project…</option></select>
     </div>
-    <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><input type="checkbox" data-all="pending" title="Select all"></h2>
+    <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><button class="btn" id="pclear" title="Take the pending cards now showing out of the queue without rejecting them. A later crawl can suggest them again.">Clear</button><input type="checkbox" data-all="pending" title="Select all"></h2>
       <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
       <div id="pending"></div></div>
     <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
-    <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Clear</button></h2></div><div id="rejected"></div></div>
+    <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
   </section>
   <section id="org">
     <div class="orghead">
@@ -1769,7 +1783,8 @@ const label = (f) => tilde(f.path) + (f.kind === 'text' && f.unit !== undefined 
 function card(f) {
   const acts = f.status === 'pending'
     ? '<button class="btn" data-a="accepted">Accept</button><button class="btn" data-a="rejected">Reject</button>'
-    : f.status === 'written' ? '<span class="dim cap">Written</span>' : '<button class="btn" data-a="pending">Undo</button>';
+    : f.status === 'written' ? '<span class="dim cap">Written</span>'
+    : '<button class="btn" data-a="pending">Undo</button>' + (f.status === 'rejected' ? '<button class="btn" data-forget="1" title="Forget this rejection: a later crawl may suggest it again">Forget</button>' : '');
   let h = '<div class="card" data-id="' + f.id + '">' + (f.status === 'written' ? '' : '<input type="checkbox" class="pick"' + (picked.has(f.id) ? ' checked' : '') + '>');
   if (f.kind === 'nickname') h += '<div class="cap dim">Working title?</div><input class="big" data-k="edited" value="' + esc(f.edited ?? f.text) + '">' +
     '<div class="pairs">' + (f.pairs || []).map(([found, site]) => thumb(site) + thumb(found)).join('') + '</div>' +
@@ -1837,6 +1852,8 @@ function drawFindings() {
 $('review').addEventListener('click', async (e) => {
   const more = e.target.closest('[data-more]');
   if (more) { shown[more.dataset.more] += 100; drawFindings(); return; }
+  const fg = e.target.closest('[data-forget]');
+  if (fg) return forget([fg.closest('.card').dataset.id]);
   const b = e.target.closest('[data-a]'); if (!b) return;
   const id = b.closest('.card').dataset.id;
   const f = findings.find(x => x.id === id);
@@ -1906,6 +1923,7 @@ function bulkBar() {
   const n = picked.size;
   $('n-sel').textContent = n ? n + ' selected' : 'Tick cards to select';
   document.querySelectorAll('[data-bulk]').forEach(b => { b.disabled = !n; });
+  $('bforget').disabled = !n;
   $('moveto').disabled = !n;
   const opts = '<option value="">Move to project…</option>' + (S ? S.projects : []).filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
   if ($('moveto').innerHTML !== opts) $('moveto').innerHTML = opts;
@@ -1933,6 +1951,44 @@ async function bulk(body) {
 }
 document.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => bulk({ status: b.dataset.bulk })));
 $('moveto').addEventListener('change', (e) => { const to = e.target.value; e.target.value = ''; if (to) bulk({ project: to }); });
+/* FORGET (and Pending's Clear, which is forgetting what the filter shows):
+   instant on screen, then told to the server; a refusal puts the cards back.
+   More than one card needs a second click, with the count on the button. */
+async function forget(ids, msg) {
+  const gone = new Set(ids), kept = findings;
+  findings = findings.filter(f => !gone.has(f.id)); ids.forEach(i => picked.delete(i)); drawFindings();
+  busy(1);
+  try { const d = await api('/api/forget', { ids }); say((msg || 'Forgot') + ' ' + d.forgotten + ' card' + (d.forgotten === 1 ? '' : 's') + '. A later crawl may suggest them again.'); }
+  catch (e) { findings = kept; drawFindings(); oops(e); }
+  finally { busy(-1); }
+}
+function twoClick(btn, label, n, go) {
+  if (!n) return;
+  if (n > 1 && btn.dataset.armed !== project) {
+    btn.dataset.armed = project; btn.textContent = label + ' ' + n + '? Click again';
+    clearTimeout(btn._t); btn._t = setTimeout(() => { delete btn.dataset.armed; btn.textContent = btn.dataset.label; }, 6000);
+    return;
+  }
+  delete btn.dataset.armed; btn.textContent = btn.dataset.label; go();
+}
+$('pclear').dataset.label = 'Clear'; $('rforget').dataset.label = 'Forget all'; $('bforget').dataset.label = 'Forget';
+$('pclear').addEventListener('click', () => {
+  // what the Pending filter is showing, not the whole column
+  const showing = pendingView(findings.filter(f => f.status === 'pending')).map(f => f.id);
+  twoClick($('pclear'), 'Clear', showing.length, () => forget(showing, 'Cleared'));
+});
+$('rforget').addEventListener('click', () => {
+  // includes hidden ones: Forget is about memory, not what is on screen
+  const ids = findings.filter(f => f.status === 'rejected').map(f => f.id);
+  api('/api/findings?project=' + encodeURIComponent(project) + '&hidden=1').then(all => {
+    const every = [...new Set([...ids, ...all.filter(f => f.status === 'rejected').map(f => f.id)])];
+    twoClick($('rforget'), 'Forget', every.length, () => forget(every));
+  }).catch(oops);
+});
+$('bforget').addEventListener('click', () => {
+  const ids = [...picked].filter(id => { const f = findings.find(x => x.id === id); return f && (f.status === 'pending' || f.status === 'rejected'); });
+  twoClick($('bforget'), 'Forget', ids.length, () => forget(ids));
+});
 $('clear').addEventListener('click', async () => {
   const kept = findings;
   findings = findings.filter(f => f.status !== 'rejected'); drawFindings();
