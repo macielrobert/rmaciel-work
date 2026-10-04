@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Harvest</title>
+<link rel="stylesheet" href="/page.css">
+<header>
+  <h1>HARVEST</h1>
+  <nav id="tabs"><button class="btn on" data-view="collect">Collect</button><button class="btn" data-view="organize">Organize</button></nav>
+  <span class="dim" id="rootline"></span>
+  <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
+  <span class="dim" id="status"></span>
+  <button class="btn" id="stop" hidden>Stop</button>
+  <button class="btn" id="publish" disabled>Publish</button>
+</header>
+<main>
+  <section>
+    <h2 class="cap">Folders</h2>
+    <!-- above the tree, not below it: a home folder lists dozens of folders,
+         and underneath them the buttons were scrolled out of sight -->
+    <div class="tree-actions">
+      <button class="btn" id="crawl" disabled>Crawl this folder</button>
+      <button class="btn" id="link" disabled>Link to project</button>
+      <input id="site" placeholder="Or a website, e.g. rmaciel.work">
+      <button class="btn" id="crawlsite">Crawl website</button>
+    </div>
+    <div id="pages"></div>
+    <div id="tree"></div>
+  </section>
+  <section>
+    <h2 class="cap">Projects</h2>
+    <div id="newp">
+      <input id="newtitle" placeholder="New project title">
+      <select id="newsection"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select>
+      <button class="btn" id="newgo" disabled>Create project</button>
+    </div>
+    <input id="nick" placeholder="Add a working title" hidden>
+    <div id="projects"></div>
+  </section>
+  <section id="review">
+    <div id="bulk">
+      <span class="dim" id="n-sel">Tick cards to select</span>
+      <button class="btn" data-bulk="accepted" disabled>Accept</button>
+      <button class="btn" data-bulk="rejected" disabled>Reject</button>
+      <button class="btn" id="bforget" disabled title="Delete the ticked pending or rejected cards without deciding them; a later crawl may suggest them again">Forget</button>
+      <select id="moveto" disabled><option value="">Move to project…</option></select>
+    </div>
+    <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><button class="btn" id="pclear" title="Take the pending cards now showing out of the queue without rejecting them. A later crawl can suggest them again.">Clear</button><input type="checkbox" data-all="pending" title="Select all"></h2>
+      <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
+      <div id="pending"></div></div>
+    <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
+    <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
+  </section>
+  <section id="org">
+    <div class="orghead">
+      <span id="orgtitle" class="cap">Pick a project</span>
+      <span class="dim" id="orgcount"></span>
+      <span id="orgviews"><button class="btn" data-ov="list">List</button> <button class="btn" data-ov="grid">Grid</button> <span id="orgsizes"><button class="btn" data-cell="100">S</button> <button class="btn" data-cell="170">M</button> <button class="btn" data-cell="280">L</button></span></span>
+      <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
+      <select id="orgmove" disabled></select>
+      <button class="btn" id="orgsave" disabled>Save to project</button>
+      <span class="dim" id="orgmsg"></span>
+    </div>
+    <div id="stacks"></div>
+  </section>
+</main>
+<script src="/page.js"></script>
+</html>

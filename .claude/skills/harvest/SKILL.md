@@ -6,8 +6,10 @@ description: How Robert's Harvest app works and how to publish what it writes. U
 # Harvest
 
 A local crawler with a review queue that fills Keystatic projects from Robert's
-own files. It is entirely `tools/harvest.js` (Node built-ins plus macOS tools);
-the launcher is `tools/Harvest.command`. Nothing in it ships to the site.
+own files. The server is `tools/harvest.js` (Node built-ins plus macOS tools);
+the page is `tools/harvest/page.html`, `page.css`, `page.js`, read from disk on
+every request (a page edit needs only ⌘R; a server edit needs quit + reopen).
+The launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 
 ## How it runs
 
@@ -76,8 +78,13 @@ Never test against Robert's real state or repo content without reverting:
 - Run with a scratch home: `HOME="$TMPDIR/hv" HARVEST_NO_OPEN=1 node tools/harvest.js`.
   The state folder then lives under that fake home.
 - `/api/*` POSTs need `Origin: http://127.0.0.1:<port>` or they get 403.
-- Accepting a working title and **Write** both write into `content/projects/`.
-  Afterwards: `git checkout content/` and delete any new `images/<slug>/images/<n>/`.
+- Accepting a working title, **Write** and Organize's **Save** write into
+  `content/projects/`. Afterwards `git checkout` ONLY the files your test
+  changed — never all of `content/`: Robert's unpublished work lives there —
+  and delete any new `images/<slug>/images/<n>/` you created.
+- Before pushing a Harvest change, once: `node tools/check-harvest.js` (syntax
+  of server and page script, CSS braces, every `$('id')` exists, and a scratch
+  server serves the page). It starts and stops its own copy by PID.
 - Commits that touch only `tools/` end the message with `[skip ci]`, so Netlify
   doesn't run a build (and charge credits) for something that doesn't change the site.
 
@@ -92,9 +99,14 @@ Never test against Robert's real state or repo content without reverting:
 | .docx .doc .rtf .odt / .txt .md | textutil / directly |
 | A website | **Crawl website**: `/sitemap.xml` for every page (including unlinked ones) and, on Squarespace, every page's pictures; page text via `?format=json` |
 
-Website pages become **page** cards (matched by address/title, or because their
-pictures match ones already on the site). Accepting one pulls in its text and
-pictures. Pictures stay on the website until Write downloads them, read their
+Website pages become **page** cards. An accepted page's PICTURES arrive
+accepted (vetted when they were published; Robert, 2026-10-04); its text
+arrives pending. Accepted folder/page cards have **Unlink** (= reject: takes
+back its pending cards) and **Read again** (re-adds anything missing, e.g.
+after a Clear; finishes a stopped one).
+
+Pages are matched by address/title, or because their pictures match ones
+already on the site. Pictures stay on the website until Write downloads them, read their
 real format from the bytes, and convert anything that isn't JPEG/PNG/WebP.
 
 **The old site is `rmaciel.work` on Squarespace and goes away at DNS cutover** —
