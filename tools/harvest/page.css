@@ -11,7 +11,13 @@
   [hidden] { display:none !important; }
   /* the columns scroll; the window never does */
   html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); }
-  body { font:300 11px/1.7 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.05em; display:grid; grid-template-rows:auto 1fr; }
+  body { font:300 11px/1.7 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.05em; display:grid; grid-template-rows:auto 1fr;
+         /* the window's width, never the content's: an "auto" column grew to
+            fit the header's longest line (a deep "Last crawl" path), the whole
+            page got wider than the window, and Organize's right-hand column
+            of works was cut off. minmax(0, …) lets the path shorten with its
+            ellipsis instead, which is what it was built to do. */
+         grid-template-columns:minmax(0, 1fr); }
   .cap { text-transform:uppercase; letter-spacing:.15em; }
   .dim { color:var(--accent); }
   .btn { color:var(--accent); cursor:pointer; background:none; border:0; padding:0; font:inherit; text-transform:uppercase; letter-spacing:.15em; text-align:left; }
@@ -32,14 +38,14 @@
   #pfilter { display:grid; gap:4px; margin:0 0 8px; }
   #pfilter input, #pfilter select { margin:0; }
   #newcards { margin-left:10px; color:var(--ink); }
-  main { display:grid; grid-template-columns:260px 220px 1fr; min-height:0; }
+  main { display:grid; grid-template-columns:260px 220px minmax(0, 1fr); min-height:0; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
   #review { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
   /* two pages: Collect (folders, projects, review) and Organize (projects, works) */
   #tabs { display:flex; gap:16px; }
   #tabs .btn.on { color:var(--ink); }
   #org { display:none; padding:0; border-right:0; }
-  main.organize { grid-template-columns:220px 1fr; }
+  main.organize { grid-template-columns:220px minmax(0, 1fr); }
   main.organize > section:first-child, main.organize #review { display:none; }
   /* Organize: a head, then the works (and project panel) beside the text
      list, each scrolling on its own so a passage stays in view while the
