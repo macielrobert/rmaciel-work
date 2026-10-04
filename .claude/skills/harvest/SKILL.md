@@ -107,3 +107,16 @@ see PUNCH-LIST §4.
 - InDesign text needs the checkbox and launches InDesign (~3 min cold).
 - Illustrator text only if saved PDF-compatible; scanned PDFs have no text.
 - Look-alike inference finds the same photo re-exported, not a crop or another shot.
+
+## Next: the Organize page (agreed 2026-10-04, not built yet)
+
+A second page after Collect, one project at a time, working on WORKS not files:
+copies of one drawing (crops, edits, resolutions, IMG_1234 names) are grouped
+into one stack — Apple Vision feature prints, which survive crops where the
+crawler's dHash does not. Per stack Robert's decisions so far:
+- ONE kept image per work. No record of the alternates is kept.
+- A copy that came from his old website wins as the web copy: it was already
+  vetted. Otherwise largest file with a real name, overridable.
+- Details (title, year, medium, size, caption, alt) suggested from Squarespace
+  image titles/captions, PDF pages naming the file or title, and EXIF.
+- Stacks are ordered by drag; Write/Publish as today.
