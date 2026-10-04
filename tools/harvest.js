@@ -1604,8 +1604,16 @@ function stateView() {
     site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
     projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
 }
-let lastSent = '';
+let lastSent = '', lastFinder = '';
+// THE FINDER MENU'S PROJECT LIST. Finder's "Harvest ›" menu is drawn by an
+// extension inside Harvest.app (tools/HarvestFinder.swift) that macOS keeps
+// in a sandbox: it cannot ask this server, whose port changes every launch,
+// and it can read only this one file. Rewritten whenever the list changes,
+// and left in place on quit, so the menu works with Harvest closed.
+const FINDER_FILE = path.join(STORE, 'finder.json');
 setInterval(() => {
+  const f = JSON.stringify(projects().map(({ slug, title, section, draft }) => ({ slug, title, section, draft })));
+  if (f !== lastFinder) { lastFinder = f; writeAtomic(FINDER_FILE, f); }
   if (!listeners.size) return;
   const s = JSON.stringify(stateView());
   if (s === lastSent) return;

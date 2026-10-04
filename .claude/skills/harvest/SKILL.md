@@ -183,3 +183,22 @@ The page no longer polls. It holds `/api/events` open (server-sent events);
 the server compares the state snapshot twice a second and writes only when it
 changed. `poll()` in page.js is now a one-shot refresh after the page's own
 actions.
+
+## Finder's right-click menu (built 2026-10-04)
+
+**Harvest › Add to Project › [projects by section]**, **Crawl for Project ›**
+(one folder selected) and **Open Harvest**. A Finder Sync extension,
+`tools/HarvestFinder.swift`, built by `build-app.sh` into
+`Harvest.app/Contents/PlugIns/HarvestFinder.appex` (sandboxed; its one
+exception is reading `~/Library/Application Support/Harvest/`). It reads the
+project list the server writes to `finder.json` and hands the choice to the
+app as `harvest://add|crawl?project=<slug>&path=…`; `HarvestApp.swift`
+queues it until the server is up, then calls `/api/addfile` (files),
+`/api/link` (folders; over 300 files asks Crawl / Add All / Cancel) or
+`/api/crawl`, selects the project and says what happened. The user switches
+the extension on once (System Settings › General › Login Items & Extensions ›
+Extensions › Added Extensions, or `pluginkit -e use -i
+work.rmaciel.harvest.finder`). Test the app half with a scratch HOME and the
+URL as a launch argument — never by `open harvest://…`, which reaches
+Robert's running Harvest. After a rebuild, `lsregister -u` any other
+Harvest.app copies so only /Applications answers `harvest://`.

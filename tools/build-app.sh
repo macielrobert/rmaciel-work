@@ -39,6 +39,11 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>Harvest</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>Harvest</string>
+    <key>CFBundleURLSchemes</key><array><string>harvest</string></array>
+  </dict></array>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -47,10 +52,51 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </dict></plist>
 EOF
 
+# THE FINDER MENU (tools/HarvestFinder.swift): a Finder Sync extension inside
+# the app. macOS runs extensions sandboxed; the one exception it is given is
+# reading Harvest's own folder, for the project list the server writes there.
+# It hands a choice to the app as a harvest:// address (registered above).
+APPEX="$APP/Contents/PlugIns/HarvestFinder.appex"
+mkdir -p "$APPEX/Contents/MacOS"
+swiftc -O -parse-as-library -application-extension -module-name HarvestFinder tools/HarvestFinder.swift \
+  -o "$APPEX/Contents/MacOS/HarvestFinder" -Xlinker -e -Xlinker _NSExtensionMain
+cat > "$APPEX/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleExecutable</key><string>HarvestFinder</string>
+  <key>CFBundleIdentifier</key><string>work.rmaciel.harvest.finder</string>
+  <key>CFBundleName</key><string>Harvest</string>
+  <key>CFBundleDisplayName</key><string>Harvest</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSExtension</key><dict>
+    <key>NSExtensionAttributes</key><dict/>
+    <key>NSExtensionPointIdentifier</key><string>com.apple.FinderSync</string>
+    <key>NSExtensionPrincipalClass</key><string>FinderSync</string>
+  </dict>
+</dict></plist>
+EOF
+ENT="$OUT/HarvestFinder.entitlements"
+cat > "$ENT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+  <array><string>/Library/Application Support/Harvest/</string></array>
+</dict></plist>
+EOF
+
 # Ad-hoc signature: required to run on Apple Silicon, and enough for an app
 # built on this Mac (it is never downloaded, so Gatekeeper never quarantines it).
 # Finder metadata on files in this folder makes codesign refuse; strip it first.
+# The extension is signed first, with its sandbox; then the app around it.
 xattr -cr "$APP"
+codesign --force --sign - --entitlements "$ENT" "$APPEX"
+rm "$ENT"
 codesign --force --sign - "$APP"
 
 # A DMG with an Applications shortcut beside the app: open it, drag across.

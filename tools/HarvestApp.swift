@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
 
   func applicationDidFinishLaunching(_ note: Notification) {
     buildMenu()
+    // a harvest:// address given when launched counts as one opened (open -a Harvest --args harvest://…)
+    waiting += CommandLine.arguments.dropFirst().compactMap { URL(string: $0) }.filter { $0.scheme == "harvest" }
 
     let config = WKWebViewConfiguration()
     web = WKWebView(frame: .zero, configuration: config)
@@ -49,7 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     let info = Bundle.main.infoDictionary ?? [:]
     let repo = info["HarvestRepo"] as? String ?? ""
     let node = info["HarvestNode"] as? String ?? "/usr/local/bin/node"
-    let store = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/Harvest")
+    // HOME, as the server reads it (node's os.homedir()), so the two agree on
+    // where Harvest's memory is — a scratch copy for testing is started with
+    // HOME pointing elsewhere, and must not touch the real log
+    let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+    let store = (home as NSString).appendingPathComponent("Library/Application Support/Harvest")
     try? FileManager.default.createDirectory(atPath: store, withIntermediateDirectories: true)
     let logPath = (store as NSString).appendingPathComponent("harvest.log")
     FileManager.default.createFile(atPath: logPath, contents: nil)
@@ -75,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
             let r = s.range(of: #"http://127\.0\.0\.1:\d+"#, options: .regularExpression),
             let url = URL(string: String(s[r]) + "/") else { return }
       self.loaded = true
-      DispatchQueue.main.async { self.web.load(URLRequest(url: url)) }
+      DispatchQueue.main.async { self.origin = String(s[r]); self.web.load(URLRequest(url: url)); self.deliver() }
     }
     server.terminationHandler = { [weak self] p in
       DispatchQueue.main.async {
@@ -120,6 +126,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
   }
 
   @objc func reloadPage() { web.reload() }
+
+  /* FINDER'S "Harvest ›" MENU (tools/HarvestFinder.swift) arrives here as an
+     address — harvest://add?project=<slug>&path=…&path=…, harvest://crawl?…,
+     harvest://open — and is held until the server is up, because choosing a
+     project in Finder is also how Harvest gets opened. Files are added; a
+     folder is linked, and one of over 300 files asks first: linking a whole
+     studio folder is how Daily Shapes got 1,950 cards. */
+  var origin: String?
+  var waiting: [URL] = []
+
+  func application(_ application: NSApplication, open urls: [URL]) {
+    waiting += urls.filter { $0.scheme == "harvest" }
+    NSApp.activate(ignoringOtherApps: true)
+    window?.makeKeyAndOrderFront(nil)
+    deliver()
+  }
+
+  func deliver() {
+    guard let origin = origin, !waiting.isEmpty else { return }
+    let urls = waiting
+    waiting = []
+    Task { @MainActor in for u in urls { await self.handle(u, origin) } }
+  }
+
+  @MainActor func handle(_ url: URL, _ origin: String) async {
+    let c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    let q = c?.queryItems ?? []
+    guard let project = q.first(where: { $0.name == "project" })?.value else { return }   // harvest://open: being in front is the whole job
+    let crawl = c?.host == "crawl"
+    var done = 0, problems: [String] = []
+    for p in q.filter({ $0.name == "path" }).compactMap({ $0.value }) {
+      var isDir: ObjCBool = false
+      FileManager.default.fileExists(atPath: p, isDirectory: &isDir)
+      let name = (p as NSString).lastPathComponent
+      var r: [String: Any]
+      if crawl {
+        r = await post(origin, "/api/crawl", ["root": p, "projects": [project]])
+      } else if isDir.boolValue {
+        r = await post(origin, "/api/link", ["project": project, "path": p])
+        if r["confirm"] as? Bool == true {
+          let a = NSAlert()
+          a.messageText = "“\(name)” holds over 300 files."
+          a.informativeText = "Add every one of them to this project, or crawl the folder for it — only the files that name the project or look like its pictures?"
+          a.addButton(withTitle: "Crawl for It"); a.addButton(withTitle: "Add All"); a.addButton(withTitle: "Cancel")
+          switch a.runModal() {
+          case .alertFirstButtonReturn: r = await post(origin, "/api/crawl", ["root": p, "projects": [project]])
+          case .alertSecondButtonReturn: r = await post(origin, "/api/link", ["project": project, "path": p, "force": true])
+          default: continue
+          }
+        }
+      } else {
+        r = await post(origin, "/api/addfile", ["project": project, "path": p])
+      }
+      if let e = r["error"] as? String { problems.append("\(name): \(e)") } else { done += 1 }
+    }
+    if !problems.isEmpty {
+      let a = NSAlert()
+      a.messageText = problems.count == 1 ? "One item was not added." : "\(problems.count) items were not added."
+      a.informativeText = problems.joined(separator: "\n")
+      a.runModal()
+    }
+    guard done > 0 else { return }
+    // shown in the page: the project is selected, and the status line says what happened
+    let verb = crawl ? "Crawling it for " : "Added \(done) from Finder to "
+    whenReady("(() => { const p = S.projects.find(p => p.slug === '\(project)'); document.querySelector('[data-s=\"\(project)\"]')?.click(); say('\(verb)' + (p ? p.title : 'the project') + '.'); })()")
+  }
+
+  func post(_ origin: String, _ path: String, _ body: [String: Any]) async -> [String: Any] {
+    var r = URLRequest(url: URL(string: origin + path)!)
+    r.httpMethod = "POST"
+    r.setValue(origin, forHTTPHeaderField: "Origin")
+    r.httpBody = try? JSONSerialization.data(withJSONObject: body)
+    guard let (data, _) = try? await URLSession.shared.data(for: r),
+          let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return ["error": "Harvest did not answer."] }
+    return j
+  }
+
+  // The page may still be loading when Harvest was opened by the menu itself:
+  // try again every half second until its project list is drawn (10 s at most).
+  func whenReady(_ js: String, tries: Int = 20) {
+    web.evaluateJavaScript("!!document.querySelector('[data-s]')") { ready, _ in
+      if ready as? Bool == true { self.web.evaluateJavaScript(js) }
+      else if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.whenReady(js, tries: tries - 1) } }
+    }
+  }
 
   func page(_ msg: String) -> String {
     "<body style='background:#000;color:#8f8f99;font:13px -apple-system;padding:40px'>\(msg)</body>"
