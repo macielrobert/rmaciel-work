@@ -418,6 +418,7 @@ function orgPicks() {
   const opts = '<option value="">' + (n ? 'Move ' + n + ' to project…' : 'Move to project…') + '</option>' + S.projects.filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
   if ($('orgmove').innerHTML !== opts) $('orgmove').innerHTML = opts;
 }
+const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
 function orgLook() {
   document.querySelectorAll('#orgviews [data-ov]').forEach(b => b.classList.toggle('on', b.dataset.ov === orgView));
   document.querySelectorAll('#orgsizes [data-cell]').forEach(b => b.classList.toggle('on', b.dataset.cell === orgCell));
@@ -453,7 +454,7 @@ function drawOrg() {
       return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
-        '<div class="under"><small>' + t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '') + '</small>' +
+        '<div class="under"><small>' + tileLabel(t) + '</small>' +
         '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div></div>';
     }).join('');
     return;
@@ -494,7 +495,7 @@ $('stacks').addEventListener('click', (e) => {
     const t = org.stacks.find(x => x.id === tile.dataset.id), dir = +turn.dataset.turn;
     t.rotate = ((t.rotate || 0) + (dir > 0 ? 90 : 270)) % 360;
     tile.querySelector('.keep').style.setProperty('--turn', t.rotate + 'deg');
-    tile.querySelector('small').textContent = t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
+    tile.querySelector('small').textContent = tileLabel(t);
     orgOp({ op: 'rotate', stack: t.id, dir }, false);
     return;
   }
@@ -805,7 +806,7 @@ $('psave').addEventListener('click', async () => {
     await poll();
     await loadProj();   // whichever project is selected now: the one just saved, or the one switched to while it held unsaved edits
     if (project) $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
-    $('pmsg').textContent = r.unchanged ? 'Nothing changed.' : 'Saved. Not live yet — Publish (top right) when ready.' + (r.warning ? ' Note: the site does not build right now — ' + r.warning : '');
+    $('pmsg').textContent = r.unchanged ? 'Nothing changed.' : 'Saved. Not live yet — Publish (top right) when ready.';
   } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
   finally { busy(-1); }
 });

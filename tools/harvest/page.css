@@ -63,7 +63,7 @@
   #textstoggle.on { color:var(--ink); }
   body.arming .stack, body.arming .tile { cursor:copy; }
   body.arming .stack:hover, body.arming .tile:hover .keep { outline:1px solid var(--ink); }
-  .orghead { position:sticky; top:0; z-index:2; background:var(--bg); padding:var(--m); border-bottom:1px solid var(--accent-dim); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
+  .orghead { background:var(--bg); padding:var(--m); border-bottom:1px solid var(--accent-dim); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
   #stacks { padding:0 var(--m) var(--m); }
   .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }
   .stack.removed { opacity:.35; }

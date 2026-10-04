@@ -249,8 +249,8 @@ function newProject(title, section) {
    the FIRST failure, so one broken project anywhere hid every problem this
    save could cause (review, 2026-10-04). A failure this project already had
    does not block a save that leaves it the same — refusing would stop it
-   being fixed a field at a time. The whole site is built once afterwards,
-   only to say whether it currently builds.
+   being fixed a field at a time. Whether the whole site builds is
+   Publish's question, and Publish asks it.
 
    ONLY WHAT WAS CHANGED IS SENT. The page sends the fields that differ from
    what it loaded, and the rest are left as the file has them now — which,
@@ -272,11 +272,8 @@ function sweep() {
   const live = new Set(Object.values(state.findings).filter(f => f.status === 'pending' || f.status === 'accepted').map(f => f.path));
   for (const n of fs.readdirSync(MOVED)) if (!live.has(path.join(MOVED, n))) fs.rmSync(path.join(MOVED, n), { force: true });
   for (const n of fs.readdirSync(UPLOADS)) { const f = path.join(UPLOADS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5) fs.rmSync(f, { force: true }); }
-  for (const n of fs.readdirSync(STORE)) if (n.startsWith('check-')) fs.rmSync(path.join(STORE, n), { recursive: true, force: true });   // a check cut short by a quit
 }
 const MARK_EXT = new Set(['.png', '.svg']);   // alpha is the shape: build.js refuses anything else for an icon
-const buildError = () => sh(process.execPath, [path.join(REPO, 'build.js')])
-  .then(() => null, e => String(e.message).trim().split('\n').pop().trim());
 const lines = (v) => String(v ?? '').split('\n').map(x => x.trim()).filter(Boolean);
 
 function projectFile(slug) {
@@ -295,14 +292,9 @@ function projectData(slug) {
 // the only way build.js judges one project by another.
 function tiedTo(slug, leads) {
   const all = projects(), set = new Set([slug, ...leads.filter(Boolean)]);
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const p of all) {
-      const before = set.size;
-      if (p.part_of && set.has(p.part_of)) set.add(p.slug);
-      if (set.has(p.slug) && p.part_of) set.add(p.part_of);
-      if (set.size > before) grew = true;
-    }
+  for (let n = -1; n !== set.size;) {   // until a pass adds nothing
+    n = set.size;
+    for (const p of all) { if (set.has(p.part_of)) set.add(p.slug); if (set.has(p.slug) && p.part_of) set.add(p.part_of); }
   }
   return [...set].filter(k => fs.existsSync(path.join(PROJECTS, k + '.mdoc')));
 }
@@ -313,7 +305,7 @@ function tiedTo(slug, leads) {
 // files, so nothing is duplicated. `uploads` stand in for files a save would
 // put in images/<slug>/. Returns the build's message, or null if it built.
 async function checkAlone(slug, text, uploads, tied) {
-  const root = fs.mkdtempSync(path.join(STORE, 'check-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-check-'));   // the system's temp folder: one cut short by a quit is cleared by macOS
   try {
     fs.copyFileSync(path.join(REPO, 'build.js'), path.join(root, 'build.js'));
     for (const n of ['index.html', 'fonts', 'node_modules']) fs.symlinkSync(path.join(REPO, n), path.join(root, n));
@@ -374,7 +366,7 @@ async function saveProject(slug, v, newBody) {
     if (data[k] && data[k] !== next[k]) gone.push(data[k]);
   }
   const text = mdocText(next, newBody === undefined ? body : newBody);
-  if (text === old && !uploads.length) return { warning: null, unchanged: true };
+  if (text === old && !uploads.length) return { unchanged: true };
 
   const tied = tiedTo(slug, [data.part_of, next.part_of]);
   const [before, after] = await Promise.all([checkAlone(slug, old, [], tied), checkAlone(slug, text, uploads, tied)]);
@@ -404,7 +396,7 @@ async function saveProject(slug, v, newBody) {
     const f = path.join(REPO, String(src).replace(/^\/+/, ''));
     if (f.startsWith(mine) && !used.has(src)) fs.rmSync(f, { force: true });
   }
-  return { warning: await buildError() };   // the whole site, for information only
+  return {};
 }
 
 function upload(name, b64) {
@@ -1576,32 +1568,14 @@ async function write(slug) {
   // A passage used as a work's caption (Organize) is not ALSO the description:
   // it stays accepted, and Organize's Save is what puts it on the site.
   const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text' && f.target !== 'caption');
-  for (const f of acc) if (f.kind === 'image' && !String(f.alt || '').trim()) throw new Error(`${path.basename(f.path)} needs alt text before it can be written — the build refuses an image without it.`);
-
-  data.images = data.images || [];
   data.details = data.details || [];
-  const paras = [], copied = [];
+  const paras = [];
   for (const f of acc) {
-    if (f.kind === 'image') {
-      let n = data.images.length;
-      while (fs.existsSync(path.join(REPO, imgRel(slug, n)))) n++;
-      // All or nothing: if a later image fails, the ones already copied are
-      // removed. Left behind they were unreferenced files that build.js ships
-      // anyway (it copies all of images/), and a retry copied them again.
-      copied.push(path.join(REPO, imgRel(slug, n)));
-      let src;
-      try { src = await importImage(f.path, slug, n, f.w, f.h); }
-      catch (e) { for (const d of copied) fs.rmSync(d, { recursive: true, force: true }); throw e; }
-      const rec = { src, alt: f.alt.trim() };
-      if (String(f.caption || '').trim()) rec.caption = f.caption.trim();
-      data.images.push(rec);
-    } else {
-      const t = String(f.edited ?? f.text).trim();
-      if (!t) continue;
-      if (f.target === 'detail') data.details.push(...t.split('\n').map(s => s.trim()).filter(Boolean));
-      else if (f.target === 'share') data.share_description = t.replace(/\s+/g, ' ');
-      else paras.push(mdEscape(t));
-    }
+    const t = String(f.edited ?? f.text).trim();
+    if (!t) continue;
+    if (f.target === 'detail') data.details.push(...t.split('\n').map(s => s.trim()).filter(Boolean));
+    else if (f.target === 'share') data.share_description = t.replace(/\s+/g, ' ');
+    else paras.push(mdEscape(t));
   }
   writeMdoc(file, data, [body.trim(), ...paras].filter(Boolean).join('\n\n'));
   for (const f of acc) f.status = 'written';
@@ -1638,8 +1612,6 @@ setInterval(() => {
   lastSent = s;
   for (const res of listeners) res.write('data: ' + s + '\n\n');
 }, 500).unref();
-// a comment line now and then, so nothing between here and the page decides the connection is dead
-setInterval(() => { for (const res of listeners) res.write(': still here\n\n'); }, 25000).unref();
 
 /* ------------------------------------------------------------- server */
 
