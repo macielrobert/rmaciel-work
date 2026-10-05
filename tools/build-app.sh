@@ -40,6 +40,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleIconFile</key><string>Harvest</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>NSServices</key><array><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Add to Harvest Project…</string></dict>
+    <key>NSMessage</key><string>addToProject</string>
+    <key>NSPortName</key><string>Harvest</string>
+    <key>NSSendFileTypes</key><array><string>public.item</string></array>
+    <key>NSRequiredContext</key><dict/>
+  </dict></array>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Harvest</string>
     <key>CFBundleURLSchemes</key><array><string>harvest</string></array>

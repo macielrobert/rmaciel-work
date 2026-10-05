@@ -186,6 +186,13 @@ actions.
 
 ## Finder's right-click menu (built 2026-10-04)
 
+**Not offered inside iCloud Drive** — Robert's Desktop and Documents are
+iCloud (file-provider) folders, where macOS shows no Finder Sync menus. There,
+use **right-click › Services › Add to Harvest Project…**: an NSServices entry
+(build-app.sh) answered by `addToProject` in HarvestApp.swift, which asks for
+the project (remembering the last), then takes the same harvest:// path.
+After installing a rebuild: `/System/Library/CoreServices/pbs -update`.
+
 **Harvest › Add to Project › [projects by section]**, **Crawl for Project ›**
 (one folder selected) and **Open Harvest**. A Finder Sync extension,
 `tools/HarvestFinder.swift`, built by `build-app.sh` into

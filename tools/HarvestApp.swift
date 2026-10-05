@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
 
   func applicationDidFinishLaunching(_ note: Notification) {
     buildMenu()
+    NSApp.servicesProvider = self   // right-click › Services › Add to Harvest Project… (addToProject below)
     // a harvest:// address given when launched counts as one opened (open -a Harvest --args harvest://…)
     waiting += CommandLine.arguments.dropFirst().compactMap { URL(string: $0) }.filter { $0.scheme == "harvest" }
 
@@ -54,8 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     // HOME, as the server reads it (node's os.homedir()), so the two agree on
     // where Harvest's memory is — a scratch copy for testing is started with
     // HOME pointing elsewhere, and must not touch the real log
-    let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
-    let store = (home as NSString).appendingPathComponent("Library/Application Support/Harvest")
+    let store = self.store
     try? FileManager.default.createDirectory(atPath: store, withIntermediateDirectories: true)
     let logPath = (store as NSString).appendingPathComponent("harvest.log")
     FileManager.default.createFile(atPath: logPath, contents: nil)
@@ -135,6 +135,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
      studio folder is how Daily Shapes got 1,950 cards. */
   var origin: String?
   var waiting: [URL] = []
+  // HOME, as the server reads it (node's os.homedir()), so the two agree on
+  // where Harvest's memory is — a scratch copy for testing is started with
+  // HOME pointing elsewhere, and must not touch the real log
+  let store = ((ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()) as NSString)
+    .appendingPathComponent("Library/Application Support/Harvest")
+
+  /* THE SERVICE — right-click › Services › Add to Harvest Project…, in ANY
+     folder. The Finder extension's "Harvest ›" menu is not offered inside
+     iCloud Drive: macOS gives folders run by a file provider (iCloud's
+     Desktop and Documents, where Robert's work lives) no extension menus.
+     A Service works everywhere, at the cost of a second step: this window,
+     which asks which project. It remembers the last one, since a run of
+     files usually goes to the same place. Declared in Info.plist (NSServices,
+     tools/build-app.sh); the choice goes the same way as the menu's. */
+  @objc func addToProject(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+    let urls = (pboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+    guard !urls.isEmpty else { return }
+    struct Project: Decodable { let slug: String; let title: String; let section: String?; let draft: Bool? }
+    let file = URL(fileURLWithPath: store).appendingPathComponent("finder.json")
+    let projects = (try? JSONDecoder().decode([Project].self, from: Data(contentsOf: file))) ?? []
+    NSApp.activate(ignoringOtherApps: true)
+    guard !projects.isEmpty else { return }   // first launch: nothing listed yet; Harvest opening is the answer
+
+    let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+    var section: String? = nil
+    for p in projects {
+      if p.section != section {   // a heading per section, as in the site's footer
+        section = p.section
+        if pick.numberOfItems > 0 { pick.menu?.addItem(.separator()) }
+        let head = NSMenuItem(title: (p.section ?? "").uppercased(), action: nil, keyEquivalent: "")
+        head.isEnabled = false
+        pick.menu?.addItem(head)
+      }
+      let item = NSMenuItem(title: p.title + (p.draft == true ? " · draft" : ""), action: nil, keyEquivalent: "")
+      item.representedObject = p.slug
+      pick.menu?.addItem(item)
+    }
+    pick.autoenablesItems = false
+    let last = UserDefaults.standard.string(forKey: "lastProject")
+    if let i = pick.itemArray.firstIndex(where: { $0.representedObject as? String == last }) { pick.selectItem(at: i) }
+    else if let i = pick.itemArray.firstIndex(where: { $0.representedObject != nil }) { pick.selectItem(at: i) }
+
+    let oneFolder = urls.count == 1 && urls[0].hasDirectoryPath
+    let a = NSAlert()
+    a.messageText = urls.count == 1 ? "Add “\(urls[0].lastPathComponent)” to a project" : "Add \(urls.count) items to a project"
+    a.informativeText = oneFolder ? "Add puts everything inside under the project. Crawl only finds the files that name it or look like its pictures." : ""
+    a.accessoryView = pick
+    a.addButton(withTitle: "Add")
+    if oneFolder { a.addButton(withTitle: "Crawl for It") }
+    a.addButton(withTitle: "Cancel")
+    let answer = a.runModal()
+    guard let slug = pick.selectedItem?.representedObject as? String,
+          answer == .alertFirstButtonReturn || (oneFolder && answer == .alertSecondButtonReturn) else { return }
+    UserDefaults.standard.set(slug, forKey: "lastProject")
+    var c = URLComponents()
+    c.scheme = "harvest"
+    c.host = answer == .alertFirstButtonReturn ? "add" : "crawl"
+    c.queryItems = [URLQueryItem(name: "project", value: slug)] + urls.map { URLQueryItem(name: "path", value: $0.path) }
+    if let u = c.url { waiting.append(u); deliver() }
+  }
 
   func application(_ application: NSApplication, open urls: [URL]) {
     waiting += urls.filter { $0.scheme == "harvest" }
