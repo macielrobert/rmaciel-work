@@ -174,7 +174,9 @@ merged ("Same work — merge": the alts the grouping missed) or separated
 work, all marked apart; each copy in List also has its own **Separate**) or moved to another
 project with all copies, grouping, alt and caption — the header's **Move to project** button
 (the right-click menu's project list, for every ticked work), or by dragging a tile onto a
-project's name in the Projects column (a ticked tile carries every ticked work with it). A moved copy that was on
+project's name in the Projects column (a ticked tile carries every ticked work with it).
+Removed works (waiting for Save) are hidden in List and Grid; the header's **Show N removed**
+brings them back to Restore (remembered as `orgShowRemoved`). A moved copy that was on
 this project's site is copied to `.../Harvest/moved/` first and the work stays
 here marked removed, so this project's Save takes it off. A moved work lands
 first in a project never opened in Organize; reorder with the arrows.

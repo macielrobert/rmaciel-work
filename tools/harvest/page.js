@@ -414,6 +414,9 @@ const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
 const opick = new Set();   // ticked works, kept across redraws and between List and Grid
 const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
 let orgView = remember('orgView') || 'list', orgCell = remember('orgCell') || '170';
+// REMOVED works are hidden unless asked for: they only wait for Save, and
+// greyed out among the rest they were clutter. The header counts them.
+let showRemoved = remember('orgShowRemoved') === '1';
 function orgPicks() {
   const n = opick.size;
   $('orgmerge').disabled = n < 2;
@@ -453,10 +456,13 @@ function drawOrg() {
   const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
   $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
   $('orgsave').disabled = !org.stacks.length;
-  for (const k of [...opick]) if (!org.stacks.some(t => t.id === k)) opick.delete(k);
+  const gone = org.stacks.length - live.length, shown = showRemoved ? org.stacks : live;
+  $('orgshowrm').hidden = !gone;
+  $('orgshowrm').textContent = showRemoved ? 'Hide removed' : 'Show ' + gone + ' removed';
+  for (const k of [...opick]) if (!shown.some(t => t.id === k)) opick.delete(k);   // a hidden work is never acted on unseen
   orgLook(); orgPicks();
-  if (orgView === 'grid' && org.stacks.length) {
-    $('stacks').innerHTML = org.stacks.map(t => {
+  if (orgView === 'grid' && shown.length) {
+    $('stacks').innerHTML = shown.map(t => {
       const k = t.members.find(m => m.key === t.keeper) || t.members[0];
       return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open, drag to reorder">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
@@ -466,7 +472,7 @@ function drawOrg() {
     }).join('');
     return;
   }
-  $('stacks').innerHTML = org.stacks.length ? org.stacks.map(t => {
+  $('stacks').innerHTML = shown.length ? shown.map(t => {
     const k = t.members.find(m => m.key === t.keeper) || t.members[0];
     const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
     return '<div class="stack' + (t.removed ? ' removed' : '') + '" data-id="' + t.id + '">' +
@@ -483,7 +489,7 @@ function drawOrg() {
       (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
       (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
       '</div></div>';
-  }).join('') : '<p class="dim">No pictures yet. Accept some in Collect, or add them to the project in Keystatic.</p>';
+  }).join('') : '<p class="dim">' + (gone ? 'Every work here is removed. Save to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
 }
 async function orgOp(body, redraw = true) {
   busy(1);
@@ -585,8 +591,9 @@ $('orgremove').addEventListener('click', async () => {
   opick.clear();
   for (const t of ticked) await orgOp({ op: 'remove', stack: t.id, value }, false);
   await loadOrg();
-  $('orgmsg').textContent = (value ? 'Removed ' : 'Restored ') + ticked.length + ' work' + (ticked.length === 1 ? '' : 's') + (value ? '. Save to project takes them off the site; Restore brings them back before then.' : '.');
+  $('orgmsg').textContent = (value ? 'Removed ' : 'Restored ') + ticked.length + ' work' + (ticked.length === 1 ? '' : 's') + (value ? '. Save to project takes them off the site; Show removed, then Restore, brings them back before then.' : '.');
 });
+$('orgshowrm').addEventListener('click', () => { remember('orgShowRemoved', (showRemoved = !showRemoved) ? '1' : '0'); drawOrg(); });
 // the opposite of merge: each ticked work's copies go back to being works of their own
 $('orgsplit').addEventListener('click', async () => {
   const ids = org.stacks.filter(t => opick.has(t.id) && t.members.length > 1).map(t => t.id);
