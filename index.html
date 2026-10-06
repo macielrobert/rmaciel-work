@@ -1987,6 +1987,50 @@
   // crop, not a resize, and no width we could ask for would reproduce it)
   function thumbURL(im, w) { return im.thumb || sized(im.src, w); }
 
+  /* ------------------------------------------------------ loading order
+
+     NOT AJAX. Every word and every image record is already in this file; an
+     image is a plain browser request for a URL. What this section decides is
+     WHEN each request goes out, and the answer is: before anyone asks.
+
+     Each picture costs a round trip, and the first request for any one width
+     also waits on the host to make that size (150–300 ms measured on the live
+     site, against 20–40 ms once made). A request that starts at the tap is a
+     wait the visitor watches. So there are four tiers, and none of them holds
+     anything back:
+       1. AT REST, after the page has loaded — every project's FIRST SCREEN
+          (its hero and the thumbs that fill the strip), in row order, a few
+          at a time. warmFirstViews() in boot().
+       2. ON OPEN — what is on screen goes first; the rest of the strip goes
+          the moment those have landed, or the moment the strip is scrolled.
+          fitThumbs() below.
+       3. ON PRESS — a thumb starts its full-size picture on the way DOWN; the
+          tap commits on the way up.
+       4. WHILE EXPANDED — the pictures one swipe away either side.
+
+     HELD, NOT JUST REQUESTED. The host serves these with max-age=0, so the
+     browser's own cache would ask again (a round trip) every time. A page
+     never re-asks for a URL it already holds, so the Image objects are kept
+     for the page's lifetime and every later use of the same URL — a thumb's
+     background, the expanded <img> — is served from memory.
+
+     REJECTED: lazy loading (loading="lazy", IntersectionObserver). It waits
+     until a picture is nearly on screen, which is the pop-in this exists to
+     prevent. The site is furniture; its mechanism should not be watched. */
+  const held = new Map();     // url -> Image, kept so the bytes stay in memory
+  let markLoad = null;        // the open entry's hero, while it is in tier 2
+  function warm(url, pri) {
+    let im = held.get(url);
+    if (!im) {
+      im = new Image();
+      if (pri) im.fetchPriority = pri;   // a hint; ignored where unsupported
+      im.done = new Promise(res => { im.onload = im.onerror = res; });
+      im.src = url;
+      held.set(url, im);
+    }
+    return im.done;
+  }
+
   /* Measure one entry's thumbs and ask for the rung each actually needs.
      Cheap to call often, which is the point — it runs on every resize, every
      entry switch, and every expand, and does nothing at all unless a box has
@@ -2002,18 +2046,41 @@
        image, can leave a thumb smaller than it was a moment ago. Re-asking at
        the lower rung would spend a fresh download to end up with a WORSE
        picture, when the bigger one is already sitting in the browser cache.
-       Up is a real improvement; down is never worth a request. */
+       Up is a real improvement; down is never worth a request.
+
+     AND ONE ORDER (tier 2 above). A thumb inside the strip's visible box, and
+     the hero, go first; every other thumb is painted once those have landed.
+     Sent together, seventy off-screen thumbs split the connection with the
+     three on screen, and the part you are looking at arrives LAST. They are
+     not held back for long: the strip is released in full the moment the
+     first screen is in, or the moment the strip is scrolled, whichever comes
+     first. */
   function fitThumbs(en) {
     if (!en || !en.thumbs || !en.images) return;
+    const view = en.car.getBoundingClientRect();
+    const first = markLoad ? [markLoad] : [], rest = [];
     for (let k = 0; k < en.thumbs.length; k++) {
       const ph = en.thumbs[k];
-      const boxW = ph.getBoundingClientRect().width;
-      if (!boxW) continue;
-      const step = stepFor(boxW);
+      const r = ph.getBoundingClientRect();
+      if (!r.width) continue;
+      const step = stepFor(r.width);
       if (step <= (ph._step || 0)) continue;
       ph._step = step;
-      ph.style.backgroundImage = 'url("' + thumbURL(en.images[k], step) + '")';
+      const url = thumbURL(en.images[k], step);
+      if (r.right > view.left && r.left < view.right && r.bottom > view.top && r.top < view.bottom) {
+        first.push(warm(url));
+        ph.style.backgroundImage = 'url("' + url + '")';
+      } else rest.push([ph, url]);
     }
+    if (!rest.length) return;
+    let gone = false;
+    const release = () => {
+      if (gone) return;
+      gone = true;
+      rest.forEach(([ph, url]) => { ph.style.backgroundImage = 'url("' + url + '")'; });
+    };
+    Promise.all(first).then(release);
+    en.car.addEventListener('scroll', release, { once: true });
   }
 
   // ------------------------------------------------------------ data adapter
@@ -4127,6 +4194,10 @@ void main() {
           ph.setAttribute('tabindex', '0');
           ph.setAttribute('aria-label', im.alt || ('Image ' + (k + 1) + ' of ' + en.images.length));
           ph.addEventListener('click', () => thumbTap(i, k));
+          // TIER 3: the full-size picture starts on the way DOWN. The tap
+          // commits on the way up, and that gap is the head start. A swipe
+          // that begins here spends one picture it may not open — on purpose.
+          ph.addEventListener('pointerdown', () => warm(sized(im.src, EXPAND_W)));
           ph.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); thumbTap(i, k); }
           });
@@ -4240,19 +4311,26 @@ void main() {
   // image as a hero, otherwise nothing. Both are sized through the host
   // transform at what they can actually draw — a mark never exceeds 320 CSS
   // px, a hero never exceeds 720.
+  // ONE URL per entry, shared with warmFirstViews(): the same picture asked
+  // for at a different width is a second download, not a cache hit.
+  function markURL(en) {
+    const wm = en && en.wordmark;
+    if (wm) return sized(wm.src, MARK_W);
+    return (en && en.images && en.images.length) ? sized(en.images[0].src, HERO_W) : null;
+  }
   function applyMark(en) {
     const wm   = en && en.wordmark;
     const hero = (!wm && en && en.images && en.images.length) ? en.images[0] : null;
     markEl.classList.toggle('hero', !!hero);
     if (wm) {
-      const url = 'url("' + sized(wm.src, MARK_W) + '")';
+      const url = 'url("' + markURL(en) + '")';
       markEl.style.webkitMaskImage = url;
       markEl.style.maskImage       = url;
       markEl.style.backgroundImage = '';
     } else if (hero) {
       markEl.style.webkitMaskImage = '';
       markEl.style.maskImage       = '';
-      markEl.style.backgroundImage = 'url("' + sized(hero.src, HERO_W) + '")';
+      markEl.style.backgroundImage = 'url("' + markURL(en) + '")';
     } else {
       markEl.style.webkitMaskImage = '';
       markEl.style.maskImage       = '';
@@ -4261,6 +4339,54 @@ void main() {
     const src = wm || hero;
     markEl.style.visibility = src ? '' : 'hidden';
     markEl.setAttribute('aria-label', src ? (src.alt || '') : '');
+    // tier 2: the strip's off-screen thumbs wait for this as well — but only
+    // where the slot is drawn. In portrait it is display:none, and asking for
+    // it there would download a picture nobody is shown.
+    markLoad = (src && markEl.offsetWidth) ? warm(markURL(en)) : null;
+  }
+
+  /* TIER 1: EVERY PROJECT'S FIRST SCREEN, before anyone taps. Run once the
+     page has loaded, so it never competes with the first paint, then a few at
+     a time in row order — the order the row is read in — at low priority, so
+     a project actually opened mid-way still gets the connection.
+
+     THE THUMB WIDTH IS PREDICTED, because a strip that is not showing has no
+     box to measure. A 'standard' strip is exactly --car-h tall (resize()
+     writes it) and each thumb is that height times its stored ratio, which
+     is the arithmetic CSS does. A wrong guess costs one wasted request, never
+     a wrong picture: fitThumbs() still measures the real box and asks for
+     that, and if the guess matched, the answer is already in memory.
+
+     'grid' entries get only tier 2 — their cell width comes from a column
+     rule that cannot be read off a hidden box. No grid project exists yet.
+
+     The hero only on a landscape screen: the CSS rule that draws the slot is
+     landscape-only, and a picture nobody sees is not worth the bytes.
+
+     Skipped entirely when the visitor has asked their browser to save data. */
+  const WARM_AT_ONCE = 4;
+  function warmFirstViews() {
+    if (navigator.connection && navigator.connection.saveData) return;
+    const carH  = parseFloat(rootEl.style.getPropertyValue('--car-h')) || 0;
+    const reach = winEl.getBoundingClientRect().width;   // a strip is never wider:
+                                     // in landscape it is half this, so a thumb or
+                                     // two too many are warmed, never too few
+    const wide  = matchMedia('(orientation: landscape)').matches;
+    const urls  = [];
+    winEntries.forEach(en => {
+      if (!en.images || !en.images.length || en.layout !== 'standard') return;
+      if (wide) urls.push(markURL(en));
+      let x = 0;
+      for (const im of en.images) {
+        if (x > reach || !carH || !im.ratio) break;
+        const w = carH * im.ratio[0] / im.ratio[1];
+        urls.push(thumbURL(im, stepFor(w)));
+        x += w;
+      }
+    });
+    let next = 0;
+    const pump = () => { if (next < urls.length) warm(urls[next++], 'low').then(pump); };
+    for (let n = 0; n < WARM_AT_ONCE; n++) pump();
   }
 
   let winActive = 0;
@@ -4327,6 +4453,12 @@ void main() {
     expCap.style.visibility = im.caption ? 'visible' : 'hidden';
     en.thumbs.forEach((t, j) => t.classList.toggle('on', j === k));
     en.thumbs[k].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // TIER 4: one swipe either way (it wraps) is already in hand when it
+    // lands. Without this, the picture you swiped away from stays up until
+    // the next one arrives.
+    const n = en.images.length;
+    warm(sized(en.images[(k + 1) % n].src, EXPAND_W));
+    warm(sized(en.images[(k + n - 1) % n].src, EXPAND_W));
     // SIBLING move, not a deeper one: replaces the entry rather than adding
     // to it, so ten swipes never bury the way out ten presses deep
     if (xTarget === 1) syncRoute(true);
@@ -4989,6 +5121,11 @@ void main() {
     lastHash = location.hash;
     if (location.hash) applyRoute(parseHash(), true);
     else updateDocTitle();
+    // tier 1 waits for the load event, so it never competes with the first
+    // paint. A deep-linked project's first screen was requested just above,
+    // so it is already ahead in the queue either way.
+    if (document.readyState === 'complete') warmFirstViews();
+    else window.addEventListener('load', warmFirstViews, { once: true });
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', resize);
     // keyboard freeze bookends: layout holds while typing; on blur, undo any

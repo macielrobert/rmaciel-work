@@ -348,6 +348,13 @@ understanding why it exists will reintroduce a solved bug.
   and recolored by ink (`uInk * alpha` in the shader, a CSS mask in the DOM).
   Source art must be transparent with real counterforms. An opaque PNG or any
   JPG becomes a solid block.
+- **Pictures are asked for before they are wanted.** Four tiers in
+  `index.html` ("loading order"): every project's first screen once the page
+  has loaded; on-screen thumbs before off-screen ones when a project opens;
+  the full-size picture on thumb PRESS; one swipe either side while expanded.
+  The Image objects are HELD for the page's lifetime: the host serves
+  `max-age=0`, so a URL dropped from memory costs a fresh round trip. Nothing
+  is ever held back to save bytes — the volume is meant to land at once.
 - **Never rasterize `<text>` inside SVG via `<img>`.** Glyphs are drawn
   directly to canvas in `bakeIcon`. This is a known-bad path in this codebase.
 - **SVG displacement filters are mobile-hostile at scale.** Confirmed from
@@ -433,6 +440,7 @@ understanding why it exists will reintroduce a solved bug.
 | A framework, bundler, or npm dependency **in the shipped file** | The single-file, zero-dependency character of the **shipped** file is the point. build.js is not exempt from npm any more — it needs `@markdoc/markdoc` — but its output is still the same one file, and nothing the editor depends on reaches a visitor |
 | **Fetching** a content file at runtime | Browsers block fetching local files, and it would add a second request. Content is folded in at build time instead — the file the visitor gets still has everything inline |
 | Typing ratio by hand in the CMS | The CMS's image field does not report dimensions. build.js reads them from the uploaded file's header. A required field that a human can silently get wrong should not be a form field |
+| Lazy loading (`loading="lazy"`, IntersectionObserver) | Waits until a picture is nearly on screen — the pop-in the loading order exists to prevent. The content is meant to land all at once |
 | Minification | Comments are ~40% of the file but gzip to almost nothing. Stripping saves <100ms and costs the documentation |
 | anime.js | Only justifies itself for orchestration, timelines, stagger, or spring physics. For a single fixed-curve transition it equals a CSS transition |
 | SVG displacement filters | Mobile-hostile at scale |
