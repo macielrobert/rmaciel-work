@@ -540,6 +540,7 @@ async function pdfText(f) {
      and reused. Recompiled only when this source changes. Each page is drawn
      at ~3000 px on its long side: smaller loses 8 pt type on a 12 x 18 sheet. */
 const OCR_SRC = `import Foundation
+import ImageIO
 import PDFKit
 import Vision
 func ocr(_ img: CGImage) -> String {
@@ -550,6 +551,17 @@ func ocr(_ img: CGImage) -> String {
   return (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\\n")
 }
 let args = CommandLine.arguments
+// --image a.jpg : the text in one picture, drawn at most 3000 px on its long
+// side as a PDF page is. Not turned first: Vision reads sideways and
+// upside-down text as it is (tried at 90, 180 and 270).
+if args.count > 2 && args[1] == "--image" {
+  let opts = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 3000] as CFDictionary
+  var text = ""
+  if let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, nil),
+     let img = CGImageSourceCreateThumbnailAtIndex(src, 0, opts) { text = ocr(img) }
+  FileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: [text]))
+  exit(0)
+}
 // --prints a.jpg b.png ... : one feature vector per picture, for grouping copies
 if args.count > 1 && args[1] == "--prints" {
   var out: [Any] = []
@@ -1159,7 +1171,7 @@ async function expandPage(f) {
 
 // One card's decision, from the card or from the bulk bar.
 function decide(f, b) {
-  for (const k of ['status', 'edited', 'target', 'alt', 'caption']) if (k in b) f[k] = b[k];
+  for (const k of ['status', 'edited', 'target', 'alt', 'caption', 'used']) if (k in b) f[k] = b[k];
   if ('status' in b) delete f.auto;   // decided now: a page's Unlink leaves it alone
   // READ AGAIN — an accepted folder or page is read once. This reads it again,
   // adding only what is missing: cards cleared since come back, decided ones
@@ -1366,6 +1378,37 @@ async function organize(slug) {
   };
 }
 
+/* EXTRACT TEXT — Organize's right-click on a work: the words in its kept copy,
+   read by the same Vision helper as a PDF page with no text layer, arrive in
+   the Text column as a passage of their own — accepted, and LEFT TO ORGANIZE,
+   so Collect's Write does not put raw recognition into the description before
+   Robert has placed it. Reading the same picture again finds the same passage
+   (a card is keyed by its text), brought back if it was rejected. A website
+   picture is read at full size, from the download Write makes anyway. */
+async function extractText(slug, stack) {
+  const t = state.organize?.[slug]?.stacks.find(x => x.id === stack);
+  if (!t) throw new Error('That work is no longer here — reload.');
+  const k = t.members.includes(t.keeper) ? t.keeper : t.members[0];
+  const from = k.startsWith('site:') ? path.join(REPO, k.slice(5).replace(/^\/+/, '')) : state.findings[k]?.path;
+  let file = from;
+  if (from && isRemote(from)) {
+    const DL = path.join(STORE, 'downloads');
+    fs.mkdirSync(DL, { recursive: true });
+    file = await download(sized(from, 2500), path.join(DL, id(from) + '.download'));
+  }
+  if (!file || !fs.existsSync(file)) throw new Error('That picture is not on this Mac any more.');
+  const bin = await ocrTool();
+  if (!bin) throw new Error('Text recognition is unavailable — the server log says why.');
+  const [text] = JSON.parse(await sh(bin, ['--image', file]));
+  if (!text.trim()) throw new Error('No text found in that picture.');
+  const f = { project: slug, kind: 'text', path: from, th: id(text), text, status: 'accepted', target: 'organize' };
+  add(f);
+  const g = state.findings[f.id];
+  if (g.status !== 'accepted') { g.status = 'accepted'; delete g.cleared; rev++; }
+  persist();
+  return g;
+}
+
 function organizeOp(slug, b) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Organize first.');
@@ -1567,8 +1610,10 @@ async function write(slug) {
   // are stacked and one is kept; writing them here as well would put every
   // copy on the site.
   // A passage used as a work's caption (Organize) is not ALSO the description:
-  // it stays accepted, and Organize's Save is what puts it on the site.
-  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text' && f.target !== 'caption');
+  // it stays accepted, and Organize's Save is what puts it on the site. One
+  // LEFT TO ORGANIZE (`organize`: read out of a picture, or placed from the
+  // Text column into Project details) is that panel's Save's to write.
+  const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text' && !['caption', 'organize'].includes(f.target));
   data.details = data.details || [];
   const paras = [];
   for (const f of acc) {
@@ -1750,6 +1795,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/publish') return json(await publish());
     if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
     if (p === '/api/organize') { organizeOp(b.project, b); return json({ ok: true }); }
+    if (p === '/api/extract') return json(await extractText(b.project, b.stack));
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
     if (p === '/api/project') return json(await saveProject(b.project, b.data || {}, b.body));
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });

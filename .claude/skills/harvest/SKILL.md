@@ -200,9 +200,17 @@ Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.
 
 Organize → **Text**: the project's accepted passages in a column beside the
-works. Click one, then a work (list or grid): it is appended to that work's
-caption and the passage's target becomes `caption`, which Collect's Write
-skips (Organize's Save is what puts it on the site).
+works. Click (or right-click) one for where it goes: a Project details field
+(description — Markdoc-escaped as Write does —, detail lines, share
+description, title, client, working titles; one-line fields are replaced, the
+rest appended), filled in the panel for ITS Save to check and write; or a
+work's caption / alt text, then click the work. Target becomes `caption` (a
+work) or `organize` (a field), both of which Collect's Write skips; `used`
+records where, and the passage stays, dimmed. A work's right-click ›
+**Extract text** (`/api/extract`) reads its kept copy with the Vision helper's
+`--image` mode (a website picture at 2500w, into `downloads/` as Write does)
+and adds an accepted passage with target `organize`. Vision reads sideways
+text as it is, so a work's turn is not passed.
 
 The page no longer polls. It holds `/api/events` open (server-sent events);
 the server compares the state snapshot twice a second and writes only when it

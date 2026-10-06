@@ -192,7 +192,7 @@ function card(f) {
   }
   if (f.kind === 'text') {
     h += '<div class="src">' + label(f) + '</div><textarea data-k="edited">' + esc(f.edited ?? f.text) + '</textarea>';
-    if (f.status === 'accepted') h += '<select data-k="target">' + [['description','Add to description'],['detail','Add as detail lines'],['share','Use as share description'],['caption','Used as a caption (Organize)']].map(([v,t]) => '<option value="' + v + '"' + ((f.target || 'description') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
+    if (f.status === 'accepted') h += '<select data-k="target">' + [['description','Add to description'],['detail','Add as detail lines'],['share','Use as share description'],['caption','Used as a caption (Organize)'],['organize','Left to Organize']].map(([v,t]) => '<option value="' + v + '"' + ((f.target || 'description') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
   }
   return h + '<div class="acts">' + acts + '</div></div>';
 }
@@ -236,7 +236,7 @@ function drawFindings() {
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length === every.length ? (list.length || '') : list.length + ' of ' + every.length;
   }
-  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text' && f.target !== 'caption');
+  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text' && !['caption', 'organize'].includes(f.target));
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
   bulkBar();
 }
@@ -672,12 +672,18 @@ $('write').addEventListener('click', async () => {
   } catch (e) { $('msg').textContent = '⚠ ' + e.message; }
 });
 
-/* ---- TEXT → CAPTION: the project's accepted passages beside the works.
-   Click a passage, then the work it describes: it is ADDED to that work's
-   caption (never replacing it, as a suggestion is). The passage is then marked
-   "used as a caption", so Collect's Write does not also put it in the
-   description; Collect's menu on the card can change that back. */
-let textsOpen = remember('textsOpen') === '1', armed = null, otexts = [];
+/* ---- TEXT → ANY FIELD: the project's accepted passages beside the works.
+   Click one (or right-click) and say where it goes. A project field is filled
+   in Project details, opened if shut, and that panel's Save checks and writes
+   it — so it can be read and tidied first, and nothing reaches the file
+   behind the panel's back. A work's caption or alt text: pick it, then click
+   the work. Either way the text is ADDED (a one-line field — title, client,
+   share description — is replaced, as Write does), and the passage is marked
+   with where it went: `caption` for a work, `organize` for a project field,
+   both of which Collect's Write skips. It stays in the column, dimmed, so it
+   can be placed again. Text read out of a picture (a work's right-click ›
+   Extract text) arrives here already `organize`, waiting to be placed. */
+let textsOpen = remember('textsOpen') === '1', armed = null, armField = 'caption', otexts = [];
 function textsLook() {
   $('texts').hidden = !textsOpen; $('textstoggle').classList.toggle('on', textsOpen);
   $('orgbody').classList.toggle('two', textsOpen);
@@ -696,32 +702,89 @@ async function loadTexts() {
 }
 function drawTexts() {
   const src = (f) => /^https?:/.test(f.path) ? new URL(f.path).pathname : f.path.split('/').pop();
-  $('texts').innerHTML = '<h2 class="cap">Text <span class="dim">— click one, then a work</span></h2>' + (otexts.length ? otexts.map(f =>
-    '<div class="tblock' + (armed === f.id ? ' on' : '') + (f.target === 'caption' ? ' used' : '') + '" data-passage="' + f.id + '">' +
-    '<small>' + esc(src(f)) + (f.target === 'caption' ? ' · used as a caption' : '') + '</small>' + esc(String(f.edited ?? f.text)) + '</div>').join('')
-    : '<p class="dim">No accepted text for this project. Accept passages in Collect and they appear here.</p>');
+  const where = (f) => f.used ? ' · in ' + f.used : f.target === 'caption' ? ' · used as a caption' : '';
+  $('texts').innerHTML = '<h2 class="cap">Text <span class="dim">— click one to place it</span></h2>' + (otexts.length ? otexts.map(f =>
+    '<div class="tblock' + (armed === f.id ? ' on' : '') + (where(f) ? ' used' : '') + '" data-passage="' + f.id + '">' +
+    '<small>' + esc(src(f) + where(f)) + '</small>' + esc(String(f.edited ?? f.text)) + '</div>').join('')
+    : '<p class="dim">No accepted text for this project. Accept passages in Collect, or right-click a work › Extract text.</p>');
 }
 function disarm() { armed = null; document.body.classList.remove('arming'); if (otexts.length) drawTexts(); }
 $('texts').addEventListener('click', (e) => {
   const b = e.target.closest('[data-passage]'); if (!b) return;
-  if (armed === b.dataset.passage) return disarm();
-  armed = b.dataset.passage; document.body.classList.add('arming'); drawTexts();
-  $('orgmsg').textContent = 'Now click the work this text describes — Esc to cancel.';
+  if (armed === b.dataset.passage) { disarm(); $('orgmsg').textContent = ''; return; }
+  openMenu(e, passageMenu(b.dataset.passage));
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && armed) { disarm(); $('orgmsg').textContent = ''; } });
+// Project details' fields a passage can go into; the description is the panel's body
+const PLACES = { body: 'Description', details: 'Detail lines', share_description: 'Share description', title: 'Title', client: 'Client name', nicknames: 'Working titles' };
+function passageMenu(id) {
+  return [
+    { head: 'Project details' },
+    ...Object.entries(PLACES).map(([k, label]) => ({ label, run: () => place(id, k) })),
+    { head: 'A work — click it next' },
+    { label: 'Caption', run: () => arm(id, 'caption') },
+    { label: 'Alt text', run: () => arm(id, 'alt') },
+    '-',
+    { label: 'Reject', run: () => rejectPassage(id) },
+  ];
+}
+function arm(id, field) {
+  armed = id; armField = field; document.body.classList.add('arming'); drawTexts();
+  $('orgmsg').textContent = 'Now click the work this is the ' + (field === 'alt' ? 'alt text' : 'caption') + ' of — Esc to cancel.';
+}
+// where a passage went, so Collect's Write leaves it and the column says so
+async function mark(f, target, used) {
+  try { await api('/api/finding', { id: f.id, target, used }); Object.assign(f, { target, used }); } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+  drawTexts();
+}
+// as harvest.js's mdEscape, which Collect's Write uses: the passage is text, not Markdoc marks
+const mdEscape = (t) => t.replace(/([\\`*_{}\[\]<>|])/g, '\\$1').replace(/^(\s*)([#>+-])/gm, '$1\\$2').replace(/^(\s*\d+)\./gm, '$1\\.');
+async function place(id, k) {
+  const f = otexts.find(x => x.id === id); if (!f) return;
+  if (!projOpen) { projOpen = true; remember('projOpen', '1'); }
+  await loadProj();
+  if (!pd || pd.slug !== project) return;   // the panel kept another project's unsaved edits
+  const el = k === 'body' ? $('pbody') : document.querySelector('#proj [data-p=' + k + ']');
+  const text = String(f.edited ?? f.text).trim(), cur = el.value.trim();
+  el.value = k === 'body' ? [cur, mdEscape(text)].filter(Boolean).join('\n\n')
+    : k === 'details' || k === 'nicknames' ? [cur, ...text.split('\n').map(s => s.trim())].filter(Boolean).join('\n')
+    : text.replace(/\s+/g, ' ');
+  el.dispatchEvent(new Event('input', { bubbles: true }));   // marks the panel unsaved; the description's preview follows
+  el.scrollIntoView({ block: 'nearest' });
+  await mark(f, 'organize', PLACES[k].toLowerCase());
+  $('orgmsg').textContent = 'Put in ' + PLACES[k].toLowerCase() + ' — Save in Project details when ready.';
+}
+async function rejectPassage(id) {
+  try { await api('/api/finding', { id, status: 'rejected' }); otexts = otexts.filter(x => x.id !== id); drawTexts(); }
+  catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+}
 async function attach(stack) {
-  const f = otexts.find(x => x.id === armed), t = org.stacks.find(x => x.id === stack);
+  const f = otexts.find(x => x.id === armed), t = org.stacks.find(x => x.id === stack), field = armField;
   disarm();
   if (!f || !t) return;
-  const text = String(f.edited ?? f.text).trim();
-  // the caption box may hold typing not yet sent: read it from the page if it is there
-  const box = document.querySelector('.stack[data-id="' + stack + '"] [data-f=caption]');
+  let text = String(f.edited ?? f.text).trim();
+  if (field === 'alt') text = text.replace(/\s+/g, ' ');   // one line: its box would drop the breaks and run the words together
+  // the box may hold typing not yet sent: read it from the page if it is there
+  const box = document.querySelector('.stack[data-id="' + stack + '"] [data-f=' + field + ']');
   if (box) { clearTimeout(box._t); box._t = null; }   // its pending save would land after this one and drop the passage
-  const cur = (box ? box.value : t.caption).trim();
-  await orgOp({ op: 'field', stack, field: 'caption', value: cur ? cur + '\n' + text : text });
-  try { await api('/api/finding', { id: f.id, target: 'caption' }); f.target = 'caption'; } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; return; }
-  drawTexts();
-  $('orgmsg').textContent = 'Added to the caption of work ' + t.n + '. Save to project when ready.';
+  const cur = (box ? box.value : t[field]).trim();
+  await orgOp({ op: 'field', stack, field, value: cur ? cur + (field === 'alt' ? ' ' : '\n') + text : text });
+  const what = (field === 'alt' ? 'alt text' : 'caption') + ' of work ' + t.n;
+  await mark(f, 'caption', what);
+  $('orgmsg').textContent = 'Added to the ' + what + '. Save to project when ready.';
+}
+// a work's right-click: the words in its kept copy become a passage here
+async function extractWork(id) {
+  const t = org.stacks.find(x => x.id === id), slug = project;
+  $('orgmsg').textContent = 'Reading the text in work ' + t.n + '…'; busy(1);
+  try {
+    const f = await api('/api/extract', { project: slug, stack: id });
+    if (!textsOpen) { textsOpen = true; remember('textsOpen', '1'); }
+    await loadTexts();
+    document.querySelector('#texts [data-passage="' + f.id + '"]')?.scrollIntoView({ block: 'nearest' });
+    $('orgmsg').textContent = 'The text in work ' + t.n + ' is in the Text column — click it to place it.';
+  } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
+  finally { busy(-1); }
 }
 
 /* ---- PROJECT PANEL: every field Keystatic edits, except the pictures (the works below).
@@ -913,9 +976,9 @@ document.addEventListener('contextmenu', (e) => {
   const t = e.target;
   if (t.closest('input, textarea, select, #menu')) return;
   const pr = t.closest('#projects [data-s]'), file = t.closest('#tree li.file'), dir = t.closest('#tree span[data-p]');
-  const card = t.closest('#review .card[data-id]'), work = t.closest('#stacks [data-id]');
+  const card = t.closest('#review .card[data-id]'), work = t.closest('#stacks [data-id]'), passage = t.closest('#texts [data-passage]');
   const items = pr ? projectMenu(pr.dataset.s) : file ? fileMenu(file.dataset.file) : dir ? folderMenu(dir.dataset.p)
-    : card ? cardMenu(card) : work ? workMenu(work.dataset.id) : null;
+    : card ? cardMenu(card) : work ? workMenu(work.dataset.id) : passage ? passageMenu(passage.dataset.passage) : null;
   if (items) openMenu(e, items);
 });
 // every project but `except`, under section headings as in the Projects column
@@ -1033,6 +1096,7 @@ function workMenu(id) {
     { label: t.removed ? 'Restore' : 'Remove from project', run: op({ op: 'remove' }) },
     { label: 'Move to project', sub: projectPicks(p => moveWorks([id], p.slug), project) },
     '-',
+    { label: 'Extract text', title: 'Read the words in this picture into the Text column', run: () => extractWork(id) },
     isWeb(k.thumb) ? { label: 'Open original in browser', run: () => opener({ path: k.thumb }) } : { label: 'Show original in Finder', run: () => opener({ path: k.thumb, reveal: true }) },
   ];
 }
