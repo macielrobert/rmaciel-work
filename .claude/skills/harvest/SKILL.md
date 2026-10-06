@@ -28,7 +28,15 @@ The launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 2. Picks a folder in the tree and clicks **Crawl this folder**.
 3. For each project: accepts or rejects cards. Text is editable; images need alt
    text; text cards choose a target (description / detail lines / share).
-4. Clicks **Write to project**, then **Publish** (top right). Publish runs
+4. In **Organize**, clicks **Write to project → Publish** (top right; both
+   show only on Organize — Collect finds and sorts, it no longer writes).
+   Write is ONE button for three writes, in this order: Project details if the
+   panel holds edits (build-checked), the works (second click if pictures come
+   off the site; every kept work needs alt text or it stops there), then
+   accepted text not placed elsewhere (`/api/write`). Each step is
+   all-or-nothing; a failure stops the rest and the line says what was
+   written first. The panel and Collect have no save buttons of their own
+   (2026-10-06). Publish runs
    build.js, commits ONLY content/ and images/ as "Harvest: <slugs>", pulls with
    rebase, pushes to main. On a clash it undoes its commit and says "ask Claude
    to publish" — that is the case below.
@@ -78,7 +86,7 @@ Never test against Robert's real state or repo content without reverting:
 - Run with a scratch home: `HOME="$TMPDIR/hv" HARVEST_NO_OPEN=1 node tools/harvest.js`.
   The state folder then lives under that fake home.
 - `/api/*` POSTs need `Origin: http://127.0.0.1:<port>` or they get 403.
-- Accepting a working title, **Write** and Organize's **Save** write into
+- Accepting a working title, and **Write to project**, write into
   `content/projects/`. Afterwards `git checkout` ONLY the files your test
   changed — never all of `content/`: Robert's unpublished work lives there —
   and delete any new `images/<slug>/images/<n>/` you created.
@@ -165,7 +173,8 @@ as #N?". Measured on BUS STOP: crops 0.21-0.26 (70 %), corner crop 0.50,
 different renders of one project 0.40-0.57 — hence the maybe band. Save rewrites
 the project's `images` to the kept copies in order and DELETES the files of
 site pictures it drops (build.js ships all of images/), after a second click.
-Collect's Write now writes text only; pictures go through Organize.
+Since 2026-10-06 the works save, the text write and the Project details save
+are one button, Write to project, on Organize's header.
 
 Added 2026-10-04: **Grid** view (S/M/L cells) showing each work's kept copy;
 click tiles to tick, double-click opens it in List, drag a tile onto another's left or right half to reorder (the `move` op). Ticked works can be
@@ -209,7 +218,7 @@ works. Click (or right-click) one for where it goes: a Project details field
 description, title, client, working titles; one-line fields are replaced, the
 rest appended), filled in the panel for ITS Save to check and write; or a
 work's caption / alt text, then click the work. Target becomes `caption` (a
-work) or `organize` (a field), both of which Collect's Write skips; `used`
+work) or `organize` (a field), both of which the text write skips; `used`
 records where, and the passage stays, dimmed. A work's right-click ›
 **Extract text** (`/api/extract`) reads its kept copy with the Vision helper's
 `--image` mode (a website picture at 2500w, into `downloads/` as Write does)

@@ -1381,7 +1381,7 @@ async function organize(slug) {
 /* EXTRACT TEXT — Organize's right-click on a work: the words in its kept copy,
    read by the same Vision helper as a PDF page with no text layer, arrive in
    the Text column as a passage of their own — accepted, and LEFT TO ORGANIZE,
-   so Collect's Write does not put raw recognition into the description before
+   so Write does not put raw recognition into the description before
    Robert has placed it. Reading the same picture again finds the same passage
    (a card is keyed by its text), brought back if it was rejected. A website
    picture is read at full size, from the download Write makes anyway. */
@@ -1610,9 +1610,10 @@ async function write(slug) {
   // are stacked and one is kept; writing them here as well would put every
   // copy on the site.
   // A passage used as a work's caption (Organize) is not ALSO the description:
-  // it stays accepted, and Organize's Save is what puts it on the site. One
+  // it stays accepted, and the works' save is what puts it on the site. One
   // LEFT TO ORGANIZE (`organize`: read out of a picture, or placed from the
-  // Text column into Project details) is that panel's Save's to write.
+  // Text column into Project details) is that panel's to write. All three are
+  // one button on Organize, Write to project, which runs this last.
   const acc = Object.values(state.findings).filter(f => f.project === slug && f.status === 'accepted' && f.kind === 'text' && !['caption', 'organize'].includes(f.target));
   data.details = data.details || [];
   const paras = [];

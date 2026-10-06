@@ -11,6 +11,10 @@
   <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
   <span class="dim" id="status"></span>
   <button class="btn" id="stop" hidden>Stop</button>
+  <!-- THE STEPS TO SHIP, in order, on Organize: Collect finds and roughly
+       sorts; Organize is where a project is planned, so writing happens there
+       (Robert, 2026-10-06). Collect has no Write of its own any more. -->
+  <span id="steps" hidden><button class="btn" id="orgwrite" disabled title="Project details, the works in this order, and the accepted text, written into the project file. Not live until Publish.">Write to project</button> <span class="dim">→</span></span>
   <button class="btn" id="publish" disabled>Publish</button>
 </header>
 <main>
@@ -51,7 +55,7 @@
       <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
       <div id="pending"></div></div>
     <div class="seam" data-fr="1"></div>
-    <div class="col" data-w="accepted"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
+    <div class="col" data-w="accepted"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><div id="msg"></div></div><div id="accepted"></div></div>
     <div class="seam" data-fr="1"></div>
     <div class="col rejected" data-w="rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
   </section>
@@ -59,13 +63,12 @@
     <div class="orghead">
       <span id="orgtitle" class="cap">Pick a project</span>
       <span class="dim" id="orgcount"></span>
-      <button class="btn" id="orgshowrm" hidden title="Removed works wait here until Save to project takes them off the site. Show them to Restore one.">Show removed</button>
+      <button class="btn" id="orgshowrm" hidden title="Removed works wait here until Write to project takes them off the site. Show them to Restore one.">Show removed</button>
       <span id="orgviews"><button class="btn" data-ov="list">List</button> <button class="btn" data-ov="grid">Grid</button> <span id="orgsizes"><button class="btn" data-cell="100">S</button> <button class="btn" data-cell="170">M</button> <button class="btn" data-cell="280">L</button></span></span>
       <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
-      <button class="btn" id="orgremove" disabled title="Take the ticked works off this project. Save is what takes them off the site; Restore brings them back before then.">Remove from project</button>
+      <button class="btn" id="orgremove" disabled title="Take the ticked works off this project. Write to project is what takes them off the site; Restore brings them back before then.">Remove from project</button>
       <button class="btn" id="orgsplit" disabled title="Undo a grouping: every copy in the ticked works becomes a work of its own">Separate copies</button>
       <button class="btn" id="orgmove" disabled title="Move the ticked works, with all their copies, to another project. Or drag them onto a project's name.">Move to project</button>
-      <button class="btn" id="orgsave" disabled>Save to project</button>
       <button class="btn" id="textstoggle" title="The project's accepted text, to place in a project field or on a work">Text</button>
       <button class="btn" id="projtoggle" title="Every other field of this project: section, icon, description…">Project details</button>
       <span class="dim" id="orgmsg"></span>
@@ -100,7 +103,7 @@
         <div id="mdbar"><button class="btn" data-md="bold"><b>B</b></button><button class="btn" data-md="italic"><i>I</i></button><button class="btn" data-md="underline"><u>U</u></button><button class="btn" data-md="strike"><s>S</s></button><button class="btn" data-md="light">Lighter</button><button class="btn" data-md="small">Smaller</button><button class="btn" data-md="large">Larger</button><button class="btn" data-md="link">Link</button><button class="btn" data-md="list">• List</button><button class="btn" data-md="numbered">1. List</button><button class="btn" data-md="quote">Quote</button><button class="btn" data-md="divider">Divider</button></div>
         <div class="pdesc"><textarea id="pbody" placeholder="Select words, then a button above. The preview on the right is how the site will set it."></textarea><div id="ppreview"></div></div>
       </div>
-      <div class="pfoot"><button class="btn" id="psave">Save project</button><span class="dim" id="pmsg"></span></div>
+      <div class="pfoot"><span class="dim" id="pmsg"></span></div>
     </div>
     <div id="stacks"></div>
     </div><div class="seam"></div><aside id="texts" data-w="texts" hidden></aside></div>

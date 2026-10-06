@@ -30,6 +30,7 @@
   /* a long crawl path gives way, not Publish: it shortens with an ellipsis */
   #rootline { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #publish[disabled] { opacity:.35; }
+  #steps { white-space:nowrap; }
   /* instant feedback: a hairline runs along the top while anything is saving */
   body.busy::before { content:''; position:fixed; top:0; left:0; height:2px; width:30%; background:var(--ink); animation:busy 1s linear infinite; z-index:9; }
   @keyframes busy { from { transform:translateX(-100%); } to { transform:translateX(400%); } }
@@ -191,7 +192,6 @@
   #ptype .btn.on { color:var(--ink); }
   option { background:var(--bg); }
   ::placeholder { color:var(--accent-dim); }
-  #write { margin:0 0 12px; }
   #msg { color:var(--ink); }
   /* project panel */
   #proj { padding:var(--m); border-bottom:1px solid var(--accent-dim); }

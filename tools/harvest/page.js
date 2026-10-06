@@ -236,7 +236,6 @@ function drawFindings() {
     if (all) all.checked = list.length > 0 && list.every(f => picked.has(f.id));
     $('n-' + col).textContent = list.length === every.length ? (list.length || '') : list.length + ' of ' + every.length;
   }
-  $('write').disabled = !findings.some(f => f.status === 'accepted' && f.kind === 'text' && !['caption', 'organize'].includes(f.target));
   for (const id of [...picked]) if (!findings.some(f => f.id === id)) picked.delete(id);
   bulkBar();
 }
@@ -408,6 +407,7 @@ $('tabs').addEventListener('click', (e) => {
   document.querySelectorAll('#tabs .btn').forEach(x => x.classList.toggle('on', x === b));
   document.querySelector('main').classList.toggle('organize', view === 'organize');
   document.querySelector('[data-pane=folders]').hidden = view === 'organize';   // Organize has no Folders column to show
+  $('steps').hidden = view !== 'organize';   // writing is Organize's step, not Collect's
   if (view === 'organize') loadOrg(); else if (project) loadFindings();
 });
 const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
@@ -443,7 +443,7 @@ $('orgviews').addEventListener('click', (e) => {
   if (org) drawOrg(); else orgLook();
 });
 async function loadOrg() {
-  if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; return; }
+  if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; $('orgwrite').disabled = true; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
   loadProj(); loadTexts();
   $('orgmsg').textContent = 'Grouping copies…'; busy(1);
@@ -455,7 +455,7 @@ function drawOrg() {
   const live = org.stacks.filter(t => !t.removed);
   const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
   $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
-  $('orgsave').disabled = !org.stacks.length;
+  $('orgwrite').disabled = false;   // with no works there may still be details or text to write
   const gone = org.stacks.length - live.length, shown = showRemoved ? org.stacks : live;
   $('orgshowrm').hidden = !gone;
   $('orgshowrm').textContent = showRemoved ? 'Hide removed' : 'Show ' + gone + ' removed';
@@ -489,7 +489,7 @@ function drawOrg() {
       (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
       (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
       '</div></div>';
-  }).join('') : '<p class="dim">' + (gone ? 'Every work here is removed. Save to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
+  }).join('') : '<p class="dim">' + (gone ? 'Every work here is removed. Write to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
 }
 async function orgOp(body, redraw = true) {
   busy(1);
@@ -591,7 +591,7 @@ $('orgremove').addEventListener('click', async () => {
   opick.clear();
   for (const t of ticked) await orgOp({ op: 'remove', stack: t.id, value }, false);
   await loadOrg();
-  $('orgmsg').textContent = (value ? 'Removed ' : 'Restored ') + ticked.length + ' work' + (ticked.length === 1 ? '' : 's') + (value ? '. Save to project takes them off the site; Show removed, then Restore, brings them back before then.' : '.');
+  $('orgmsg').textContent = (value ? 'Removed ' : 'Restored ') + ticked.length + ' work' + (ticked.length === 1 ? '' : 's') + (value ? '. Write to project takes them off the site; Show removed, then Restore, brings them back before then.' : '.');
 });
 $('orgshowrm').addEventListener('click', () => { remember('orgShowRemoved', (showRemoved = !showRemoved) ? '1' : '0'); drawOrg(); });
 // the opposite of merge: each ticked work's copies go back to being works of their own
@@ -628,28 +628,73 @@ async function moveWorks(ids, to) {
   ids.forEach(i => opick.delete(i));
   for (const stack of ids) await orgOp({ op: 'moveto', stack, to }, false);
   await loadOrg();
-  $('orgmsg').textContent = 'Moved ' + ids.length + ' work' + (ids.length === 1 ? '' : 's') + ' to ' + title + '. Any already on this site are marked removed — Save takes them off.';
+  $('orgmsg').textContent = 'Moved ' + ids.length + ' work' + (ids.length === 1 ? '' : 's') + ' to ' + title + '. Any already on this site are marked removed — Write to project takes them off.';
 }
-$('orgsave').addEventListener('click', async () => {
-  // fields still waiting on their pause are sent first
+/* WRITE TO PROJECT — the one step between Organize and Publish. Collect
+   finds and roughly sorts; Organize is where a project is planned, so this is
+   where it is written (Robert, 2026-10-06). It was three buttons in two
+   places — Collect's Write (text), Organize's Save (works), Project details'
+   Save — and NOISE sat accepted and unwritten because two of them were never
+   pressed. One button now, three writes, in an order that matters:
+     1. Project details, if the panel holds edits. Step 3 appends to the
+        description, and the panel saved AFTER it would put its older copy back.
+     2. The works. Before the text because it may stop for a second click
+        (pictures coming off the site), and nothing more is written until then.
+     3. Accepted text placed nowhere else: description paragraphs, detail
+        lines, share description, as each card says.
+   Each is all-or-nothing on its own; a failure stops the rest, and the line
+   says what was written before it. */
+async function saveDetails() {
+  if (!pd) return false;
+  // Only the fields changed here are sent; the server leaves the rest as the
+  // file has them — which may be newer than this form (an edit from the phone).
+  const now = formValues(), data = {};
+  for (const k in now) if (JSON.stringify(now[k]) !== JSON.stringify(pd.shown[k])) data[k] = now[k];
+  const body = $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
+  if (!Object.keys(data).length && body === undefined) return false;
+  $('orgmsg').textContent = 'Saving project details — checking the site still builds…';
+  const r = await api('/api/project', { project: pd.slug, data, body });
+  pdDirty = false;
+  return !r.unchanged;
+}
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+$('orgwrite').addEventListener('click', async () => {
+  // fields still waiting on their pause are sent first: a work's, and a card edited in Collect
   for (const el of document.querySelectorAll('#stacks [data-f]')) if (el._t) { clearTimeout(el._t); el._t = null; await orgOp({ op: 'field', stack: el.closest('.stack').dataset.id, field: el.dataset.f, value: el.value }, false); }
-  const confirm = $('orgsave').dataset.armed === project;
+  await save();
+  const b = $('orgwrite'), confirm = b.dataset.armed === project, done = [];
+  let msg = '';
   busy(1);
   try {
-    const d = await api('/api/organize/save', { project, confirm });
-    if (d.confirm) {
-      $('orgsave').dataset.armed = project;
-      $('orgsave').textContent = 'Takes ' + d.confirm + ' picture' + (d.confirm === 1 ? '' : 's') + ' off the site — click again';
-      clearTimeout(orgsave.t); orgsave.t = setTimeout(() => { delete $('orgsave').dataset.armed; $('orgsave').textContent = 'Save to project'; }, 8000);
-      return;
+    if (await saveDetails()) done.push('project details');
+    if (org && org.stacks.length) {
+      const d = await api('/api/organize/save', { project, confirm });
+      if (d.confirm) {
+        b.dataset.armed = project;
+        b.textContent = 'Takes ' + plural(d.confirm, 'picture', 'pictures') + ' off the site — click again';
+        clearTimeout(orgWrite.t); orgWrite.t = setTimeout(() => { delete b.dataset.armed; b.textContent = 'Write to project'; }, 8000);
+        if (done.length) msg = 'Wrote ' + done.join(', ') + '.';
+        return;
+      }
+      done.push(plural(d.saved, 'work', 'works') + (d.dropped ? ' (took ' + d.dropped + ' off)' : ''));
     }
-    delete $('orgsave').dataset.armed; $('orgsave').textContent = 'Save to project';
-    await loadOrg(); poll();   // first: reloading clears the message line
-    $('orgmsg').textContent = 'Saved ' + d.saved + ' work' + (d.saved === 1 ? '' : 's') + (d.dropped ? ', took ' + d.dropped + ' off' : '') + '. Not live yet — Publish (top right) when ready.';
-  } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
-  finally { busy(-1); }
+    const w = await api('/api/write', { project });
+    if (w.written) done.push(plural(w.written, 'passage', 'passages'));
+    delete b.dataset.armed; b.textContent = 'Write to project';
+    msg = 'Wrote ' + (done.join(', ') || 'nothing new') + '. Not live yet — Publish (top right) when ready.';
+  } catch (e) { msg = (done.length ? 'Wrote ' + done.join(', ') + ', then stopped: ' : '') + '⚠ ' + e.message; }
+  finally {
+    // Reload what was written, the panel included: one still showing the
+    // description from before step 3 would write it back over the new text.
+    // Not a panel whose own save failed — its edits are still only on screen.
+    await poll();
+    if (!pdDirty) pd = null;
+    await loadOrg();   // first: reloading clears the message line
+    $('orgmsg').textContent = msg;
+    busy(-1);
+  }
 });
-const orgsave = {};
+const orgWrite = {};
 
 /* ---- publish, new project */
 $('publish').addEventListener('click', async () => {
@@ -684,24 +729,16 @@ $('newtitle').addEventListener('input', newLabel);
 $('newsection').addEventListener('change', newLabel);
 $('newtitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProject(); });
 $('newgo').addEventListener('click', createProject);
-$('write').addEventListener('click', async () => {
-  try {
-    await save();
-    const d = await api('/api/write', { project });
-    $('msg').textContent = d.written + ' written into the project. Not live yet — Publish (top right) when ready.';
-    loadFindings();
-  } catch (e) { $('msg').textContent = '⚠ ' + e.message; }
-});
 
 /* ---- TEXT → ANY FIELD: the project's accepted passages beside the works.
    Click one (or right-click) and say where it goes. A project field is filled
-   in Project details, opened if shut, and that panel's Save checks and writes
+   in Project details, opened if shut, and Write to project checks and writes
    it — so it can be read and tidied first, and nothing reaches the file
    behind the panel's back. A work's caption or alt text: pick it, then click
    the work. Either way the text is ADDED (a one-line field — title, client,
    share description — is replaced, as Write does), and the passage is marked
    with where it went: `caption` for a work, `organize` for a project field,
-   both of which Collect's Write skips. It stays in the column, dimmed, so it
+   both of which Write skips. It stays in the column, dimmed, so it
    can be placed again. Text read out of a picture (a work's right-click ›
    Extract text) arrives here already `organize`, waiting to be placed. */
 let textsOpen = remember('textsOpen') === '1', armed = null, armField = 'caption', otexts = [];
@@ -753,12 +790,12 @@ function arm(id, field) {
   armed = id; armField = field; document.body.classList.add('arming'); drawTexts();
   $('orgmsg').textContent = 'Now click the work this is the ' + (field === 'alt' ? 'alt text' : 'caption') + ' of — Esc to cancel.';
 }
-// where a passage went, so Collect's Write leaves it and the column says so
+// where a passage went, so Write leaves it and the column says so
 async function mark(f, target, used) {
   try { await api('/api/finding', { id: f.id, target, used }); Object.assign(f, { target, used }); } catch (e) { $('orgmsg').textContent = '⚠ ' + e.message; }
   drawTexts();
 }
-// as harvest.js's mdEscape, which Collect's Write uses: the passage is text, not Markdoc marks
+// as harvest.js's mdEscape, which Write uses: the passage is text, not Markdoc marks
 const mdEscape = (t) => t.replace(/([\\`*_{}\[\]<>|])/g, '\\$1').replace(/^(\s*)([#>+-])/gm, '$1\\$2').replace(/^(\s*\d+)\./gm, '$1\\.');
 async function place(id, k) {
   const f = otexts.find(x => x.id === id); if (!f) return;
@@ -773,7 +810,7 @@ async function place(id, k) {
   el.dispatchEvent(new Event('input', { bubbles: true }));   // marks the panel unsaved; the description's preview follows
   el.scrollIntoView({ block: 'nearest' });
   await mark(f, 'organize', PLACES[k].toLowerCase());
-  $('orgmsg').textContent = 'Put in ' + PLACES[k].toLowerCase() + ' — Save in Project details when ready.';
+  $('orgmsg').textContent = 'Put in ' + PLACES[k].toLowerCase() + ' — Write to project when ready.';
 }
 async function rejectPassage(id) {
   try { await api('/api/finding', { id, status: 'rejected' }); otexts = otexts.filter(x => x.id !== id); drawTexts(); }
@@ -792,7 +829,7 @@ async function attach(stack) {
   await orgOp({ op: 'field', stack, field, value: cur ? cur + (field === 'alt' ? ' ' : '\n') + text : text });
   const what = (field === 'alt' ? 'alt text' : 'caption') + ' of work ' + t.n;
   await mark(f, 'caption', what);
-  $('orgmsg').textContent = 'Added to the ' + what + '. Save to project when ready.';
+  $('orgmsg').textContent = 'Added to the ' + what + '. Write to project when ready.';
 }
 // a work's right-click: the words in its kept copy become a passage here
 async function extractWork(id) {
@@ -912,27 +949,8 @@ function markup(kind) {
 }
 async function showDesc() {
   try { const d = await api('/api/preview', { body: $('pbody').value }); $('ppreview').innerHTML = d.error ? '<span class="dim">' + esc(d.error) + '</span>' : d.html; }
-  catch { /* a preview is a convenience; Save is what checks */ }
+  catch { /* a preview is a convenience; Write to project is what checks */ }
 }
-$('psave').addEventListener('click', async () => {
-  if (!pd) return;
-  // Only the fields changed here are sent; the server leaves the rest as the
-  // file has them — which may be newer than this form (an edit from the phone).
-  const now = formValues(), data = {};
-  for (const k in now) if (JSON.stringify(now[k]) !== JSON.stringify(pd.shown[k])) data[k] = now[k];
-  const body = $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
-  if (!Object.keys(data).length && body === undefined) { $('pmsg').textContent = 'Nothing changed.'; return; }
-  $('pmsg').textContent = 'Saving — checking the site still builds…'; busy(1);
-  try {
-    const r = await api('/api/project', { project: pd.slug, data, body });
-    const slug = pd.slug; pd = null; pdDirty = false;
-    await poll();
-    await loadProj();   // whichever project is selected now: the one just saved, or the one switched to while it held unsaved edits
-    if (project) $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
-    $('pmsg').textContent = r.unchanged ? 'Nothing changed.' : 'Saved. Not live yet — Publish (top right) when ready.';
-  } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
-  finally { busy(-1); }
-});
 
 /* ---- RIGHT-CLICK MENU — on a project, a folder or file in the tree, a card,
    or a work. Mostly the buttons already on the thing, gathered where the
