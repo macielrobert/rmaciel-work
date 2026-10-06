@@ -35,12 +35,7 @@ $('tree').addEventListener('click', async (e) => {
     const pr = S.projects.find(p => p.slug === project);
     if (!pr) return say('Pick a project first, then Add.');
     const b = e.target.closest('.btn');
-    try {
-      const d = await api('/api/addfile', { project, path: fl.dataset.file, indesign: $('indesign').checked });
-      b.textContent = 'Added'; b.disabled = true;
-      say(d.kind === 'image' ? 'Added to ' + pr.title + ' — accepted; it is in Organize.' : 'Reading it for ' + pr.title + ' — its passages arrive in Pending.');
-      poll();
-    } catch (err) { oops(err); }
+    if (await addFile(pr, fl.dataset.file)) { b.textContent = 'Added'; b.disabled = true; }
     return;
   }
   const s = e.target.closest('span'); if (!s) return;
@@ -51,8 +46,19 @@ $('tree').addEventListener('click', async (e) => {
   else { s.querySelector('i').textContent = '⌄'; await branch(li, folder); }
 });
 
+// one file into a project: the tree's Add button, and the right-click menu's Add to project
+async function addFile(pr, file) {
+  try {
+    const d = await api('/api/addfile', { project: pr.slug, path: file, indesign: $('indesign').checked });
+    say(d.kind === 'image' ? 'Added to ' + pr.title + ' — accepted; it is in Organize.' : 'Reading it for ' + pr.title + ' — its passages arrive in Pending.');
+    poll();
+    return true;
+  } catch (err) { oops(err); }
+}
+
 /* ---- projects */
 function drawProjects() {
+  if ($('projects').querySelector('.rename')) return;   // not under a rename being typed; it redraws when that ends
   let last = null, h = '';
   for (const p of S.projects) {
     if (p.section !== last) { h += '<div class="sec cap">' + esc(p.section) + '</div>'; last = p.section; }
@@ -61,7 +67,7 @@ function drawProjects() {
   $('projects').innerHTML = h;
 }
 $('projects').addEventListener('click', (e) => {
-  const d = e.target.closest('[data-s]'); if (!d) return;
+  const d = e.target.closest('[data-s]'); if (!d || e.target.closest('.rename')) return;
   save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; $('msg').textContent = '';
   shown.pending = shown.accepted = shown.rejected = 100;
@@ -330,13 +336,14 @@ $('review').addEventListener('change', (e) => {
   if (t.classList.contains('pick')) { const id = t.closest('.card').dataset.id; t.checked ? picked.add(id) : picked.delete(id); bulkBar(); }
   if (t.dataset.all) { for (const c of $(t.dataset.all).querySelectorAll('.card')) { t.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); c.querySelector('.pick') && (c.querySelector('.pick').checked = t.checked); } bulkBar(); }
 });
-async function bulk(body) {
-  const ids = [...picked], n = ids.length;
+// the ticked cards, or one card (the right-click menu's Move to project)
+async function bulk(body, ids = [...picked]) {
+  const n = ids.length, these = new Set(ids);
   const to = body.project && S.projects.find(p => p.slug === body.project);
   // shown at once: moved cards leave this project, decided ones change column
-  for (const f of findings) if (picked.has(f.id)) { if (to) f.status = 'moving'; else f.status = body.status; }
+  for (const f of findings) if (these.has(f.id)) { if (to) f.status = 'moving'; else f.status = body.status; }
   if (to) findings = findings.filter(f => f.status !== 'moving');
-  picked.clear(); drawFindings();
+  ids.forEach(i => picked.delete(i)); drawFindings();
   say((to ? 'Moving ' + n + ' to ' + to.title : (body.status === 'accepted' ? 'Accepting ' : 'Rejecting ') + n) + '…');
   busy(1);
   try {
@@ -563,14 +570,18 @@ $('orgsplit').addEventListener('click', async () => {
   await loadOrg();
   $('orgmsg').textContent = 'Separated ' + n + ' cop' + (n === 1 ? 'y' : 'ies') + ' into works of their own.';
 });
-$('orgmove').addEventListener('change', async (e) => {
-  const to = e.target.value; e.target.value = ''; if (!to) return;
-  const ids = org.stacks.filter(t => opick.has(t.id)).map(t => t.id), title = S.projects.find(p => p.slug === to).title;
-  opick.clear();
+$('orgmove').addEventListener('change', (e) => {
+  const to = e.target.value; e.target.value = '';
+  if (to) moveWorks(org.stacks.filter(t => opick.has(t.id)).map(t => t.id), to);
+});
+// the ticked works, or one work (the right-click menu's Move to project)
+async function moveWorks(ids, to) {
+  const title = S.projects.find(p => p.slug === to).title;
+  ids.forEach(i => opick.delete(i));
   for (const stack of ids) await orgOp({ op: 'moveto', stack, to }, false);
   await loadOrg();
   $('orgmsg').textContent = 'Moved ' + ids.length + ' work' + (ids.length === 1 ? '' : 's') + ' to ' + title + '. Any already on this site are marked removed — Save takes them off.';
-});
+}
 $('orgsave').addEventListener('click', async () => {
   // fields still waiting on their pause are sent first
   for (const el of document.querySelectorAll('#stacks [data-f]')) if (el._t) { clearTimeout(el._t); el._t = null; await orgOp({ op: 'field', stack: el.closest('.stack').dataset.id, field: el.dataset.f, value: el.value }, false); }
@@ -811,6 +822,193 @@ $('psave').addEventListener('click', async () => {
   } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
   finally { busy(-1); }
 });
+
+/* ---- RIGHT-CLICK MENU — on a project, a folder or file in the tree, a card,
+   or a work. Mostly the buttons already on the thing, gathered where the
+   pointer is; what is new is Rename, Move to section, Hold back, View on
+   live site, Show in Finder / Open, Move to top / bottom, and Add or Crawl
+   for any project rather than only the selected one. In a text field the
+   Mac's own menu stays (copy, paste, spelling). An item is { label, run },
+   { label, sub: [items] }, { head } for a heading, or '-' for a rule. */
+const isWeb = (p) => /^https?:/.test(p);
+const opener = (b) => api('/api/open', b).catch(oops);
+function closeMenu() { $('menu').hidden = true; $('menu').innerHTML = ''; }
+function menuList(items) {
+  const box = document.createElement('div'); box.className = 'mlist';
+  for (const it of items) {
+    if (it === '-') { box.appendChild(document.createElement('hr')); continue; }
+    if (it.head) { const h = document.createElement('div'); h.className = 'mh'; h.textContent = it.head; box.appendChild(h); continue; }
+    const b = document.createElement('button');
+    b.className = 'btn mi'; b.textContent = it.label; b.disabled = !!it.off;
+    if (it.title) b.title = it.title;
+    if (it.sub) {
+      const w = document.createElement('div'), sub = menuList(it.sub);
+      w.className = 'mwrap'; b.classList.add('opens'); sub.classList.add('sub');
+      b.addEventListener('click', () => { openSub(b); sub.querySelector('.mi')?.focus(); });
+      w.append(b, sub); box.appendChild(w);
+    } else {
+      b.addEventListener('click', () => { closeMenu(); it.run(); });
+      box.appendChild(b);
+    }
+  }
+  return box;
+}
+// a submenu beside its item, on whichever side has room, kept inside the window
+function openSub(b) {
+  const w = b.parentElement, sub = b.nextElementSibling;
+  for (const o of w.parentElement.querySelectorAll(':scope > .mwrap.open')) if (o !== w) o.classList.remove('open');
+  if (w.classList.contains('open')) return;
+  w.classList.add('open');
+  const r = b.getBoundingClientRect();
+  sub.style.left = (r.right + sub.offsetWidth < innerWidth ? r.right : Math.max(0, r.left - sub.offsetWidth)) + 'px';
+  sub.style.top = Math.max(8, Math.min(r.top - 7, innerHeight - sub.offsetHeight - 8)) + 'px';
+}
+function openMenu(e, items) {
+  e.preventDefault();
+  const m = $('menu');
+  m.innerHTML = ''; m.appendChild(menuList(items)); m.hidden = false;
+  m.style.left = (e.clientX + m.offsetWidth < innerWidth ? e.clientX : Math.max(0, e.clientX - m.offsetWidth)) + 'px';
+  m.style.top = Math.max(8, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + 'px';
+}
+$('menu').addEventListener('mouseover', (e) => {
+  const b = e.target.closest('.mi'); if (!b) return;
+  if (b.classList.contains('opens')) openSub(b);
+  else for (const o of b.parentElement.querySelectorAll(':scope > .mwrap.open')) o.classList.remove('open');
+});
+document.addEventListener('mousedown', (e) => { if (!$('menu').hidden && !e.target.closest('#menu')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('menu').hidden) closeMenu(); });
+addEventListener('blur', closeMenu);
+addEventListener('resize', closeMenu);
+// a column scrolling moves what the menu is about out from under it; the menu's own lists scroll too, and stay
+document.addEventListener('scroll', (e) => { if (!e.target.closest?.('#menu')) closeMenu(); }, true);
+document.addEventListener('contextmenu', (e) => {
+  closeMenu();
+  const t = e.target;
+  if (t.closest('input, textarea, select, #menu')) return;
+  const pr = t.closest('#projects [data-s]'), file = t.closest('#tree li.file'), dir = t.closest('#tree span[data-p]');
+  const card = t.closest('#review .card[data-id]'), work = t.closest('#stacks [data-id]');
+  const items = pr ? projectMenu(pr.dataset.s) : file ? fileMenu(file.dataset.file) : dir ? folderMenu(dir.dataset.p)
+    : card ? cardMenu(card) : work ? workMenu(work.dataset.id) : null;
+  if (items) openMenu(e, items);
+});
+// every project but `except`, under section headings as in the Projects column
+function projectPicks(go, except) {
+  const out = []; let last = null;
+  for (const p of S.projects) {
+    if (p.slug === except) continue;
+    if (p.section !== last) { out.push({ head: p.section }); last = p.section; }
+    out.push({ label: p.title + (p.draft ? ' · draft' : ''), run: () => go(p) });
+  }
+  return out;
+}
+const showOpen = (p, open) => [
+  { label: 'Show in Finder', off: isWeb(p), run: () => opener({ path: p, reveal: true }) },
+  open || { label: isWeb(p) ? 'Open in browser' : 'Open', run: () => opener({ path: p }) },
+];
+
+// PROJECT. Rename, section and hold-back save through the same check as
+// Project details (build.js run first), and say in the status line how it went.
+function projectMenu(slug) {
+  const p = S.projects.find(x => x.slug === slug);
+  const pick = () => { if (project !== slug) document.querySelector('#projects [data-s="' + slug + '"]').click(); };
+  const organize = () => { pick(); if (view !== 'organize') document.querySelector('[data-view=organize]').click(); };
+  return [
+    { label: 'Rename…', run: () => renameProject(slug) },
+    { label: 'Move to section', sub: ['build', 'design', 'art'].map(k => ({ label: k.toUpperCase(), off: k === p.section, run: () => setProject(slug, { section: k }, 'Moved ' + p.title + ' to ' + k.toUpperCase()) })) },
+    p.draft ? { label: 'Stop holding back', run: () => setProject(slug, { draft: false }, p.title + ' will go on the site') }
+            : { label: 'Hold back (do not publish)', run: () => setProject(slug, { draft: true }, p.title + ' is held back') },
+    '-',
+    { label: 'Add working title…', run: () => { pick(); $('nick').focus(); } },
+    { label: 'Open in Organize', run: organize },
+    { label: 'Project details', run: () => { organize(); if (!projOpen) $('projtoggle').click(); } },
+    '-',
+    { label: 'View on live site', off: p.draft, title: p.draft ? 'Held back: it is not on the site' : '', run: () => opener({ project: slug }) },
+  ];
+}
+async function setProject(slug, data, done) {
+  say('Saving — checking the site still builds…'); busy(1);
+  try {
+    const r = await api('/api/project', { project: slug, data });
+    if (pd && pd.slug === slug && !pdDirty) { pd = null; loadProj(); }   // the panel, if it shows this project and holds no edits of its own
+    await poll();
+    if (project === slug) $('orgtitle').textContent = S.projects.find(x => x.slug === slug).title;
+    say(r.unchanged ? 'Nothing changed.' : done + '. Not live yet — Publish (top right) when ready.');
+  } catch (e) { oops(e); }
+  finally { busy(-1); }
+}
+// in place, as in Finder: Return or clicking away keeps it, Escape does not.
+// The title only — the address (#section/slug) is permanent.
+function renameProject(slug) {
+  const p = S.projects.find(x => x.slug === slug), span = document.querySelector('#projects [data-s="' + slug + '"] > span');
+  const box = document.createElement('input');
+  box.className = 'rename'; box.value = p.title;
+  span.replaceWith(box); box.focus(); box.select();
+  let over = false;
+  const end = (keep) => {
+    if (over) return; over = true;
+    const title = box.value.trim();
+    box.remove(); drawProjects();
+    if (keep && title && title !== p.title) setProject(slug, { title }, 'Renamed to ' + title);
+  };
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') end(true); if (e.key === 'Escape') end(false); });
+  box.addEventListener('blur', () => end(true));
+}
+
+// FOLDER and FILE in the tree: for any project, not only the selected one
+function folderMenu(dir) {
+  return [
+    { label: 'Link to project', sub: projectPicks(p => linkTo(p, dir)) },
+    { label: 'Crawl for project', sub: projectPicks(p => api('/api/crawl', { root: dir, projects: [p.slug], indesign: $('indesign').checked }).then(() => { say('Crawling it for ' + p.title + '.'); poll(); }).catch(oops)) },
+    '-', ...showOpen(dir),
+  ];
+}
+async function linkTo(p, dir) {
+  try {
+    const body = { project: p.slug, path: dir, indesign: $('indesign').checked };
+    if ((await api('/api/link', body)).confirm) {
+      if (!confirm('That folder holds over 300 files. File every one of them under ' + p.title + '?\n\nTo sort them by project instead, use Crawl for project.')) return;
+      await api('/api/link', { ...body, force: true });
+    }
+    say('Linked to ' + p.title + ' — what is inside arrives in Pending.'); poll();
+  } catch (e) { oops(e); }
+}
+const fileMenu = (file) => [{ label: 'Add to project', sub: projectPicks(p => addFile(p, file)) }, '-', ...showOpen(file)];
+
+// CARD: its own buttons, then Move and Finder. Each button is found again when
+// chosen, since the column may have been redrawn while the menu was open.
+function cardMenu(el) {
+  const id = el.dataset.id, f = findings.find(x => x.id === id);
+  if (!f) return null;
+  const again = (sel) => () => document.querySelector('#review .card[data-id="' + CSS.escape(id) + '"] ' + sel)?.click();
+  const own = [...el.querySelectorAll('.acts .btn, [data-inside]')].map(b => ({ label: b.textContent,
+    run: again(b.dataset.a ? '[data-a="' + b.dataset.a + '"]' : b.dataset.reread ? '[data-reread]' : b.dataset.forget ? '[data-forget]' : '[data-inside]') }));
+  const page = f.kind === 'text' && f.unit !== undefined && /\.(pdf|ai)$/i.test(f.path) ? f.unit + 1 : 0;
+  return [
+    ...own,
+    ...(el.querySelector('.pick') ? [{ label: 'Move to project', sub: projectPicks(p => bulk({ project: p.slug }, [id]), project) }] : []),
+    '-', ...showOpen(f.path, page && { label: 'Open at page ' + page, run: () => opener({ path: f.path, page }) }),
+  ];
+}
+
+// WORK in Organize, list or grid. Show original is the kept copy.
+function workMenu(id) {
+  const t = org && org.stacks.find(x => x.id === id);
+  if (!t) return null;
+  const k = t.members.find(m => m.key === t.keeper) || t.members[0];
+  const op = (body) => () => orgOp({ stack: id, ...body });
+  return [
+    { label: 'Move to top', run: op({ op: 'move', dir: -1e6 }) },
+    { label: 'Move to bottom', run: op({ op: 'move', dir: 1e6 }) },
+    '-',
+    { label: 'Turn left', run: op({ op: 'rotate', dir: -1 }) },
+    { label: 'Turn right', run: op({ op: 'rotate', dir: 1 }) },
+    { label: 'Separate copies', off: t.members.length < 2, run: op({ op: 'unstack' }) },
+    { label: t.removed ? 'Restore' : 'Remove from project', run: op({ op: 'remove' }) },
+    { label: 'Move to project', sub: projectPicks(p => moveWorks([id], p.slug), project) },
+    '-',
+    isWeb(k.thumb) ? { label: 'Open original in browser', run: () => opener({ path: k.thumb }) } : { label: 'Show original in Finder', run: () => opener({ path: k.thumb, reveal: true }) },
+  ];
+}
 
 /* ---- COLUMNS: Folders and Projects can each be shut from the header, and
    every column line can be dragged. A side column (Folders, Projects, Text)

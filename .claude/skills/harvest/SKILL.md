@@ -130,6 +130,22 @@ line is a drag seam (`.seam`, a zero-width grid track): side columns
 proportions, so with both side columns shut they fill the window. Both are
 remembered in the page's localStorage (`pane-*`, `widths`).
 
+## Right-click menu (built 2026-10-05)
+
+`openMenu()` in page.js, on a project, a tree folder/file, a card, or a work
+(list or grid); text fields keep the Mac's own menu. Mostly the buttons
+already on the thing. New: **Rename…** (in place, title only — the slug is
+permanent; projects only, never files on disk, because Harvest remembers
+files by path), **Move to section**, **Hold back** (all three via
+`/api/project`, so build.js checks first), **View on live site** (`LIVE` in
+harvest.js — change it at DNS cutover), **Move to top/bottom** (the `move`
+op clamps), and Add/Link/Crawl for ANY project. **Show in Finder / Open** go
+through `POST /api/open` (macOS `open`; files only if pictures or readable
+documents, never an .app). A PDF text card's **Open at page N** opens
+`/pdf?p=…#page=N` in the default browser (Chrome), because Preview cannot be
+sent to a page; `/pdf` serves only PDFs a card names. Test with a stub
+`open` first on PATH, so nothing opens on Robert's screen.
+
 ## The Organize page (built 2026-10-04)
 
 A second page after Collect, one project at a time, working on WORKS not files:

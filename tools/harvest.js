@@ -1398,7 +1398,8 @@ function organizeOp(slug, b) {
     if (u && u !== t) { t.members.push(...u.members); if (!t.alt) t.alt = u.alt; if (!t.caption) t.caption = u.caption; o.stacks = o.stacks.filter(x => x !== u); }
   }
   if (b.op === 'apart') (o.apart ||= []).push([t.id, b.other]);
-  if (b.op === 'move') { const to = at + b.dir; if (to >= 0 && to < o.stacks.length) [o.stacks[at], o.stacks[to]] = [o.stacks[to], t]; }
+  // clamped, so a large step is "to the top" or "to the bottom" (the right-click menu's)
+  if (b.op === 'move') { const to = Math.max(0, Math.min(o.stacks.length - 1, at + b.dir)); o.stacks.splice(at, 1); o.stacks.splice(to, 0, t); }
   // MOVE TO PROJECT — a work filed under the wrong project goes, all its
   // copies together, as ONE work in the other: its grouping, kept copy, turn,
   // alt and caption travel with it. Accepted copies move as Collect's Move
@@ -1624,6 +1625,8 @@ setInterval(() => {
 /* ------------------------------------------------------------- server */
 
 let ORIGIN = '';
+// where the right-click menu's "View on live site" goes. Becomes https://rmaciel.work/ at the DNS cutover (PUNCH-LIST).
+const LIVE = 'https://rmaciel-work.netlify.app/';
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (code, type, data) => { res.writeHead(code, { 'content-type': type }); res.end(data); };
@@ -1676,6 +1679,16 @@ const server = http.createServer(async (req, res) => {
       // address that script could call the API — opened directly, it must not run
       res.setHeader('content-security-policy', 'sandbox; default-src \'none\'; img-src \'self\' data:; style-src \'unsafe-inline\'');
       return send(200, type, fs.readFileSync(abs));
+    }
+    // A PDF a text card came from, for the right-click menu's "Open at page N":
+    // served here so the browser's viewer can be sent to the page (#page=N),
+    // which Preview cannot be. Only files a card names — this is not a way to
+    // read any PDF on the disk. Streamed: a layout PDF runs to hundreds of MB.
+    if (p === '/pdf') {
+      const abs = path.resolve(url.searchParams.get('p') || '');
+      if (!/\.(pdf|ai)$/i.test(abs) || !fs.existsSync(abs) || !Object.values(state.findings).some(f => f.path === abs)) return send(404, 'text/plain', 'not found');
+      res.writeHead(200, { 'content-type': 'application/pdf' });
+      return fs.createReadStream(abs).pipe(res);
     }
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
@@ -1789,6 +1802,27 @@ const server = http.createServer(async (req, res) => {
       return json(f);
     }
     if (p === '/api/write') return json(await write(b.project));
+    // OPEN — the right-click menu's Show in Finder, Open and View on live site,
+    // through macOS's `open`. Never anything `open` would RUN: a file opens
+    // only if it is a picture or a document Harvest reads (an .app or a
+    // .command would launch), a folder only if it is not an app, and an
+    // address only on the web. Revealing in Finder runs nothing, so any path.
+    if (p === '/api/open') {
+      let target = String(b.path || '');
+      if (b.project) {
+        const pr = projects().find(x => x.slug === b.project);
+        if (!pr) throw new Error('That project is gone.');
+        target = LIVE + '#' + pr.section + '/' + pr.slug;
+      }
+      if (/^https?:\/\//i.test(target)) { execFile('open', [target]); return json({ ok: true }); }
+      const file = path.resolve(target), st = fs.statSync(file, { throwIfNoEntry: false });
+      if (!st) throw new Error('That is no longer where Harvest found it.');
+      if (b.reveal) execFile('open', ['-R', file]);
+      else if (b.page && /\.(pdf|ai)$/i.test(file)) execFile('open', [ORIGIN + '/pdf?p=' + encodeURIComponent(file) + '#page=' + Math.max(1, Math.round(b.page))]);
+      else if (st.isDirectory() ? !/\.app$/i.test(file) : (IMAGE_EXT.has(ext(file)) || isDoc(ext(file), true))) execFile('open', [file]);
+      else throw new Error('Harvest opens only pictures, documents and folders.');
+      return json({ ok: true });
+    }
     if (p === '/api/nickname') { addNickname(b.project, String(b.name || '').trim()); return json({ ok: true }); }
     send(404, 'text/plain', 'not found');
   } catch (e) {

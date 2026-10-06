@@ -215,3 +215,18 @@
   #ppreview a { color:inherit; }
   .pfoot { display:flex; gap:16px; align-items:baseline; margin-top:14px; }
   #pmsg { color:var(--ink); }
+
+  /* RIGHT-CLICK MENU — the site's type, not the Mac's: a panel of the same
+     buttons as everywhere else. Fixed, so a scrolled column does not carry it
+     off; a submenu is fixed too, placed beside its item by page.js. */
+  #menu, #menu .sub { position:fixed; z-index:20; background:var(--bg); border:1px solid var(--accent-dim); padding:6px 0; min-width:190px; max-height:80vh; overflow:auto; }
+  #menu .sub { display:none; }
+  #menu .mwrap.open > .sub { display:block; }
+  #menu .mi { display:block; width:100%; padding:3px 14px; white-space:nowrap; }
+  /* project names as the Projects column sets them, not shouted */
+  #menu .sub .mi { text-transform:none; letter-spacing:.05em; }
+  #menu .mi.opens::after { content:'›'; float:right; margin-left:16px; }
+  #menu .mwrap.open > .mi { color:var(--ink); }
+  #menu .mh { padding:8px 14px 2px; color:var(--accent-dim); text-transform:uppercase; letter-spacing:.15em; }
+  #menu hr { border:0; border-top:1px solid var(--accent-dim); margin:6px 0; }
+  #projects input.rename { margin:0; padding:0 0 1px; }
