@@ -38,21 +38,45 @@
   #pfilter { display:grid; gap:4px; margin:0 0 8px; }
   #pfilter input, #pfilter select { margin:0; }
   #newcards { margin-left:10px; color:var(--ink); }
-  main { display:grid; grid-template-columns:260px 220px minmax(0, 1fr); min-height:0; }
+  /* COLUMNS: a side column has a width in pixels (dragged at its seam, in
+     page.js) and the review or Organize takes the rest. Every child has a
+     fixed track, so a shut column leaves a zero-width track behind instead
+     of the next one sliding into its place and its width. */
+  main { --wf:var(--w-folders, 260px); --wp:var(--w-projects, 220px);
+         display:grid; grid-template-columns:var(--wf) 0 var(--wp) 0 minmax(0, 1fr); min-height:0; }
+  main > * { grid-row:1; }
+  #foldercol { grid-column:1; } #foldercol + .seam { grid-column:2; }
+  #projectcol { grid-column:3; } #projectcol + .seam { grid-column:4; }
+  #review, #org { grid-column:5; }
+  main.organize, main.shut-folders { --wf:0px; }
+  main.shut-projects { --wp:0px; }
+  main:is(.organize, .shut-folders) :is(#foldercol, #foldercol + .seam),
+  main.shut-projects :is(#projectcol, #projectcol + .seam) { display:none; }
+  #panes { display:flex; gap:16px; }
+  #panes .btn.on { color:var(--ink); }
+  /* a grab strip 8px wide over each column line, sitting in a zero-width
+     track so it adds no width; the line itself is still the column's border */
+  .seam { width:8px; margin:0 -4px; z-index:5; cursor:col-resize; touch-action:none; }
+  .seam:hover, .seam.drag { background:linear-gradient(var(--ink), var(--ink)) center / 1px 100% no-repeat; }
+  body.sizing, body.sizing * { cursor:col-resize !important; user-select:none; }
   main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
-  #review { border-right:0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:auto 1fr; }
+  /* the three review columns share the width as proportions, so they still
+     fill it whatever the side columns do; minmax(0, …) so a drag is obeyed
+     rather than overruled by a long word */
+  #review { border-right:0; padding:0; display:grid; grid-template-rows:auto 1fr;
+            grid-template-columns:minmax(0, var(--w-pending, 1fr)) 0 minmax(0, var(--w-accepted, 1fr)) 0 minmax(0, var(--w-rejected, 1fr)); }
   /* two pages: Collect (folders, projects, review) and Organize (projects, works) */
   #tabs { display:flex; gap:16px; }
   #tabs .btn.on { color:var(--ink); }
   #org { display:none; padding:0; border-right:0; }
-  main.organize { grid-template-columns:220px minmax(0, 1fr); }
-  main.organize > section:first-child, main.organize #review { display:none; }
+  main.organize #review { display:none; }
   /* Organize: a head, then the works (and project panel) beside the text
      list, each scrolling on its own so a passage stays in view while the
      works scroll under it */
   main.organize #org { display:flex; flex-direction:column; overflow:hidden; }
   #orgbody { flex:1; min-height:0; display:grid; grid-template-columns:1fr; }
-  #orgbody.two { grid-template-columns:1fr 300px; }
+  #orgbody.two { grid-template-columns:minmax(0, 1fr) 0 var(--w-texts, 300px); }
+  #orgbody:not(.two) > .seam { display:none; }
   #orgmain { overflow:auto; min-height:0; }
   #texts { overflow:auto; min-height:0; padding:var(--m); border-left:1px solid var(--accent-dim); }
   .tblock { border-top:1px solid var(--accent-dim); padding:8px 0 10px; cursor:pointer; color:var(--accent); white-space:pre-wrap; overflow-wrap:anywhere; }

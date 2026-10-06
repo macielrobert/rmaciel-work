@@ -121,6 +121,15 @@ see PUNCH-LIST §4.
 - Illustrator text only if saved PDF-compatible; scanned PDFs have no text.
 - Look-alike inference finds the same photo re-exported, not a crop or another shot.
 
+## Columns (built 2026-10-05)
+
+**Folders** and **Projects** in the header show/hide those columns
+independently (Folders is hidden on Organize, which has none). Every column
+line is a drag seam (`.seam`, a zero-width grid track): side columns
+(Folders, Projects, Text) are sized in px, the three review columns as
+proportions, so with both side columns shut they fill the window. Both are
+remembered in the page's localStorage (`pane-*`, `widths`).
+
 ## The Organize page (built 2026-10-04)
 
 A second page after Collect, one project at a time, working on WORKS not files:

@@ -400,6 +400,7 @@ $('tabs').addEventListener('click', (e) => {
   view = b.dataset.view;
   document.querySelectorAll('#tabs .btn').forEach(x => x.classList.toggle('on', x === b));
   document.querySelector('main').classList.toggle('organize', view === 'organize');
+  document.querySelector('[data-pane=folders]').hidden = view === 'organize';   // Organize has no Folders column to show
   if (view === 'organize') loadOrg(); else if (project) loadFindings();
 });
 const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
@@ -809,6 +810,48 @@ $('psave').addEventListener('click', async () => {
     $('pmsg').textContent = r.unchanged ? 'Nothing changed.' : 'Saved. Not live yet — Publish (top right) when ready.';
   } catch (e) { $('pmsg').textContent = '⚠ ' + e.message; }
   finally { busy(-1); }
+});
+
+/* ---- COLUMNS: Folders and Projects can each be shut from the header, and
+   every column line can be dragged. A side column (Folders, Projects, Text)
+   is sized in pixels; the three review columns share theirs as proportions,
+   so with both side columns shut they fill the window. Remembered on this
+   Mac, as List/Grid is. */
+function paneLook(k, open) {
+  document.querySelector('[data-pane=' + k + ']').classList.toggle('on', open);
+  document.querySelector('main').classList.toggle('shut-' + k, !open);
+}
+['folders', 'projects'].forEach(k => paneLook(k, remember('pane-' + k) !== '0'));
+$('panes').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pane]'); if (!b) return;
+  const open = !b.classList.contains('on');
+  paneLook(b.dataset.pane, open); remember('pane-' + b.dataset.pane, open ? '1' : '0');
+});
+let widths = {};
+try { widths = JSON.parse(remember('widths')) || {}; } catch {}
+const setWidth = (k, v) => { widths[k] = v; document.documentElement.style.setProperty('--w-' + k, v); };
+Object.entries(widths).forEach(([k, v]) => setWidth(k, v));
+document.addEventListener('pointerdown', (e) => {
+  const s = e.target.closest('.seam'); if (!s || e.button) return;
+  e.preventDefault(); s.setPointerCapture(e.pointerId);
+  s.classList.add('drag'); document.body.classList.add('sizing');
+  const a = s.previousElementSibling, b = s.nextElementSibling, x0 = e.clientX, wa = a.offsetWidth, wb = b.offsetWidth;
+  const MIN = 140, clamp = (w) => Math.min(Math.max(w, MIN), innerWidth / 2);
+  // proportions in pixels, so the column not beside this seam keeps its share.
+  // All measured before any is written: each write re-lays out the other two.
+  if (s.dataset.fr) [...document.querySelectorAll('#review > .col')].map(c => [c.dataset.w, c.offsetWidth + 'fr']).forEach(([k, v]) => setWidth(k, v));
+  const move = (ev) => {
+    const d = ev.clientX - x0;
+    if (s.dataset.fr) { const na = Math.min(Math.max(wa + d, MIN), wa + wb - MIN); setWidth(a.dataset.w, na + 'fr'); setWidth(b.dataset.w, wa + wb - na + 'fr'); }
+    else if (a.dataset.w) setWidth(a.dataset.w, clamp(wa + d) + 'px');   // the column left of the line
+    else setWidth(b.dataset.w, clamp(wb - d) + 'px');                     // Text, right of it
+  };
+  s.addEventListener('pointermove', move);
+  s.addEventListener('lostpointercapture', () => {
+    s.removeEventListener('pointermove', move);
+    s.classList.remove('drag'); document.body.classList.remove('sizing');
+    remember('widths', JSON.stringify(widths));
+  }, { once: true });
 });
 
 (async () => {

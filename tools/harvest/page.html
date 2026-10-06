@@ -5,6 +5,8 @@
 <header>
   <h1>HARVEST</h1>
   <nav id="tabs"><button class="btn on" data-view="collect">Collect</button><button class="btn" data-view="organize">Organize</button></nav>
+  <!-- show or hide a side column; the columns to its right take the room -->
+  <nav id="panes"><button class="btn on" data-pane="folders" title="Show or hide the Folders column">Folders</button><button class="btn on" data-pane="projects" title="Show or hide the Projects column">Projects</button></nav>
   <span class="dim" id="rootline"></span>
   <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
   <span class="dim" id="status"></span>
@@ -12,7 +14,7 @@
   <button class="btn" id="publish" disabled>Publish</button>
 </header>
 <main>
-  <section>
+  <section id="foldercol" data-w="folders">
     <h2 class="cap">Folders</h2>
     <!-- above the tree, not below it: a home folder lists dozens of folders,
          and underneath them the buttons were scrolled out of sight -->
@@ -25,7 +27,8 @@
     <div id="pages"></div>
     <div id="tree"></div>
   </section>
-  <section>
+  <div class="seam"></div>
+  <section id="projectcol" data-w="projects">
     <h2 class="cap">Projects</h2>
     <div id="newp">
       <input id="newtitle" placeholder="New project title">
@@ -35,6 +38,7 @@
     <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
   </section>
+  <div class="seam"></div>
   <section id="review">
     <div id="bulk">
       <span class="dim" id="n-sel">Tick cards to select</span>
@@ -43,11 +47,13 @@
       <button class="btn" id="bforget" disabled title="Delete the ticked pending or rejected cards without deciding them; a later crawl may suggest them again">Forget</button>
       <select id="moveto" disabled><option value="">Move to project…</option></select>
     </div>
-    <div class="col"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><button class="btn" id="pclear" title="Take the pending cards now showing out of the queue without rejecting them. A later crawl can suggest them again.">Clear</button><input type="checkbox" data-all="pending" title="Select all"></h2>
+    <div class="col" data-w="pending"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><button class="btn" id="pclear" title="Take the pending cards now showing out of the queue without rejecting them. A later crawl can suggest them again.">Clear</button><input type="checkbox" data-all="pending" title="Select all"></h2>
       <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
       <div id="pending"></div></div>
-    <div class="col"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
-    <div class="col rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
+    <div class="seam" data-fr="1"></div>
+    <div class="col" data-w="accepted"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><button class="btn" id="write" disabled>Write text to project</button><div id="msg"></div></div><div id="accepted"></div></div>
+    <div class="seam" data-fr="1"></div>
+    <div class="col rejected" data-w="rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
   </section>
   <section id="org">
     <div class="orghead">
@@ -96,7 +102,7 @@
       <div class="pfoot"><button class="btn" id="psave">Save project</button><span class="dim" id="pmsg"></span></div>
     </div>
     <div id="stacks"></div>
-    </div><aside id="texts" hidden></aside></div>
+    </div><div class="seam"></div><aside id="texts" data-w="texts" hidden></aside></div>
   </section>
 </main>
 <script src="/page.js"></script>
