@@ -97,7 +97,11 @@
   #stacks.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--cell, 160px), 1fr)); gap:12px; padding-top:var(--m); }
   .tile { cursor:pointer; position:relative; }
   .tile .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; outline:1px solid transparent; }
-  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
+  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); transition:transform .2s; -webkit-user-drag:none; }   /* the tile drags, not its picture */
+  .tile.dragging { opacity:.4; }
+  .tile.before::before, .tile.after::after { content:''; position:absolute; top:0; bottom:0; width:2px; background:var(--ink); }   /* where the drop lands: in the 12px gap */
+  .tile.before::before { left:-7px; }
+  .tile.after::after { right:-7px; }
   .tile.on .keep { outline-color:var(--ink); }
   .tile.removed { opacity:.35; }
   .tile .under { display:flex; gap:10px; align-items:baseline; margin-top:4px; }

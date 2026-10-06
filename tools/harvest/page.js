@@ -459,7 +459,7 @@ function drawOrg() {
   if (orgView === 'grid' && org.stacks.length) {
     $('stacks').innerHTML = org.stacks.map(t => {
       const k = t.members.find(m => m.key === t.keeper) || t.members[0];
-      return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open">' +
+      return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + '" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to tick, double-click to open, drag to reorder">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
         '<div class="under"><small>' + tileLabel(t) + '</small>' +
@@ -541,6 +541,33 @@ $('stacks').addEventListener('dblclick', (e) => {
   remember('orgView', orgView = 'list'); drawOrg();
   document.querySelector('.stack[data-id="' + tile.dataset.id + '"]')?.scrollIntoView({ block: 'start' });
 });
+// DRAG, in grid: drop on a tile's left or right half to land before or after
+// it. Sent as the arrows' own `move` op, with the step the drop works out to
+// (the server clamps and splices); the tile moves at once, the redraw confirms
+let dragId = null;
+const dropSide = (e, tile) => { const r = tile.getBoundingClientRect(); return e.clientX > r.left + r.width / 2 ? 'after' : 'before'; };
+const unmark = () => document.querySelectorAll('.tile.before, .tile.after').forEach(x => x.classList.remove('before', 'after'));
+$('stacks').addEventListener('dragstart', (e) => {
+  const tile = e.target.closest('.tile'); if (!tile) return;
+  dragId = tile.dataset.id; tile.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', '');   // some engines start no drag without data
+});
+$('stacks').addEventListener('dragover', (e) => {
+  const tile = dragId && e.target.closest('.tile'); if (!tile) return;
+  e.preventDefault(); unmark();
+  if (tile.dataset.id !== dragId) tile.classList.add(dropSide(e, tile));
+});
+$('stacks').addEventListener('drop', (e) => {
+  const tile = dragId && e.target.closest('.tile'); if (!tile) return;
+  e.preventDefault(); unmark();
+  const ids = org.stacks.map(t => t.id), from = ids.indexOf(dragId), side = dropSide(e, tile);
+  let to = ids.indexOf(tile.dataset.id) + (side === 'after');
+  if (from < to) to--;   // its own place closes up first
+  if (to === from) return;
+  tile[side](document.querySelector('.tile.dragging'));
+  orgOp({ op: 'move', stack: dragId, dir: to - from });
+});
+$('stacks').addEventListener('dragend', () => { unmark(); document.querySelector('.tile.dragging')?.classList.remove('dragging'); dragId = null; });
 // typing saves after a pause, without redrawing under the cursor
 $('stacks').addEventListener('input', (e) => {
   const f = e.target.dataset.f; if (!f) return;
