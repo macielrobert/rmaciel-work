@@ -423,8 +423,7 @@ function orgPicks() {
   $('orgremove').disabled = !ticked.length;
   $('orgremove').textContent = ticked.length && ticked.every(t => t.removed) ? 'Restore' : 'Remove from project';
   $('orgmove').disabled = !n;
-  const opts = '<option value="">' + (n ? 'Move ' + n + ' to project…' : 'Move to project…') + '</option>' + S.projects.filter(p => p.slug !== project).map(p => '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>').join('');
-  if ($('orgmove').innerHTML !== opts) $('orgmove').innerHTML = opts;
+  $('orgmove').textContent = n > 1 ? 'Move ' + n + ' to project' : 'Move to project';
 }
 const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
 function orgLook() {
@@ -567,7 +566,7 @@ $('stacks').addEventListener('drop', (e) => {
   tile[side](document.querySelector('.tile.dragging'));
   orgOp({ op: 'move', stack: dragId, dir: to - from });
 });
-$('stacks').addEventListener('dragend', () => { unmark(); document.querySelector('.tile.dragging')?.classList.remove('dragging'); dragId = null; });
+$('stacks').addEventListener('dragend', () => { unmark(); undrop(); document.querySelector('.tile.dragging')?.classList.remove('dragging'); dragId = null; });
 // typing saves after a pause, without redrawing under the cursor
 $('stacks').addEventListener('input', (e) => {
   const f = e.target.dataset.f; if (!f) return;
@@ -597,9 +596,24 @@ $('orgsplit').addEventListener('click', async () => {
   await loadOrg();
   $('orgmsg').textContent = 'Separated ' + n + ' cop' + (n === 1 ? 'y' : 'ies') + ' into works of their own.';
 });
-$('orgmove').addEventListener('change', (e) => {
-  const to = e.target.value; e.target.value = '';
-  if (to) moveWorks(org.stacks.filter(t => opick.has(t.id)).map(t => t.id), to);
+// the same section-grouped list as the right-click menu, opened under the button
+$('orgmove').addEventListener('click', (e) => {
+  const r = e.currentTarget.getBoundingClientRect(), ids = org.stacks.filter(t => opick.has(t.id)).map(t => t.id);
+  openMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom + 4 }, projectPicks(p => moveWorks(ids, p.slug), project));
+});
+// DRAG a grid tile onto a project's name: that work moves there, or every
+// ticked work if the dragged one is ticked (as Finder drags a selection)
+const undrop = () => document.querySelectorAll('#projects .drop').forEach(x => x.classList.remove('drop'));
+$('projects').addEventListener('dragover', (e) => {
+  const row = dragId && e.target.closest('[data-s]'); if (!row || row.dataset.s === project) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  if (!row.classList.contains('drop')) { undrop(); row.classList.add('drop'); }
+});
+$('projects').addEventListener('dragleave', (e) => { if (!e.relatedTarget?.closest?.('#projects .drop')) undrop(); });
+$('projects').addEventListener('drop', (e) => {
+  const row = dragId && e.target.closest('[data-s]'); if (!row || row.dataset.s === project) return;
+  e.preventDefault(); undrop();
+  moveWorks(opick.has(dragId) ? org.stacks.filter(t => opick.has(t.id)).map(t => t.id) : [dragId], row.dataset.s);
 });
 // the ticked works, or one work (the right-click menu's Move to project)
 async function moveWorks(ids, to) {
