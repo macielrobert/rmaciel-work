@@ -116,7 +116,17 @@ after a Clear; finishes a stopped one).
 
 Pages are matched by address/title, or because their pictures match ones
 already on the site. Pictures stay on the website until Write downloads them, read their
-real format from the bytes, and convert anything that isn't JPEG/PNG/WebP.
+real format from the bytes, and convert anything that isn't JPEG/PNG/WebP/GIF.
+
+**GIFs stay GIFs (2026-10-06).** NOISE is animated GIFs; converted they kept
+one frame. build.js measures GIF; Harvest copies them untouched (never via
+sips, which flattens), refuses one over 20 MB at Write (`MAX_GIF`; NOISE's
+IMG_8617 is 66 MB), and refuses a turned GIF. Netlify's image CDN picks WebP
+for most browsers and documents animated WebP output — confirm on the live
+site the first time a GIF is published; if it comes back still, skip the
+transform for `.gif` in `IMAGE_TRANSFORM` (index.html).
+The Mac's not-added alert groups failures by reason with three names each:
+an NSAlert does not scroll, and forty lines pushed OK off the screen.
 
 **The old site is `rmaciel.work` on Squarespace and goes away at DNS cutover** —
 see PUNCH-LIST §4.

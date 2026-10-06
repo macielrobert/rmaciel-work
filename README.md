@@ -100,7 +100,7 @@ The build stops on purpose rather than publishing something broken, and it alway
 |---|---|
 | `required field "details" is missing or empty` | A project is missing something it needs. |
 | `image "…" is referenced but does not exist` | An image was deleted but a project still points at it. |
-| `cannot measure "…"` | An image in a project's image list is the wrong format. Those must be **PNG or JPEG**. |
+| `cannot measure "…"` | An image in a project's image list is the wrong format. Those must be **PNG, JPEG, WebP or GIF**. |
 | `the frontmatter is not valid JSON` | A project file got damaged — usually from editing it by hand instead of through the CMS. |
 | `needs the @markdoc/markdoc package` | Someone ran the build without installing first. |
 

@@ -215,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     let q = c?.queryItems ?? []
     guard let project = q.first(where: { $0.name == "project" })?.value else { return }   // harvest://open: being in front is the whole job
     let crawl = c?.host == "crawl"
-    var done = 0, problems: [String] = []
+    var done = 0, problems: [(String, String)] = []
     for p in q.filter({ $0.name == "path" }).compactMap({ $0.value }) {
       var isDir: ObjCBool = false
       FileManager.default.fileExists(atPath: p, isDirectory: &isDir)
@@ -239,12 +239,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
       } else {
         r = await post(origin, "/api/addfile", ["project": project, "path": p])
       }
-      if let e = r["error"] as? String { problems.append("\(name): \(e)") } else { done += 1 }
+      if let e = r["error"] as? String { problems.append((name, e)) } else { done += 1 }
     }
     if !problems.isEmpty {
       let a = NSAlert()
       a.messageText = problems.count == 1 ? "One item was not added." : "\(problems.count) items were not added."
-      a.informativeText = problems.joined(separator: "\n")
+      // One line per REASON, a few names each. One line per file ran off the
+      // bottom of the screen with forty GIFs, and an NSAlert does not scroll:
+      // OK was out of reach and the only way out was to quit (2026-10-06).
+      var reasons: [String] = [], names: [String: [String]] = [:]
+      for (name, why) in problems {
+        if names[why] == nil { reasons.append(why) }
+        names[why, default: []].append(name)
+      }
+      a.informativeText = reasons.map { why in
+        let n = names[why]!
+        return why + "\n" + n.prefix(3).joined(separator: ", ") + (n.count > 3 ? " and \(n.count - 3) more" : "")
+      }.joined(separator: "\n\n")
       a.runModal()
     }
     guard done > 0 else { return }

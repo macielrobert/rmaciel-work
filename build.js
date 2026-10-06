@@ -118,6 +118,16 @@ function pngSize(buf, label) {
   return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
 }
 
+// GIF: "GIF87a" or "GIF89a", then the logical screen's width and height as
+// little-endian uint16. Added 2026-10-06 for NOISE, which is animated GIFs:
+// converted to JPEG they kept one frame of several hundred.
+function gifSize(buf, label) {
+  if (buf.length < 10 || !/^GIF8[79]a$/.test(buf.toString('latin1', 0, 6))) {
+    fail(`${label}: has a .gif extension but is not a GIF file`);
+  }
+  return [buf.readUInt16LE(6), buf.readUInt16LE(8)];
+}
+
 // SOFn markers carrying a frame header. C4 (DHT), C8 (JPG) and CC (DAC) share
 // the range but are NOT frame headers — reading dimensions out of them yields
 // nonsense, which is why this is a list and not a range test.
@@ -213,8 +223,9 @@ function measure(src, label) {
   }
   if (ext === '.jpg' || ext === '.jpeg') return jpegSize(buf, `${label}: ${src}`);
   if (ext === '.webp') return webpSize(buf, `${label}: ${src}`);
+  if (ext === '.gif') return gifSize(buf, `${label}: ${src}`);
   fail(
-    `${label}: cannot measure "${src}" — only PNG, JPEG and WebP can be read from the file header. ` +
+    `${label}: cannot measure "${src}" — only PNG, JPEG, WebP and GIF can be read from the file header. ` +
     `Strip images REQUIRE a ratio, so this format cannot be used there. Re-export as PNG or JPEG. ` +
     `(Icons and wordmarks are exempt and may be SVG.)`
   );

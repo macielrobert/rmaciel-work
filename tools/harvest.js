@@ -109,13 +109,18 @@ if (process.env.HARVEST_APP) {
 }
 
 // Formats build.js can measure go in as-is; HEIC/TIFF become JPEG on the way
-// in. GIF is left out: build.js cannot read its size and every strip image
-// needs one.
-const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.tif', '.tiff']);
-const KEEP_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+// in. GIF was left out until 2026-10-06, when build.js learned its size: NOISE
+// is animated GIFs (hundreds of frames each), and a JPEG keeps one of them.
+const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.tif', '.tiff']);
+const KEEP_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 // Longest side written into the repo. Netlify's image CDN resizes per screen;
 // this only keeps 40 MB camera files out of git.
 const MAX_SIDE = 2400;
+// A GIF cannot be shrunk here (sips writes one frame), so it goes to the site
+// at the size it comes in. NOISE's run 1-7 MB; one is 66 MB, which is a video,
+// and a file that size stays in git history for good once published.
+// ponytail: a flat cap, not a re-encode; gifsicle/ffmpeg if big GIFs keep coming.
+const MAX_GIF = 20 * 1024 * 1024;
 // Never descended into: system and app internals, and libraries that are
 // thousands of files of someone else's structure.
 const SKIP = /^(\.|node_modules$|Library$|Applications$)|\.(app|photoslibrary|lrdata|lrcat-data|fcpbundle|bundle|framework)$/i;
@@ -1509,6 +1514,11 @@ async function saveOrganize(slug, confirmed) {
   const keep = o.stacks.filter(t => !t.removed && byKey.has(t.keeper));
   const missing = keep.findIndex(t => !String(t.alt || '').trim() || !realName(t.alt.trim()));
   if (missing >= 0) throw new Error(`Work ${o.stacks.indexOf(keep[missing]) + 1} needs alt text — what is in the picture, in words, not a filename.`);
+  // turn() goes through sips, which writes one frame of a GIF: refused here,
+  // before anything is copied, rather than flattening the animation
+  const isGif = (m) => { const p = String(m.path || m.src); return /\.gif$/i.test(isRemote(p) ? p.split(/[?#]/)[0] : p); };
+  const turnedGif = keep.findIndex(t => t.rotate && isGif(byKey.get(t.keeper)));
+  if (turnedGif >= 0) throw new Error(`Work ${o.stacks.indexOf(keep[turnedGif]) + 1} is a GIF, and turning one would keep a single frame. Turn it back, or turn the GIF itself before adding it.`);
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
   const keptSite = new Set(keep.map(t => byKey.get(t.keeper)).filter(m => m.kind === 'site').map(m => m.src));
@@ -1559,8 +1569,8 @@ async function importImage(src, slug, n, w, h) {
     fs.mkdirSync(DL, { recursive: true });
     // Named by what the bytes ARE, not what the address says: a website can
     // serve a GIF under any name, and a GIF called .jpg would be copied as-is
-    // and then rejected by build.js. Anything not JPEG/PNG/WebP is converted
-    // below — an animated GIF keeps its first frame.
+    // and then rejected by build.js. Anything not JPEG/PNG/WebP/GIF is
+    // converted below; a GIF stays a GIF, animation and all.
     const raw = await download(sized(src, 2500), path.join(DL, id(src) + '.download'));
     const head = fs.readFileSync(raw).subarray(0, 12);
     const kind = head.toString('latin1', 0, 4) === 'GIF8' ? '.gif' : head[0] === 0x89 ? '.png'
@@ -1578,6 +1588,7 @@ async function importImage(src, slug, n, w, h) {
     if (!w || !h) throw new Error(`cannot read the size of ${path.basename(src)} — re-export it as JPEG or PNG`);
   }
   const e = ext(src);
+  if (e === '.gif' && fs.statSync(src).size > MAX_GIF) throw new Error(`${path.basename(src)} is ${Math.round(fs.statSync(src).size / 1048576)} MB — too big to put on the site as a GIF (the limit is ${MAX_GIF / 1048576} MB). Export it smaller, or remove that work.`);
   const outExt = KEEP_EXT.has(e) ? (e === '.jpeg' ? '.jpg' : e) : '.jpg';
   const dir = path.join(REPO, imgRel(slug, n));
   fs.mkdirSync(dir, { recursive: true });
@@ -1587,7 +1598,10 @@ async function importImage(src, slug, n, w, h) {
   const args = [];
   if (big) args.push('-Z', String(MAX_SIDE));
   if (outExt === '.jpg' && (big || !KEEP_EXT.has(e))) args.push('-s', 'format', 'jpeg', '-s', 'formatOptions', '85');
-  if (!args.length || e === '.webp') await fs.promises.copyFile(src, out);   // sips cannot write WebP; async: an iCloud original downloads as it is read
+  // copied, never through sips: sips cannot write WebP, and writes a GIF's
+  // first frame only — so a GIF over MAX_SIDE goes in at its own size.
+  // async: an iCloud original downloads as it is read
+  if (!args.length || e === '.webp' || e === '.gif') await fs.promises.copyFile(src, out);
   else await sh('sips', [...args, src, '--out', out]);
   return `/${imgRel(slug, n)}/src${outExt}`;
 }
@@ -1719,7 +1733,7 @@ const server = http.createServer(async (req, res) => {
       const q = url.searchParams.get('p') || '';
       const abs = q.startsWith('/images/') ? path.join(REPO, q) : path.resolve(q);   // a site path, as the project file stores it
       const ok = (abs.startsWith(path.join(REPO, 'images') + path.sep) || abs.startsWith(UPLOADS + path.sep)) && fs.existsSync(abs);
-      const type = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext(abs)];
+      const type = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }[ext(abs)];
       if (!ok || !type) return send(404, 'text/plain', 'not found');
       // sandboxed: an SVG is a document that can carry script, and from this
       // address that script could call the API — opened directly, it must not run
