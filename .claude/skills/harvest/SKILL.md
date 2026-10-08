@@ -101,11 +101,18 @@ Never test against Robert's real state or repo content without reverting:
 | Source | How |
 |---|---|
 | PDF / .ai text layer | PDFKit via osascript JXA |
-| PDF pages with no text (Rhino tiled-PNG exports, InDesign layouts of them) | OCR: Apple Vision, a Swift helper compiled once into `.../Harvest/ocr` (~1 min the first time) |
+| PDF pages with under 20 letters of text (Rhino tiled-PNG exports, InDesign layouts of them, a placed picture plus a page number) | OCR: Apple Vision, a Swift helper compiled once into `.../Harvest/ocr` (~1 min the first time) |
 | .indd | InDesign itself, only when the checkbox is ticked |
 | .3dm | the Notes panel, read from the file's properties table (first 8 MB only) |
 | .docx .doc .rtf .odt / .txt .md | textutil / directly |
 | A website | **Crawl website**: `/sitemap.xml` for every page (including unlinked ones) and, on Squarespace, every page's pictures; page text via `?format=json` |
+
+A crawl never takes pictures OUT of a PDF; a page matches by its words. A PDF
+text card has **Add page N as a picture** (button and right-click): the helper's
+`--page` mode draws the whole page (crop box) as a 2400 px JPEG into
+`.../Harvest/pages/`, filed as an accepted picture for Organize. Whole page,
+not the photo placed on it (2026-10-07). Text caches are keyed with `READ_V`;
+bump it when a reader starts finding more, so cached files are read again.
 
 Website pages become **page** cards. An accepted page's PICTURES arrive
 accepted (vetted when they were published; Robert, 2026-10-04); its text

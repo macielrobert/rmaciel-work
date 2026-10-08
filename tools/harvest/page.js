@@ -46,6 +46,14 @@ $('tree').addEventListener('click', async (e) => {
   else { s.querySelector('i').textContent = '⌄'; await branch(li, folder); }
 });
 
+// a PDF text card's page, drawn as a picture and added accepted (pagePicture in harvest.js)
+async function pagePicture(id) {
+  const f = findings.find(x => x.id === id);
+  say('Drawing page ' + pdfPage(f) + '…'); busy(1);
+  try { await api('/api/pagepicture', { id }); say('Page ' + pdfPage(f) + ' added as a picture — accepted; it is in Organize.'); loadFindings(); poll(); }
+  catch (err) { oops(err); }
+  finally { busy(-1); }
+}
 // one file into a project: the tree's Add button, and the right-click menu's Add to project
 async function addFile(pr, file) {
   try {
@@ -158,6 +166,8 @@ async function loadFindings() {
   for (const [id, fields] of dirty) Object.assign(findings.find(f => f.id === id) || {}, fields);
   drawFindings();
 }
+// the page number (from 1) of a card read from a PDF page, else 0
+const pdfPage = (f) => f.kind === 'text' && f.unit !== undefined && /\.(pdf|ai)$/i.test(f.path) ? f.unit + 1 : 0;
 const label = (f) => tilde(f.path) + (f.kind === 'text' && f.unit !== undefined ? ' · ' + (/\.(pdf|ai)$/i.test(f.path) ? 'page ' : 'part ') + (f.unit + 1) : '');
 function card(f) {
   const acts = f.status === 'pending'
@@ -191,7 +201,9 @@ function card(f) {
     if (f.status === 'accepted') h += '<div class="dim">Next: Organize — copies are stacked there and one is kept</div>';
   }
   if (f.kind === 'text') {
-    h += '<div class="src">' + label(f) + '</div><textarea data-k="edited">' + esc(f.edited ?? f.text) + '</textarea>';
+    const pg = pdfPage(f);
+    h += '<div class="src">' + label(f) + '</div><textarea data-k="edited">' + esc(f.edited ?? f.text) + '</textarea>' +
+      (pg ? '<button class="btn" data-pagepic="1" title="Draw this page of the PDF as a picture and add it to the project, accepted. The text card stays as it is.">Add page ' + pg + ' as a picture</button>' : '');
     if (f.status === 'accepted') h += '<select data-k="target">' + [['description','Add to description'],['detail','Add as detail lines'],['share','Use as share description'],['caption','Used as a caption (Organize)'],['organize','Left to Organize']].map(([v,t]) => '<option value="' + v + '"' + ((f.target || 'description') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
   }
   return h + '<div class="acts">' + acts + '</div></div>';
@@ -256,6 +268,8 @@ $('review').addEventListener('click', async (e) => {
   if (rr) { api('/api/finding', { id: rr.closest('.card').dataset.id, reread: true }).then(() => { say('Reading it again…'); poll(); }).catch(oops); return; }
   const fg = e.target.closest('[data-forget]');
   if (fg) return forget([fg.closest('.card').dataset.id]);
+  const pp = e.target.closest('[data-pagepic]');
+  if (pp) return pagePicture(pp.closest('.card').dataset.id);
   const b = e.target.closest('[data-a]'); if (!b) return;
   const id = b.closest('.card').dataset.id;
   const f = findings.find(x => x.id === id);
@@ -1111,7 +1125,8 @@ function cardMenu(el) {
   const again = (sel) => () => document.querySelector('#review .card[data-id="' + CSS.escape(id) + '"] ' + sel)?.click();
   const own = [...el.querySelectorAll('.acts .btn, [data-inside]')].map(b => ({ label: b.textContent,
     run: again(b.dataset.a ? '[data-a="' + b.dataset.a + '"]' : b.dataset.reread ? '[data-reread]' : b.dataset.forget ? '[data-forget]' : '[data-inside]') }));
-  const page = f.kind === 'text' && f.unit !== undefined && /\.(pdf|ai)$/i.test(f.path) ? f.unit + 1 : 0;
+  if (page) own.push({ label: 'Add page ' + page + ' as a picture', run: () => pagePicture(id) });
+  const page = pdfPage(f);
   return [
     ...own,
     ...(el.querySelector('.pick') ? [{ label: 'Move to project', sub: projectPicks(p => bulk({ project: p.slug }, [id]), project) }] : []),

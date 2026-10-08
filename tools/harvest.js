@@ -528,14 +528,19 @@ const isDoc = (e, indesign) => Object.hasOwn(READERS, e) && (e !== '.indd' || in
 // A PDF's own text layer first. Pages with none are pictures of text — Rhino
 // exports tiled PNGs, and InDesign layouts built from them keep that — and only
 // those pages go to text recognition, so an ordinary PDF stays fast.
+// "None" means fewer than 20 letters, not an empty layer: the portfolio's BUS
+// STOP pages are one placed picture each plus a typed page number, and that
+// lone "6" kept them from being read, so they never matched — only the
+// contents pages listing them did (2026-10-07).
+const pictureOfText = (t) => (t.match(/\p{L}/gu) || []).length < 20;
 async function pdfText(f) {
   const pages = JSON.parse(await sh('osascript', ['-l', 'JavaScript', PDF_JS, f]));
-  const blank = pages.flatMap((t, i) => (t.trim() ? [] : [String(i)]));
+  const blank = pages.flatMap((t, i) => (pictureOfText(t) ? [String(i)] : []));
   if (!blank.length) return pages;
   const bin = await ocrTool();
   if (!bin) return pages;
   const seen = JSON.parse(await sh(bin, [f, ...blank]));
-  return pages.map((t, i) => (t.trim() ? t : seen[i] || ''));
+  return pages.map((t, i) => (pictureOfText(t) && seen[i] ? seen[i] : t));
 }
 
 /* TEXT RECOGNITION (OCR)
@@ -566,6 +571,19 @@ if args.count > 2 && args[1] == "--image" {
      let img = CGImageSourceCreateThumbnailAtIndex(src, 0, opts) { text = ocr(img) }
   FileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: [text]))
   exit(0)
+}
+// --page a.pdf 4 out.jpg 2400 : page 5 drawn as a JPEG, 2400 px on its long
+// side, as Preview shows it (the crop box), for a page wanted as a picture
+if args.count > 5 && args[1] == "--page" {
+  guard let doc = PDFDocument(url: URL(fileURLWithPath: args[2])), let i = Int(args[3]), let page = doc.page(at: i),
+        let side = Double(args[5]) else { exit(1) }
+  let box = page.bounds(for: .cropBox)
+  let scale = side / max(box.width, box.height)
+  let pic = page.thumbnail(of: CGSize(width: box.width * scale, height: box.height * scale), for: .cropBox)
+  guard let img = pic.cgImage(forProposedRect: nil, context: nil, hints: nil),
+        let out = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[4]) as CFURL, "public.jpeg" as CFString, 1, nil) else { exit(1) }
+  CGImageDestinationAddImage(out, img, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+  exit(CGImageDestinationFinalize(out) ? 0 : 1)
 }
 // --prints a.jpg b.png ... : one feature vector per picture, for grouping copies
 if args.count > 1 && args[1] == "--prints" {
@@ -655,10 +673,13 @@ async function textutilText(f) {
 }
 
 // Returns an array of text units: pages, stories or chunks. Cached by path,
-// size and date, so an unchanged file is read once, ever.
+// size and date, so an unchanged file is read once — per READ_V, which goes up
+// when the readers start finding more (2: near-empty PDF pages are read as
+// pictures), so a file already read is read again once.
+const READ_V = 2;
 async function extract(file) {
   const st = await fs.promises.stat(file);
-  const cached = path.join(TEXT, id(file, st.size, st.mtimeMs) + '.json');
+  const cached = path.join(TEXT, id(file, st.size, st.mtimeMs, READ_V) + '.json');
   if (fs.existsSync(cached)) return JSON.parse(await fs.promises.readFile(cached, 'utf8'));
   let units;
   try {
@@ -1414,6 +1435,37 @@ async function extractText(slug, stack) {
   return g;
 }
 
+/* A PDF PAGE AS A PICTURE. A crawl reads a PDF's words, page by page, and
+   never its pictures, so a portfolio page about BUS STOP arrives only as a
+   text card (Robert, 2026-10-07: "I want the page"). From such a card the
+   page itself is drawn as a JPEG — the whole page as Preview shows it — and
+   filed as an accepted picture, so Organize stacks and keeps it like any
+   other. Drawn by the Vision helper, which already draws pages to read them.
+   ponytail: the whole page, margins and type included, not the photograph
+   placed on it; pulling that out (the page's image objects, via CGPDF) if
+   the layout around the picture gets in the way. */
+async function pagePicture(fid) {
+  const t = state.findings[fid];
+  if (!t || t.kind !== 'text' || t.unit === undefined || !/\.(pdf|ai)$/i.test(t.path)) throw new Error('Only a page of a PDF can be added as a picture.');
+  const st = await fs.promises.stat(t.path).catch(() => null);
+  if (!st) throw new Error('That PDF is not on this Mac any more.');
+  const dir = path.join(STORE, 'pages', id(t.path, st.size, st.mtimeMs));
+  const out = path.join(dir, path.parse(t.path).name + ' p' + (t.unit + 1) + '.jpg');
+  if (!fs.existsSync(out)) {
+    const bin = await ocrTool();
+    if (!bin) throw new Error('Drawing pages is unavailable — the server log says why.');
+    fs.mkdirSync(dir, { recursive: true });
+    await sh(bin, ['--page', t.path, String(t.unit), out, String(MAX_SIDE)]);
+  }
+  const f = { project: t.project, kind: 'image', path: out };
+  add(f);
+  const g = state.findings[f.id];
+  if (g.status !== 'written') { g.status = 'accepted'; delete g.cleared; rev++; }
+  await sizeImages();
+  persist();
+  return g;
+}
+
 function organizeOp(slug, b) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Organize first.');
@@ -1811,6 +1863,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/stop') { stopAll(); return json({ ok: true }); }
     if (p === '/api/organize') { organizeOp(b.project, b); return json({ ok: true }); }
     if (p === '/api/extract') return json(await extractText(b.project, b.stack));
+    if (p === '/api/pagepicture') return json(await pagePicture(b.id));
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
     if (p === '/api/project') return json(await saveProject(b.project, b.data || {}, b.body));
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
