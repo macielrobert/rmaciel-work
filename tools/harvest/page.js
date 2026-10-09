@@ -456,6 +456,9 @@ $('orgviews').addEventListener('click', (e) => {
   if (b.dataset.cell) remember('orgCell', orgCell = b.dataset.cell);
   if (org) drawOrg(); else orgLook();
 });
+$('orgq').addEventListener('input', () => { if (org) drawOrg(); });
+// ⌘F: Harvest.app's web view has no find bar, so on Organize it goes to the find box
+document.addEventListener('keydown', (e) => { if (view === 'organize' && (e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); $('orgq').focus(); $('orgq').select(); } });
 async function loadOrg() {
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; $('orgwrite').disabled = true; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
@@ -470,7 +473,10 @@ function drawOrg() {
   const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
   $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
   $('orgwrite').disabled = false;   // with no works there may still be details or text to write
-  const gone = org.stacks.length - live.length, shown = showRemoved ? org.stacks : live;
+  // the find box matches EVERY copy's name, so a work turns up even when the copy it was found by is not the kept one
+  const q = $('orgq').value.trim().toLowerCase();
+  const named = (t) => !q || t.members.some(m => m.name.toLowerCase().includes(q));
+  const gone = org.stacks.length - live.length, shown = (showRemoved ? org.stacks : live).filter(named);
   $('orgshowrm').hidden = !gone;
   $('orgshowrm').textContent = showRemoved ? 'Hide removed' : 'Show ' + gone + ' removed';
   for (const k of [...opick]) if (!shown.some(t => t.id === k)) opick.delete(k);   // a hidden work is never acted on unseen
@@ -504,7 +510,7 @@ function drawOrg() {
       (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
       (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
       '</div></div>';
-  }).join('') : '<p class="dim">' + (gone ? 'Every work here is removed. Write to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
+  }).join('') : '<p class="dim">' + (q ? (org.stacks.some(named) ? 'Only removed works are named “' + esc(q) + '” — Show removed to see them.' : 'No file here is named “' + esc(q) + '”.') : gone ? 'Every work here is removed. Write to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
 }
 async function orgOp(body, redraw = true) {
   busy(1);
