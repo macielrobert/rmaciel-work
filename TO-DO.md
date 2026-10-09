@@ -258,6 +258,14 @@ plays in every browser as-is; what it gives up is the quality switching.
         second account, and a second address the page loads from.
       Depends on how long the real videos are. Audio is small enough for the
       repo either way.
+      **Answered 2026-10-09: up to 2 minutes each.** Converted for the web
+      that is roughly 40–60 MB a video (an estimate, from typical 720p–1080p
+      bitrates — real sizes depend on the footage). Under GitHub's ceiling,
+      but every one stays in the repo's history for good, and every play is
+      bandwidth Netlify counts against the free plan.
+      **Recommended: a Cloudflare R2 bucket**, which does not charge for
+      plays (recalled, not verified — check before signing up). Awaiting
+      Robert's go.
 - [ ] **Site: the video player.** Own play button, DRAWN in CSS like the caret
       — a typed ▶ is not in the typeface and would fall to a fallback font.
       Play/pause, a scrub bar, mute, fullscreen. **Controls never churn**,
