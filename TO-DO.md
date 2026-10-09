@@ -232,6 +232,63 @@ Wait about a week after Phase 9.
 
 ---
 
+## NEXT — Video and audio players
+
+Requested 2026-10-09. Not started.
+
+Two players, one design: the browser's own `<video>` and `<audio>` elements
+with their built-in controls switched off, and the site's own controls drawn
+over them. **No YouTube, no Vimeo, no third-party player, no branding
+anywhere on screen.**
+
+This clears the single-file rule because `<video>` and `<audio>` are part of
+HTML: the player is code in `index.html`, not a dependency. The one thing that
+would break the rule is adaptive streaming (HLS — the format that switches
+quality mid-play to suit the connection), which outside Safari needs a player
+library. **Default: plain MP4 (H.264 picture, AAC sound), no library.** It
+plays in every browser as-is; what it gives up is the quality switching.
+
+- [ ] **Decide where the video files live — the one real fork.** Pictures
+      live in the repo; most video cannot. GitHub refuses any file over
+      100 MB, and every committed file stays in the repo's history for good —
+      the reason Harvest already refuses GIFs over 20 MB.
+      - *In the repo, under a size cap* — simplest; fine for short clips.
+      - *A storage bucket outside the repo* (Cloudflare R2, Bunny and the like,
+        serving plain MP4 files) — no ceiling and still no branding, but a
+        second account, and a second address the page loads from.
+      Depends on how long the real videos are. Audio is small enough for the
+      repo either way.
+- [ ] **Site: the video player.** Own play button, DRAWN in CSS like the caret
+      — a typed ▶ is not in the typeface and would fall to a fallback font.
+      Play/pause, a scrub bar, mute, fullscreen. **Controls never churn**,
+      same as `×` and `←`. `playsinline`, so an iPhone plays it inside the
+      window instead of jumping to its own full-screen player. A poster frame
+      (a still from the video) shows until play is pressed.
+- [ ] **Site: the audio player.** The same controls without the picture:
+      play/pause, scrub bar, time.
+- [ ] **An exception to the loading order.** The rule is that nothing is held
+      back to save bytes — every picture is asked for early. Video cannot
+      follow it: one clip can outweigh the whole site. Video fetches its
+      poster and its length only (`preload="metadata"`) until play is
+      pressed. Record the exception in the "loading order" comment in
+      `index.html`, so it does not read as a mistake.
+- [ ] **Build: `ratio` for video.** build.js reads each picture's size from
+      the file so the layout never jumps; an MP4 records its frame size the
+      same way, so the build can read that too.
+- [ ] **CMS: a video field and an audio field** in Keystatic. Check whether
+      Keystatic's upload to GitHub accepts a file that large before relying on
+      it — only matters if the files live in the repo.
+- [ ] **Harvest: load and preview video.** Today it skips video entirely; it
+      only recognises picture extensions. Needs: recognise `.mov`, `.mp4`,
+      `.m4v`; read size and length with `mdls`, since `sips` cannot read
+      video (both built into macOS); a still for the review grid via
+      `qlmanage` (also built in); play in the review page with a plain
+      `<video>`. **Convert on the way in**, as it already downsizes pictures:
+      an iPhone records HEVC `.mov`, which not every browser plays.
+      `avconvert` (built into macOS — verify on the Mac) can write H.264 MP4.
+
+---
+
 ## DEFERRED
 
 Not now; revisit if the conditions appear.
