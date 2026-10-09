@@ -263,9 +263,28 @@ plays in every browser as-is; what it gives up is the quality switching.
       bitrates — real sizes depend on the footage). Under GitHub's ceiling,
       but every one stays in the repo's history for good, and every play is
       bandwidth Netlify counts against the free plan.
-      **Recommended: a Cloudflare R2 bucket**, which does not charge for
-      plays (recalled, not verified — check before signing up). Awaiting
-      Robert's go.
+      **Decided 2026-10-09: a Cloudflare R2 bucket, for video only.** Plays
+      cost nothing: R2 has no egress charge (verified on Cloudflare's R2
+      pricing page; free tier 10 GB stored a month). Images stay in
+      `images/` — Keystatic uploads there, the build reads their sizes there,
+      and Netlify's image CDN resizes them; moving them breaks all three for
+      no gain. The site stays on Netlify: Cloudflare serves a bare domain
+      only from its own nameservers, which is standing rule #1.
+      **Catch, found after the decision — the bucket's public address.**
+      - `r2.dev`, the free address every bucket gets, is throttled and
+        documented as not for production. Ruled out.
+      - A custom address (`media.rmaciel.work`) needs the domain added to
+        Cloudflare: full setup moves the nameservers (standing rule #1);
+        partial setup keeps them but is Business/Enterprise only (verified
+        on Cloudflare's DNS docs). Ruled out.
+      - **A second domain, only for media, entirely on Cloudflare.** No email
+        on it, so moving its nameservers costs nothing. A yearly domain fee.
+        **Recommended.**
+      - A Cloudflare Worker (a small script Cloudflare runs) on a free
+        `workers.dev` address, reading the bucket. Free, but code to keep,
+        and it must answer byte-range requests itself — iPhone Safari will
+        not play an MP4 from a server that does not.
+      Awaiting Robert's go on the second domain.
 - [ ] **Site: the video player.** Own play button, DRAWN in CSS like the caret
       — a typed ▶ is not in the typeface and would fall to a fallback font.
       Play/pause, a scrub bar, mute, fullscreen. **Controls never churn**,
