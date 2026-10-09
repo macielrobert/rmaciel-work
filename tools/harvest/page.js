@@ -482,7 +482,8 @@ function drawOrg() {
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
         '<div class="under"><small>' + tileLabel(t) + '</small>' +
-        '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div></div>';
+        '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div>' +
+        '<div class="fname">' + esc(k.name) + '</div></div>';
     }).join('');
     return;
   }
