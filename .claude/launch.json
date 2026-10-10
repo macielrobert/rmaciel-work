@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "dist", "runtimeExecutable": "node", "runtimeArgs": ["serve-dist.js"], "port": 4321 }
+    { "name": "dist", "runtimeExecutable": "node", "runtimeArgs": ["serve-dist.js"], "port": 4321 },
+    { "name": "specimen", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "4322", "--bind", "127.0.0.1"], "port": 4322 }
   ]
 }
