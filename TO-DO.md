@@ -171,6 +171,26 @@ side by side in both themes, and the guide explains their roles and placement.
   the footer, and the footer's focus ring moves to 4px out so it clears the
   teeth. That closes UX-1. Body 12px is adopted with UX-4.
 
+**Record, 2026-10-10, third pass: Claude. UX-1 DONE.** Branch `ux-1-zigzag`.
+- **Robert's corrections:** the zigzag at half the height; keyboard focus on
+  it drawn as a bold zigzag instead of an outline, as a field thickens its
+  line; and the zigzag only in the site's footer (sections, ALL, ABOUT,
+  CONTACT), nowhere else.
+- **Live in `index.html`:** a 3px zigzag with 90° vertices and a tooth every
+  6px, 1px in the label's ink, under the chosen footer label. Keyboard focus
+  on any footer label draws it at 2px, and the footer has no outline (the
+  browser's own ring is switched off there too). Narrow phones follow the
+  6px padding.
+- **Specimen, draft 3:** the same, plus a footer row in "Every state".
+- **Checks:** a local build in both themes and at 375px. With real Tab
+  presses, a focused label measured bold, in ink, with no outline, and the
+  screenshot shows the bold zigzag beside the thin one. CSS braces and script
+  syntax pass.
+- **Seen in passing, not caused by this work:** after one Tab press the icon
+  row showed only a few icons, with blank space to their right. The live site
+  does the same. It is recorded as a separate task.
+- **Next:** UX-2. Body 12px still waits for UX-4.
+
 ### UX-2 — Reorganize Harvest around the selected project
 
 **Finding:** Collect has five competing columns (Folders, Projects, Pending,

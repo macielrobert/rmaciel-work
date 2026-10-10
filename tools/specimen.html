@@ -9,9 +9,10 @@
      proposed ones, in both themes, at actual size, with the site's real copy.
      STYLE-GUIDE.md is the prose that goes with it.
 
-     SECOND DRAFT (2026-10-10): Robert's answers applied — one fixed grey, the
-     site body at 12px, and a zigzag under the chosen footer label, which is
-     the one new thing here to judge.
+     THIRD DRAFT (2026-10-10): Robert's answers and corrections applied — one
+     fixed grey, the site body at 12px, and the footer's zigzag at half the
+     x-height, in bold for keyboard focus. All of it is live on the site
+     except the 12px body, which lands with UX-4.
 
      A PROTOTYPE, NOT A SOURCE. Nothing here ships: build.js copies index.html, fonts/ and
      images/, never tools/. When values are adopted they go into index.html and
@@ -43,6 +44,9 @@
     --rule: rgba(143,143,153,.5);
     --s1:4px; --s2:8px; --s3:12px; --s4:20px; --s5:32px;
     --body: 12px;                       /* the site's body size, decided */
+    /* the footer's zigzag, thin and bold — the same two images as index.html */
+    --zigzag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-3 1.5L0 4.5L3 1.5L6 4.5L9 1.5' fill='none' stroke='black'/%3E%3C/svg%3E");
+    --zigzag-bold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-3 1.5L0 4.5L3 1.5L6 4.5L9 1.5' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
     --bg:#000; --ink:#fff;
   }
   @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
@@ -96,40 +100,42 @@
   .site-now u, .site-prop u { text-underline-offset:.18em; text-decoration-thickness:1px; }
   .shot { display:block; width:100%; max-width:280px; aspect-ratio:16/9; object-fit:cover; margin:var(--s4) 0 var(--s1); background:#808080; }
   /* the footer strip: geometry exactly as index.html's #nl-fns */
-  .ft { display:flex; flex-wrap:wrap; margin:var(--s4) -8px 0; font:400 11px/1.3 var(--face); letter-spacing:.15em; }
+  .ft { display:flex; flex-wrap:wrap; margin:var(--s4) -8px 0; font:400 11px/normal var(--face); letter-spacing:.15em; }
   .ft a { padding:6px 8px; color:inherit; text-decoration:none; cursor:pointer; }
-  .ft a.on { color:var(--ink); }
+  .ft a.on, .ft a:hover, .ft a.is-hover { color:var(--ink); }
   .ft .right { margin-left:auto; }
   .site-now .ft  { color:var(--accent-dim); }
   .site-prop .ft { color:var(--text-2); }
-  /* THE CHOSEN LABEL'S MARK — Robert, 2026-10-10: a zigzag, not a straight
-     line, with 90° vertices, about as tall as the x-height. PP Neue Montreal's
-     x-height measures 0.51em: 6.1px at the 12px body, 5.6px at the footer's
-     11px. So 6px from the centre of a low vertex to the centre of a high one;
-     and because each vertex is a right angle, every run is 45°, 6px across
-     for 6px up: one tooth every 12px.
-     A MASK over currentColor, so it is ink in either theme like the label,
-     and drawn in whole px rather than scaled from em, so the 1px stroke stays
-     1px. It starts on a low vertex under the word's first letter and stops
-     under its last — the trailing tracking after the last letter is not the
-     word. Its top sits ~4px under the baseline (the straight underline was 6).
-     Under whichever label is chosen: a section, ALL, or an open
-     ABOUT / CONTACT. */
-  .site-prop .ft a { position:relative; }
-  /* the zigzag hangs ~3px below the label's box, so the focus ring sits 4px
-     out instead of 2 to clear it — otherwise the ring's bottom edge cuts
-     through the teeth */
-  .site-prop .ft a:focus-visible, .site-prop .ft a.is-focus { outline-offset:4px; }
-  .site-prop .ft a.on::after {
-    content:''; position:absolute; left:8px; right:calc(8px + .15em); top:calc(100% - 5px); height:8px;
+  /* THE ZIGZAG — the chosen footer label's mark, and used nowhere else: the
+     section labels (ALL, BUILD, DESIGN, ART), and ABOUT and CONTACT while
+     open (Robert, 2026-10-10). Harvest's tabs keep a straight line.
+     HALF THE X-HEIGHT, his correction to the second draft: 3px from the
+     centre of a low vertex to the centre of a high one (PP Neue Montreal's
+     x-height is 0.51em, 5.6px at the footer's 11px), still 90° at every
+     vertex, so every run is 45°: 3px across for 3px up, a tooth every 6px.
+     KEYBOARD FOCUS IS THE SAME ZIGZAG IN BOLD (2px), not an outline. An
+     outline round a chosen label doubled the mark; this is the field's rule
+     instead, where focus thickens the line the control already has. Any
+     label under keyboard focus gets it, chosen or not: thin is the chosen
+     one, bold is where the keyboard is.
+     A MASK over currentColor, so it is the label's own ink in either theme,
+     at whole px so the 1px stroke is never scaled. It starts on a low vertex
+     under the first letter and stops under the last (the tracking after the
+     last letter is not the word), along the bottom of the tap area: about
+     3.5px under the baseline. */
+  .ft a { position:relative; }
+  .ft a.on::after, .ft a:focus-visible::after, .ft a.is-focus::after {
+    content:''; position:absolute; left:8px; right:calc(8px + .15em); bottom:0; height:6px;
     background:currentColor;
-    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M-6 1L0 7L6 1L12 7L18 1' fill='none' stroke='black'/%3E%3C/svg%3E") 0 0 / 12px 8px repeat-x;
-            mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M-6 1L0 7L6 1L12 7L18 1' fill='none' stroke='black'/%3E%3C/svg%3E") 0 0 / 12px 8px repeat-x;
+    -webkit-mask:var(--zigzag) 0 0 / 6px 6px repeat-x;
+            mask:var(--zigzag) 0 0 / 6px 6px repeat-x;
   }
+  .ft a:focus-visible::after, .ft a.is-focus::after { -webkit-mask-image:var(--zigzag-bold); mask-image:var(--zigzag-bold); }
+  .site-now .ft a::after { content:none; }   /* today's footer has no mark */
   /* index.html's own narrow rules for the strip, so a phone sees what the site does */
   @media (max-width: 500px) { .ft { justify-content:center; } .ft .right { margin-left:0; } }
   @media (max-width: 400px) { .ft { letter-spacing:.06em; } .ft a { padding-left:6px; padding-right:6px; }
-                              .site-prop .ft a.on::after { left:6px; right:calc(6px + .06em); } }
+                              .ft a:is(.on, :focus-visible, .is-focus)::after { left:6px; right:calc(6px + .06em); } }
   .rowlabel { font-size:11px; color:var(--text-2); letter-spacing:.05em; margin-top:var(--s3); }
 
   /* ===================================================== 3. EDITOR, TODAY */
@@ -192,6 +198,8 @@
   :is(.b, .tg, .row, .ft a, .tile):focus-visible, .is-focus { outline:1px solid var(--ink); outline-offset:2px; }
   .row:focus-visible, .row.is-focus { outline-offset:-1px; }
   :is(.b, .tg, .row, .tile):focus:not(:focus-visible) { outline:none; }
+  /* a footer label's focus is its bold zigzag, never an outline (above) */
+  .ft a:focus-visible, .ft a.is-focus { outline:none; color:var(--ink); }
 
   /* FIELDS */
   .f { display:block; margin:0 0 var(--s3); }
@@ -234,6 +242,7 @@
   .mx { width:100%; border-collapse:collapse; }
   .mx th { font-weight:400; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-2); text-align:left; padding:0 var(--s2) var(--s2) 0; }
   .mx td { padding:var(--s2) var(--s2) var(--s2) 0; border-top:1px solid var(--rule); vertical-align:middle; }
+  .mx .ft { margin:0 -8px; color:var(--text-2); }
   .mx td:first-child { font-size:12px; color:var(--text-2); white-space:nowrap; }
   .scroll { overflow-x:auto; }
 
@@ -265,9 +274,9 @@
 <div class="page">
 
   <h1>Style specimen</h1>
-  <p class="intro"><b>Second draft.</b> The shared style for the site and Harvest, next to today, at actual size, in both themes,
-    with Robert’s answers applied: one fixed grey, the site’s body at 12px, and a <b>zigzag under the chosen footer label</b>,
-    the one new thing to judge. The prose is in <b>STYLE-GUIDE.md</b>.</p>
+  <p class="intro"><b>Third draft.</b> The shared style for the site and Harvest, next to today, at actual size, in both themes,
+    with Robert’s answers applied: one fixed grey, the site’s body at 12px, and the footer’s zigzag at half the x-height,
+    in bold for keyboard focus. The prose is in <b>STYLE-GUIDE.md</b>.</p>
 
   <div class="knobs" role="group" aria-label="What to compare">
     <div class="knob"><span>Tap areas</span>
@@ -292,9 +301,9 @@
   </template>
 
   <!-- ================================================================ PORTFOLIO -->
-  <h2>2 · The site: a project, today and second draft</h2>
+  <h2>2 · The site: a project, today and third draft</h2>
   <p class="note">LIGHT WORK's real copy, with the body at 12px. The title in ink and the detail lines at 11px in grey are still a proposal; UX-4 settles them.
-    The footer keeps its size and spacing. Its grey is now readable, and the chosen label carries the zigzag. The last row shows the keyboard outline on DESIGN.</p>
+    The footer keeps its size and spacing. Its grey is now readable, and the chosen label carries the zigzag. With the keyboard, the zigzag goes bold instead of an outline.</p>
   <template id="entry">
     <div class="pair">
       <div class="panel">
@@ -310,7 +319,7 @@
         </div>
       </div>
       <div class="panel">
-        <span class="tag">Second draft</span>
+        <span class="tag">Third draft</span>
         <div class="site-prop">
           <span class="hd">LIGHT WORK</span>
           <div class="facts">Exhibition, Fundraiser<br>Co-Director, Curator<br>2021</div>
@@ -322,8 +331,10 @@
           <nav class="ft"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
           <div class="rowlabel">ABOUT open</div>
           <nav class="ft" style="margin-top:0"><a>ALL</a><a>BUILD</a><a>DESIGN</a><a>ART</a><a class="right">CONTACT</a><a class="on">ABOUT</a></nav>
-          <div class="rowlabel">Keyboard focus on DESIGN</div>
-          <nav class="ft" style="margin-top:6px"><a>ALL</a><a>BUILD</a><a class="on is-focus">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+          <div class="rowlabel">Keyboard on DESIGN, the chosen one</div>
+          <nav class="ft" style="margin-top:0"><a>ALL</a><a>BUILD</a><a class="on is-focus">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+          <div class="rowlabel">Keyboard on BUILD, with DESIGN chosen</div>
+          <nav class="ft" style="margin-top:0"><a>ALL</a><a class="is-focus">BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
         </div>
       </div>
     </div>
@@ -405,7 +416,7 @@
 
   <!-- ================================================================ STATES -->
   <h2>4 · Every state, side by side</h2>
-  <p class="note">Hover changes tone only. Keyboard focus is a thin outline around the control, so the two can never be confused. Something selected is darker AND carries a mark: a line under a tab, a bar beside a row, a frame and a tick on a tile.
+  <p class="note">Hover changes tone only. Keyboard focus is a thin outline around the control, so the two can never be confused, except where the control already carries a line: a field thickens its line, and a footer label thickens its zigzag. Something selected is darker AND carries a mark: a line under a tab, a bar beside a row, a frame and a tick on a tile, a zigzag under a footer label.
     Disabled stays readable. Every cell here is also live; hover it or press Tab.</p>
   <template id="states">
     <div class="scroll"><table class="mx ed">
@@ -415,6 +426,7 @@
       <tr><td>Quiet</td><td><button class="b quiet">Remove</button></td><td><button class="b quiet is-hover">Remove</button></td><td><button class="b quiet is-focus">Remove</button></td><td class="help">—</td><td><button class="b quiet" disabled>Remove</button></td></tr>
       <tr><td>Tab or toggle</td><td><button class="tg">Grid</button></td><td><button class="tg is-hover">Grid</button></td><td><button class="tg is-focus">Grid</button></td><td><button class="tg on">Grid</button></td><td><button class="tg" disabled>Grid</button></td></tr>
       <tr><td>List row</td><td><div class="row" tabindex="0">CANOPY<span class="n">12</span></div></td><td><div class="row is-hover">CANOPY<span class="n">12</span></div></td><td><div class="row is-focus">CANOPY<span class="n">12</span></div></td><td><div class="row on">CANOPY<span class="n">12</span></div></td><td><div class="row off">CANOPY<span class="n">12</span></div></td></tr>
+      <tr><td>Footer label (site)</td><td><span class="ft"><a>DESIGN</a></span></td><td><span class="ft"><a class="is-hover">DESIGN</a></span></td><td><span class="ft"><a class="is-focus">DESIGN</a></span></td><td><span class="ft"><a class="on">DESIGN</a></span></td><td class="help">—</td></tr>
       <tr><td>Field</td><td><label class="f" style="margin:0"><input value="Wave House"></label></td><td><label class="f" style="margin:0"><input class="is-hover" value="Wave House"></label></td><td><label class="f" style="margin:0"><input class="is-focus" value="Wave House"></label></td><td class="help">—</td><td><label class="f" style="margin:0"><input disabled value="Wave House"></label></td></tr>
     </table></div>
   </template>
