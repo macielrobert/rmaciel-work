@@ -145,6 +145,32 @@ side by side in both themes, and the guide explains their roles and placement.
   rewritten); the body size goes with UX-4; Harvest takes the editor values
   with UX-2.
 
+**Record, 2026-10-10, second pass: Claude.** Branch `ux-1-decisions`.
+- **Robert's answers:** (1) one fixed grey, (2) footer and copyright in it,
+  (3) a zigzag under the chosen footer label, not a straight line, with 90°
+  vertices, about the x-height tall, (4) site body 12px, (5) keyboard focus
+  outlines on the site's controls. They are recorded in `STYLE-GUIDE.md`,
+  Decisions.
+- **Live in `index.html`:** words use `--text-2` `rgb(117,117,126)`, 4.60:1 on
+  black and 4.56:1 on white. That covers the footer, the copyright, titles,
+  labels, captions, the glyph controls, SEND, and the no-WebGL labels. Field
+  underlines use `--edge` (3.20:1 or better). The seam, dividers and quote
+  bars use `--rule`, the old `--accent-dim`, at the same value. Keyboard focus
+  is a 1px ink outline on ×, ←, the caret, SEND, the footer, the field mark,
+  the sibling row, links, and the icon keys. The icon row's shader grey is
+  unchanged. `AGENTS.md` records the new rule.
+- **Specimen, draft 2:** the decisions applied; the zigzag under the chosen
+  label is drawn in both themes, with ABOUT open, and with keyboard focus.
+- **Checks:** a local build of the site, in both themes and at 375px. The
+  computed colours were read off the footer, copyright, title, close mark,
+  form labels, field line and SEND. Keyboard focus was measured on × and the
+  footer, and the ring was seen in a screenshot. The no-WebGL fallback was
+  loaded, and the console showed no errors. check-tokens and check-harvest
+  pass.
+- **Open, needs Robert:** his look at the zigzag. Once approved it ships to
+  the footer, and the footer's focus ring moves to 4px out so it clears the
+  teeth. That closes UX-1. Body 12px is adopted with UX-4.
+
 ### UX-2 — Reorganize Harvest around the selected project
 
 **Finding:** Collect has five competing columns (Folders, Projects, Pending,
@@ -242,7 +268,8 @@ which styling alone cannot fix.
       preserve local return versus global close and history behavior.
 - [ ] Establish title → short project facts → description hierarchy. Try a
       bounded thumbnail strip instead of a fixed share of the content height,
-      while preserving the established size caps and reading measure.
+      while preserving the established size caps and reading measure. Body
+      text is decided at 12px (Robert, 2026-10-10; `STYLE-GUIDE.md`, Type).
 - [ ] Separate client identification from project imagery: a wordmark should
       not automatically displace the main photograph. If this needs a new
       authoring choice, carry it through the schema, editors, build, and site.

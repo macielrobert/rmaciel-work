@@ -221,8 +221,11 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
 5. **Image expand.** In-flow view swap inside the window; swipe to navigate;
    two-scope exits (`←` local, `×` global).
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
-   shader uniform recolor everything. A third, `--accent-rgb`, is the grey that
-   is neither — not theme-swapped, and the one place that colour is written.
+   shader uniform recolor everything. The greys are neither, and nothing
+   theme-swaps them: `--text-2` (117,117,126) is the grey of WORDS, the one
+   grey that clears 4.5:1 on both black and white (Robert, 2026-10-10), and
+   `--accent-rgb` is the grey of lines, decoration and the icon row, the one
+   place that colour is written. `STYLE-GUIDE.md`, Colour, has the measurements.
 7. **Routing.** `#section/slug/image` mirrors state. The URL never becomes a
    second way of setting state.
 
@@ -543,6 +546,7 @@ understanding why it exists will reintroduce a solved bug.
 | ◄ ► arrows on the menu row | Duplicate a capability the wheel already gives, in furniture the phone would never show — a device-conditional design paying for what the faded edge says for free on both |
 | Caret or arrow indicators on the section wheel | Same answer the menu row gave, and for more reason: the half-lit neighbours already name what is above and below |
 | A `|` divider in the footer at every width | On a wide screen the two ends already say where the sections stop and the fixtures begin. A mark that repeats what the layout says is furniture — the same answer the menu row gave the arrows |
+| A secondary grey per theme | Robert chose one fixed grey (2026-10-10). `rgb(117,117,126)` clears 4.5:1 on both fields; a pair would mean two values to keep in step, and a theme swap for a colour that is meant to be neither |
 | Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---
