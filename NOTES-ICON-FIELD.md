@@ -121,7 +121,7 @@ measure first, on hardware.
 
 ## Rules this mode deliberately suspends
 
-Both are load-bearing in `CLAUDE.md`, and both stop applying the moment the
+Both are load-bearing in `AGENTS.md`, and both stop applying the moment the
 seam leaves the screen — because at that moment this is no longer the
 portfolio. Written down as intentional so they are not "fixed" later.
 

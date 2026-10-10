@@ -161,7 +161,7 @@ immediately after a section switch in each.
 A rearrangement is a moment with no selection. What is coherent while
 everything is moving? The footer label is the existing answer for fixtures and
 is probably the answer here too — but it is a decision, and the rule is
-explicit enough in `CLAUDE.md` that breaking it silently would be a
+explicit enough in `AGENTS.md` that breaking it silently would be a
 regression.
 
 **RESOLVED — no change needed; the existing behaviour was already right.**
@@ -211,7 +211,7 @@ Not decided here. Whichever it is, it belongs to the arrangement design.
 
 ## The open question worth deciding early
 
-`CLAUDE.md` rejects anime.js with a specific carve-out:
+`AGENTS.md` rejects anime.js with a specific carve-out:
 
 > Only justifies itself for orchestration, timelines, stagger, or spring
 > physics. For a single fixed-curve transition it equals a CSS transition.
@@ -219,7 +219,7 @@ Not decided here. Whichever it is, it belongs to the arrangement design.
 **A staggered reorganization of ~13 icons is precisely that carve-out.** This
 is the one change in the project that could legitimately reopen that decision.
 
-Against it: the top of `CLAUDE.md` is unambiguous that the *shipped* file has
+Against it: the top of `AGENTS.md` is unambiguous that the *shipped* file has
 zero runtime dependencies, and a second request needs to clear a high bar.
 `build.js` was exempted because its output is still one file; an animation
 library would not be — it would ship.

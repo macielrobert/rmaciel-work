@@ -13,7 +13,8 @@ actually need doing. Current build: **v80**.
 > kept for their reasoning; the punch list is what to actually work from, so
 > nothing is tracked in two places.
 
-Companion files: `CLAUDE.md` (context for Claude Code and `@claude`),
+Companion files: `AGENTS.md` (context for every agent — Codex reads it,
+Claude Code imports it through `CLAUDE.md`),
 `README.md` (plain-language operating instructions), `PUNCH-LIST.md` (the
 pre-launch gate), `STRESS-TESTS.md` (the test list, run at Phase 4).
 
@@ -108,9 +109,9 @@ account connection above supersedes it.
 **Optional:** branch protection on `main`. Claude Code on the web opens pull
 requests anyway, so this is a safety net rather than a requirement.
 
-Known gap: routes share the **code and `CLAUDE.md`, not conversation memory**.
-Decisions that matter get written into `CLAUDE.md` or the commit message, or
-they don't survive.
+Known gap: routes share the **code and `AGENTS.md`, not conversation memory**.
+Decisions that matter get written into `AGENTS.md` or the commit message, or
+they don't survive. Truer still with two agents — see the last handoff below.
 
 ---
 
@@ -473,3 +474,65 @@ until those are filled in, or the projects are marked `draft`.
    placeholder contact email, no favicon/OG/404,
    `big-deal-project.mdoc` test entry to delete.
 5. `grid-motion` branch — parked, not touched.
+
+---
+
+## HANDOFF — Two agents, one repository (2026-10-10)
+
+Codex joins Claude Code on this repository. What changed, what is left for
+Robert, and where production picks up.
+
+### Done
+
+- **The repository lives at `~/Developer/rmaciel-work`**, out of iCloud.
+  Copied rather than moved, then checked: the same 1,303 files, `git fsck`
+  clean, `npm ci` and `npm run build` pass, Harvest.app rebuilt from the new
+  path and launched (its page loaded), GitHub Desktop relinked.
+- **`CLAUDE.md` became `AGENTS.md`**, the one file every agent reads. Codex
+  reads it by that name; `CLAUDE.md` now only imports it. The rules that lived
+  in Claude's private memory — the pull-request flow, the Harvest PID rule,
+  the standing holds — moved into its "Working across agents" section, so
+  Codex works under the same ones.
+- **Codex on this Mac reads all of it.** Codex stops reading `AGENTS.md` at
+  32 KiB unless told otherwise, and the file is ~41 KB, so
+  `~/.codex/config.toml` now sets `project_doc_max_bytes = 65536`. That
+  setting is on this Mac, not in the repository.
+- Two statements about Keystatic writing straight to `main` were corrected:
+  the repository is public and a ruleset now refuses direct pushes.
+
+### Robert's next steps
+
+1. Drag `rmaciel.work - site` off the Desktop into the Trash. Nothing uses
+   it any more, and an edit made there reaches nothing.
+2. Start Claude sessions from `~/Developer/rmaciel-work`.
+3. Codex: open the ChatGPT app, go to Codex, and pick the same folder. First
+   task, to prove the loop end to end: something small that ends in a merged
+   pull request.
+4. Never point Claude and Codex at the folder at the same time. If both are
+   working, the second one asks for its own worktree.
+
+### Known limits
+
+- **Codex from the phone.** A cloud task does not have this Mac's
+  `~/.codex/config.toml`, and is expected to read only the first 32 KiB of
+  `AGENTS.md`. That cuts it partway through "Rejected alternatives", losing
+  Conventions, Current state and Deployment. **Split the file before relying
+  on Codex from the phone** — not done now, since nothing uses it there yet.
+- **Keystatic and the ruleset — untested.** The ruleset has no bypass, so a
+  Keystatic save to `main` should be refused. Branch first in the editor
+  anyway, as `README.md` says.
+- **Codex and pushing.** Expect Codex to ask before running `git push` or
+  `gh`. Approve them for this repository; they are how work reaches the site.
+
+### Production — where it picks up
+
+Nothing here changes the queue; the open work is where it was.
+
+- `PUNCH-LIST.md` is the gate before the domain moves. Section 1 (content)
+  is the long pole.
+- **NEXT — Video and audio players**, above: waiting on Robert's go for a
+  second domain to serve the R2 bucket.
+- **HANDOFF — Netlify build cost**, above: splitting into two Netlify sites,
+  waiting on his go.
+- Harvest: growing to cover every project field; its output stays held
+  until he says so (`AGENTS.md`, standing holds).
