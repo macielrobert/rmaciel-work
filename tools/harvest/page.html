@@ -78,7 +78,7 @@
          are the works below. Filled by loadProj() in page.js. -->
     <div id="orgbody"><div id="orgmain">
     <div id="proj" hidden>
-      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span></div>
+      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span><span id="punsaved" hidden>Unsaved <button class="btn" id="pwrite">Write to project</button></span></div>
       <div class="pgrid">
         <label>Title<input data-p="title"></label>
         <label>Section<select data-p="section"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select></label>
@@ -89,7 +89,7 @@
         <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
         <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
         <div class="field">Grid icon
-          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Uploaded mark</option></select>
+          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Image (PNG or SVG)</option></select>
           <input data-p="icon_glyph" placeholder="One character">
           <div class="mark" data-mark="icon_image"></div>
         </div>

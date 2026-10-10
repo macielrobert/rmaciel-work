@@ -43,8 +43,9 @@ The launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 5. Bulk: tick cards → Accept / Reject / Move to project (moved cards arrive
    accepted; the original is kept rejected+hidden so a re-crawl can't refile it).
    Rejected → Clear hides them but keeps them rejected.
-6. New project (Projects column): writes a draft .mdoc; needs a grid icon in
-   /keystatic before it can go live.
+6. New project (Projects column): writes a draft .mdoc; needs a grid icon
+   before it can go live — Organize › Project details uploads one (a typed
+   character shows "Or an image" under it; choosing a file switches to it).
 
 ## What "publish the harvest" means for Claude
 
@@ -132,6 +133,10 @@ IMG_8617 is 66 MB), and refuses a turned GIF. Netlify's image CDN picks WebP
 for most browsers and documents animated WebP output — confirm on the live
 site the first time a GIF is published; if it comes back still, skip the
 transform for `.gif` in `IMAGE_TRANSFORM` (index.html).
+A refused GIF gets a smaller copy from `tools/gif-shrink.swift` (header says how
+to run it): every frame and its timing kept, 720 wide, 32 colours by default —
+IMG_8617 went 66.5 MB → 8.4 MB. Write the copy beside the original, add it to
+the project, and check Organize kept the new one (2026-10-09).
 The Mac's not-added alert groups failures by reason with three names each:
 an NSAlert does not scroll, and forty lines pushed OK off the screen.
 
@@ -228,6 +233,11 @@ fields it changed, so newer edits from GitHub survive. Icon/wordmark uploads wai
 `.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
 Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.
+Unsaved panel edits (2026-10-10): the panel head shows **Unsaved** with its own
+**Write to project** (it clicks the header's — still one write). Picking another
+project asks BEFORE switching; Cancel stays put. It used to ask after the list,
+header and works had moved, so Cancel left one project's details over another's
+works and every click asked again.
 
 Organize → **Text**: the project's accepted passages in a column beside the
 works. Click (or right-click) one for where it goes: a Project details field
