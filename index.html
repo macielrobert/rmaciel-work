@@ -212,6 +212,14 @@
     position: relative;
   }
   #nl-content { flex: 1 1 auto; }
+  /* CLIP, NOT HIDDEN, on the grid half. overflow:hidden is still a scroll
+     container: a Tab onto a key span the ring had carried past the canvas edge
+     made the browser scroll THIS box to bring it into view, the whole row slid
+     left, and nothing ever scrolled it back — a row stopping short of the right
+     edge. clip cannot be scrolled at all; the row is moved by ensureVisible()
+     instead. `hidden` above stays as the fallback where clip is unknown
+     (Safari before 16). Same reason #nl-keys clips with clip-path. */
+  #nl-grid { overflow: clip; }
   /* 50% is a LAST-RESORT fallback for a page whose script never runs at all.
      It is not the load state any more: placeSeam() writes the real resting
      height at parse time, before the first paint, so nothing here is ever
@@ -2945,6 +2953,12 @@ void main() {
     keyEls[i].focus({ preventScroll: true });
     ensureVisible(i);
   }
+
+  // TAB ARRIVES WITHOUT moveFocus: the browser focuses the tab stop itself,
+  // wherever the ring has carried it — often off screen, where the clip hides
+  // the focus mark. Bring it on screen the same way the arrows do. A second
+  // call from moveFocus above finds the same distance and sets the same target.
+  keysEl.addEventListener('focusin', (ev) => ensureVisible(keyEls.indexOf(ev.target)));
 
   function onKeyNav(ev, i) {
     // the grid is inert while it REARRANGES and under the CONTACT LOCK,
