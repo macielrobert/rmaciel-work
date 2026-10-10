@@ -75,9 +75,19 @@
      list, each scrolling on its own so a passage stays in view while the
      works scroll under it */
   main.organize #org { display:flex; flex-direction:column; overflow:hidden; }
-  #orgbody { flex:1; min-height:0; display:grid; grid-template-columns:1fr; }
-  #orgbody.two { grid-template-columns:minmax(0, 1fr) 0 var(--w-texts, 300px); }
-  #orgbody:not(.two) > .seam { display:none; }
+  /* works | Text | Preview, each side column shut by default. Every child has
+     its own track, so a hidden one leaves a 0 track instead of shifting the rest */
+  #orgbody { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0, 1fr) 0 var(--c-texts, 0) 0 var(--c-prev, 0); }
+  #orgbody > * { grid-row:1; }
+  #orgbody.two { --c-texts:var(--w-texts, 300px); }
+  #orgbody.prev { --c-prev:var(--w-preview, 420px); }
+  #orgmain { grid-column:1; } #orgmain + .seam { grid-column:2; } #texts { grid-column:3; } #texts + .seam { grid-column:4; } #preview { grid-column:5; }
+  #orgbody:not(.two) > #orgmain + .seam, #orgbody:not(.prev) > #texts + .seam { display:none; }
+  #preview { display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--accent-dim); }
+  .prevhead { padding:var(--m); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+  #prevsrc .btn.on, #prevtoggle.on { color:var(--ink); }
+  #prevframe { flex:1; width:100%; border:0; border-top:1px solid var(--accent-dim); }
+  body.sizing iframe { pointer-events:none; }   /* a drag over the frame would otherwise go to the site */
   #orgmain { overflow:auto; min-height:0; }
   #texts { overflow:auto; min-height:0; padding:var(--m); border-left:1px solid var(--accent-dim); }
   .tblock { border-top:1px solid var(--accent-dim); padding:8px 0 10px; cursor:pointer; color:var(--accent); white-space:pre-wrap; overflow-wrap:anywhere; }

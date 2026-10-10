@@ -467,6 +467,7 @@ $('orgq').addEventListener('input', () => { if (org) drawOrg(); });
 // ⌘F: Harvest.app's web view has no find bar, so on Organize it goes to the find box
 document.addEventListener('keydown', (e) => { if (view === 'organize' && (e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); $('orgq').focus(); $('orgq').select(); } });
 async function loadOrg() {
+  loadPreview();   // the selected project, and the files as they now are (loadOrg also runs after Write)
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; $('orgwrite').disabled = true; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
   loadProj(); loadTexts();
@@ -770,6 +771,28 @@ $('newgo').addEventListener('click', createProject);
    both of which Write skips. It stays in the column, dimmed, so it
    can be placed again. Text read out of a picture (a work's right-click ›
    Extract text) arrives here already `organize`, waiting to be placed. */
+/* ---- PREVIEW: the site itself, beside the works. "As written" is built from
+   the files on this Mac each time it loads (harvest.js, on a port of its own),
+   so it shows what Write to project changed before Publish; "Live" is what
+   visitors get now. It opens on the selected project. A fresh load every time
+   (the ?v=), not a change of the part after #: the build has to run again to
+   pick up a Write. The boundary — a link out of the site opens in the default
+   browser, not in the pane — is HarvestApp.swift's; a plain browser has none. */
+let prevOpen = remember('prevOpen') === '1', prevSrc = remember('prevSrc') || 'written';
+function loadPreview() {
+  $('preview').hidden = !prevOpen; $('prevtoggle').classList.toggle('on', prevOpen);
+  $('orgbody').classList.toggle('prev', prevOpen);
+  document.querySelectorAll('#prevsrc [data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === prevSrc));
+  if (!prevOpen || !S) return;
+  const pr = S.projects.find(p => p.slug === project), shown = pr && !pr.draft;
+  // a held-back project is not in the build, and the site would quietly show everything instead
+  $('prevmsg').textContent = pr && pr.draft ? pr.title + ' is held back, so the site does not show it yet.' : '';
+  $('prevframe').src = (prevSrc === 'live' ? S.live : S.preview) + '?v=' + Date.now() + (shown ? '#' + pr.section + '/' + pr.slug : '');
+}
+$('prevtoggle').addEventListener('click', () => { prevOpen = !prevOpen; remember('prevOpen', prevOpen ? '1' : '0'); loadPreview(); });
+$('prevsrc').addEventListener('click', (e) => { const b = e.target.closest('[data-src]'); if (b) { remember('prevSrc', prevSrc = b.dataset.src); loadPreview(); } });
+$('prevreload').addEventListener('click', loadPreview);
+
 let textsOpen = remember('textsOpen') === '1', armed = null, armField = 'caption', otexts = [];
 function textsLook() {
   $('texts').hidden = !textsOpen; $('textstoggle').classList.toggle('on', textsOpen);
@@ -1203,15 +1226,16 @@ document.addEventListener('pointerdown', (e) => {
   e.preventDefault(); s.setPointerCapture(e.pointerId);
   s.classList.add('drag'); document.body.classList.add('sizing');
   const a = s.previousElementSibling, b = s.nextElementSibling, x0 = e.clientX, wa = a.offsetWidth, wb = b.offsetWidth;
-  const MIN = 140, clamp = (w) => Math.min(Math.max(w, MIN), innerWidth / 2);
+  // the Preview may take most of the window: the site's wide layout needs the room
+  const MIN = 140, clamp = (w) => Math.min(Math.max(w, MIN), innerWidth * ('right' in s.dataset ? 0.75 : 0.5));
   // proportions in pixels, so the column not beside this seam keeps its share.
   // All measured before any is written: each write re-lays out the other two.
   if (s.dataset.fr) [...document.querySelectorAll('#review > .col')].map(c => [c.dataset.w, c.offsetWidth + 'fr']).forEach(([k, v]) => setWidth(k, v));
   const move = (ev) => {
     const d = ev.clientX - x0;
     if (s.dataset.fr) { const na = Math.min(Math.max(wa + d, MIN), wa + wb - MIN); setWidth(a.dataset.w, na + 'fr'); setWidth(b.dataset.w, wa + wb - na + 'fr'); }
-    else if (a.dataset.w) setWidth(a.dataset.w, clamp(wa + d) + 'px');   // the column left of the line
-    else setWidth(b.dataset.w, clamp(wb - d) + 'px');                     // Text, right of it
+    else if (a.dataset.w && !('right' in s.dataset)) setWidth(a.dataset.w, clamp(wa + d) + 'px');   // the column left of the line
+    else setWidth(b.dataset.w, clamp(wb - d) + 'px');   // Text or Preview, right of it (data-right: Text is on its left)
   };
   s.addEventListener('pointermove', move);
   s.addEventListener('lostpointercapture', () => {
