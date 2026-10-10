@@ -567,7 +567,8 @@ understanding why it exists will reintroduce a solved bug.
   would otherwise turn it on.
 - **Verify before presenting.** At minimum: JS syntax check, CSS brace
   balance, and a grep that every new function is actually wired in. Several
-  real bugs were caught this way.
+  real bugs were caught this way. A change to a colour or size the site and
+  Harvest share also runs `node tools/check-tokens.js`.
 - **Version numbers were a workaround** for passing files through chat. In Git,
   history handles that. `<title>` should hold the real site title, not `v80`.
 
@@ -595,6 +596,9 @@ Companion documents in this repo:
   claim marked verified or recalled. **Read before proposing anything about
   the CMS.** The decision has been made three times because the reasoning was
   never written down; it is written down now.
+- `STYLE-GUIDE.md` — the shared style for the site and Harvest: what each
+  colour, size and control is for, and where it goes. `tools/specimen.html`
+  shows it at actual size. **Read before changing how anything looks.**
 - `NOTES-*.md` — design notes belonging to a branch. Each is that branch's
   memory: read it first, update it last.
 

@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style specimen</title>
+<!-- UX-1 STYLE SPECIMEN — the side-by-side the shared UX plan asks for
+     (TO-DO.md, UX-1): today's greys, type, controls and states next to the
+     proposed ones, in both themes, at actual size, with the site's real copy.
+     STYLE-GUIDE.md is the prose that goes with it.
+
+     A PROTOTYPE, NOT A SOURCE. Nothing here is adopted until Robert has looked
+     at it, and nothing here ships: build.js copies index.html, fonts/ and
+     images/, never tools/. When values are adopted they go into index.html and
+     page.css, and tools/check-tokens.js keeps those two agreeing — this file is
+     not checked, because it holds the old values on purpose.
+
+     Open it SERVED from the repository root — the "specimen" entry in
+     .claude/launch.json, then /tools/specimen.html. Opened as a file, a
+     browser refuses the fonts to it and every sample falls back to the
+     system face, which is the one thing this page cannot be judged in. -->
+<style>
+  @font-face { font-family:'PP Neue Montreal'; src:url('../fonts/PPNeueMontreal-Light.woff2') format('woff2'); font-weight:300; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('../fonts/PPNeueMontreal-Book.woff2') format('woff2'); font-weight:400; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('../fonts/PPNeueMontreal-Bold.woff2') format('woff2'); font-weight:700; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('../fonts/PPNeueMontreal-Italic.woff2') format('woff2'); font-weight:400; font-style:italic; }
+
+  :root {
+    --face: 'PP Neue Montreal', system-ui, -apple-system, sans-serif;
+    /* TODAY, as index.html and page.css write them */
+    --accent: rgba(143,143,153,.9);
+    --accent-dim: rgba(143,143,153,.5);
+    /* PROPOSED — the names STYLE-GUIDE.md uses. These two are the same in
+       both themes: --edge is today's grey at full strength, which clears the
+       3:1 a field line or an outline needs on white AND on black; --rule is
+       today's --accent-dim, unchanged, because decoration needs no ratio. */
+    --edge: rgb(143,143,153);
+    --rule: rgba(143,143,153,.5);
+    --s1:4px; --s2:8px; --s3:12px; --s4:20px; --s5:32px;
+    --body: 14px;                       /* the size buttons move it */
+    --bg:#000; --ink:#fff; --text-2:rgb(129,129,138);
+  }
+  @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; --text-2:rgb(104,104,113); } }
+  /* --text-2, THE PROPOSED READABLE GREY, is the one value that differs by
+     theme: each is picked for the same ~5.5:1 on its own background. The
+     "one fixed grey" button swaps in the alternative that keeps today's
+     single-grey rule — the only grey that clears 4.5:1 on both, by a hair. */
+  .t-dark  { --bg:#000; --ink:#fff; --text-2:rgb(129,129,138); }
+  .t-light { --bg:#fff; --ink:#000; --text-2:rgb(104,104,113); }
+  .one-grey, .one-grey .t-dark, .one-grey .t-light { --text-2:rgb(117,117,126); }
+
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:400 13px/1.5 var(--face); letter-spacing:.01em; }
+  .page { max-width:1240px; margin:0 auto; padding:var(--s5) 16px 96px; }
+  .intro { max-width:40em; color:var(--text-2); margin:0 0 var(--s4); }
+  .intro b { color:var(--ink); font-weight:400; }
+  h1 { font-size:16px; font-weight:400; letter-spacing:.06em; text-transform:uppercase; margin:0 0 var(--s3); }
+  h2 { font-size:11px; font-weight:400; letter-spacing:.12em; text-transform:uppercase; color:var(--text-2);
+       margin:var(--s5) 0 var(--s3); padding-top:var(--s3); border-top:1px solid var(--rule); }
+  .note { color:var(--text-2); font-size:12px; max-width:44em; margin:0 0 var(--s3); }
+  .knobs { display:flex; flex-wrap:wrap; gap:var(--s3) var(--s5); align-items:center; margin:0 0 var(--s3); }
+  .knob { display:flex; align-items:center; gap:var(--s1); flex-wrap:wrap; }
+  .knob > span { color:var(--text-2); font-size:12px; margin-right:var(--s1); }
+
+  /* each comparison: two panels side by side, stacked on a phone */
+  .pair { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1px; background:var(--rule); border:1px solid var(--rule); }
+  .pair + .pair { margin-top:var(--s3); }
+  .panel { background:var(--bg); color:var(--ink); padding:var(--s4); min-width:0; }
+  .tag { display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-2); margin:0 0 var(--s3); }
+  .pair.stack { grid-template-columns:minmax(0,1fr); }   /* the states table needs the full width */
+  @media (max-width: 760px) { .pair { grid-template-columns:minmax(0,1fr); } }
+
+  /* ===================================================== 1. GREYS */
+  .gt { width:100%; border-collapse:collapse; }
+  .gt td { padding:var(--s2) var(--s2) var(--s2) 0; vertical-align:baseline; border-top:1px solid var(--rule); }
+  .gt tr:first-child td { border-top:0; }
+  .gt .nm { font-size:12px; color:var(--text-2); white-space:nowrap; }
+  .gt .cr { font-size:12px; white-space:nowrap; text-align:right; padding-right:0; }
+  .gt .cr.fail { text-decoration:line-through; text-decoration-thickness:1px; }
+  .sw-line { display:inline-block; width:56px; height:0; border-top:1px solid; vertical-align:middle; }
+
+  /* ===================================================== 2. PORTFOLIO */
+  /* TODAY: #nl-window's text, exactly — 11px / 1.9 / .05em, the title in grey */
+  .site-now { font:400 11px/1.9 var(--face); letter-spacing:.05em; max-width:33em; }
+  .site-now .hd { color:var(--accent); }
+  .site-now .cap { color:var(--accent); }
+  /* PROPOSED: title -> facts -> body, each a step apart. Facts and caption
+     follow the body size down so they never end up larger than it. */
+  .site-prop { font:400 var(--body)/1.6 var(--face); letter-spacing:.01em; max-width:33em; }
+  .site-prop .hd { display:block; letter-spacing:.08em; margin:0 0 var(--s3); }
+  .site-prop .facts { font-size:max(11px, calc(var(--body) - 2px)); line-height:1.5; color:var(--text-2); margin:0 0 var(--s4); }
+  .site-prop .cap { font-size:max(11px, calc(var(--body) - 2px)); line-height:1.5; color:var(--text-2); }
+  .site-now p, .site-prop p { margin:0 0 1em; }
+  .site-now u, .site-prop u { text-underline-offset:.18em; text-decoration-thickness:1px; }
+  .shot { display:block; width:100%; max-width:280px; aspect-ratio:16/9; object-fit:cover; margin:var(--s4) 0 var(--s1); background:#808080; }
+  /* the footer strip: geometry exactly as index.html's #nl-fns */
+  .ft { display:flex; flex-wrap:wrap; margin:var(--s4) -8px 0; font:400 11px/1.3 var(--face); letter-spacing:.15em; }
+  .ft a { padding:6px 8px; color:inherit; text-decoration:none; cursor:pointer; }
+  .ft a.on { color:var(--ink); }
+  .ft .right { margin-left:auto; }
+  .site-now .ft  { color:var(--accent-dim); }
+  .site-prop .ft { color:var(--text-2); }
+  .ft.marked a.on { text-decoration:underline; text-underline-offset:.55em; text-decoration-thickness:1px; }
+  /* index.html's own narrow rules for the strip, so a phone sees what the site does */
+  @media (max-width: 500px) { .ft { justify-content:center; } .ft .right { margin-left:0; } }
+  @media (max-width: 400px) { .ft { letter-spacing:.06em; } .ft a { padding-left:6px; padding-right:6px; } }
+  .rowlabel { font-size:11px; color:var(--text-2); letter-spacing:.05em; margin-top:var(--s3); }
+
+  /* ===================================================== 3. EDITOR, TODAY */
+  /* page.css as it is: Light 300 at 11px, every button the same uppercase grey word */
+  .ed-now { font:300 11px/1.7 var(--face); letter-spacing:.05em; }
+  .ed-now .bar { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:baseline; padding:0 0 var(--s3); border-bottom:1px solid var(--accent-dim); margin-bottom:var(--s3); }
+  .ed-now h3 { font-size:13px; font-weight:400; letter-spacing:.15em; margin:0; }
+  .ed-now .btn { font:inherit; background:none; border:0; padding:0; color:var(--accent); text-transform:uppercase; letter-spacing:.15em; cursor:pointer; }
+  .ed-now .btn.on { color:var(--ink); }
+  .ed-now .btn[disabled] { opacity:.35; }
+  .ed-now .dim { color:var(--accent); }
+  .ed-now .cap { text-transform:uppercase; letter-spacing:.15em; }
+  .ed-now label { display:block; color:var(--accent); margin-top:var(--s2); }
+  .ed-now input { display:block; width:100%; font:inherit; letter-spacing:inherit; color:var(--ink); background:none;
+                  border:0; border-bottom:1px solid var(--accent-dim); border-radius:0; padding:4px 0 5px; margin-top:6px; outline:none; }
+  .ed-now input::placeholder { color:var(--accent-dim); }
+
+  /* ===================================================== 3. EDITOR, PROPOSED */
+  .ed { font:400 13px/1.5 var(--face); letter-spacing:.01em; }
+  .rl { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-2); }
+  .help { font-size:12px; color:var(--text-2); }
+  .region { display:flex; flex-wrap:wrap; align-items:center; gap:var(--s2) var(--s3); padding:var(--s3) 0; border-bottom:1px solid var(--rule); }
+  .region .rl { flex:0 0 100%; }
+  .region .push { margin-left:auto; display:flex; flex-wrap:wrap; gap:var(--s2) var(--s3); align-items:center; }
+  .ptitle { font-size:16px; letter-spacing:.06em; }
+  .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ink); margin-right:6px; vertical-align:1px; }
+
+  /* BUTTONS — three kinds, by what they do, not one grey word for all */
+  .b { font:inherit; letter-spacing:inherit; color:var(--ink); background:none; border:1px solid var(--edge); border-radius:0;
+       min-height:28px; padding:0 var(--s3); display:inline-flex; align-items:center; gap:var(--s1); cursor:pointer; white-space:nowrap;
+       transition:color .15s, border-color .15s, background-color .15s, opacity .15s; }
+  .b.primary { background-color:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .b.quiet { border-color:transparent; color:var(--text-2); padding:0 var(--s2); }
+  /* HOVER CHANGES TONE ONLY. It never draws an outline — the outline is
+     keyboard focus's, so the two can never be mistaken for each other. */
+  .b:hover, .b.is-hover { border-color:var(--ink); }
+  .b.primary:hover, .b.primary.is-hover { opacity:.8; }
+  .b.quiet:hover, .b.quiet.is-hover { color:var(--ink); border-color:transparent; }
+  /* disabled stays READABLE — you should be able to see what it would do */
+  .b:disabled, .b.primary:disabled { background-color:transparent; color:var(--text-2); border-color:var(--rule); opacity:1; cursor:default; }
+  .b.quiet:disabled { color:var(--rule); border-color:transparent; }
+
+  /* TOGGLES and TABS — a choice between views. Selected = ink AND a line */
+  .tg { font:inherit; letter-spacing:inherit; background:none; border:0; color:var(--text-2); min-height:28px;
+        padding:0 var(--s2); position:relative; cursor:pointer; transition:color .15s; }
+  .tg:hover, .tg.is-hover, .tg.on { color:var(--ink); }
+  .tg.on::after { content:''; position:absolute; left:var(--s2); right:var(--s2); bottom:3px; height:1px; background:var(--ink); }
+  .tg:disabled { color:var(--rule); cursor:default; }
+
+  /* LIST ROWS — the projects list. Selected = ink AND a bar at the left */
+  .rows { margin:0 calc(-1 * var(--s3)); }
+  .row { display:flex; align-items:center; gap:var(--s2); min-height:28px; padding:0 var(--s3); color:var(--text-2);
+         position:relative; cursor:pointer; transition:color .15s; }
+  .row:hover, .row.is-hover, .row.on { color:var(--ink); }
+  .row.on::before { content:''; position:absolute; left:0; top:5px; bottom:5px; width:2px; background:var(--ink); }
+  .row .n { margin-left:auto; font-size:12px; }
+  .row.off { color:var(--rule); cursor:default; }
+
+  /* KEYBOARD FOCUS — one look for every kind of control */
+  :is(.b, .tg, .row, .ft a, .tile):focus-visible, .is-focus { outline:1px solid var(--ink); outline-offset:2px; }
+  .row:focus-visible, .row.is-focus { outline-offset:-1px; }
+  :is(.b, .tg, .row, .tile):focus:not(:focus-visible) { outline:none; }
+
+  /* FIELDS */
+  .f { display:block; margin:0 0 var(--s3); }
+  .f > span:first-child { display:block; font-size:12px; color:var(--text-2); }
+  .f input, .f textarea, .f select { display:block; width:100%; font:inherit; letter-spacing:inherit; color:var(--ink);
+       background:none; border:0; border-bottom:1px solid var(--edge); border-radius:0; padding:4px 0 5px; margin-top:2px; outline:none;
+       transition:border-color .15s, box-shadow .15s; }
+  .f textarea { resize:vertical; min-height:60px; }
+  .f input::placeholder, .f textarea::placeholder { color:var(--text-2); }
+  .f input:hover, .f textarea:hover, .f .is-hover { border-bottom-color:var(--ink); }
+  /* focus is the line DOUBLED, drawn as a shadow so nothing below moves */
+  .f input:focus, .f textarea:focus, .f select:focus, .f .is-focus, .f.err input, .f.err textarea {
+       border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); outline:none; }
+  .f input:disabled { color:var(--text-2); border-bottom:1px dashed var(--rule); }
+  .f select { appearance:none; cursor:pointer; padding-right:16px;
+    background:linear-gradient(45deg, transparent 50%, var(--text-2) 50%) right 6px center / 5px 5px no-repeat,
+               linear-gradient(-45deg, transparent 50%, var(--text-2) 50%) right 1px center / 5px 5px no-repeat; }
+  .f select option { background:var(--bg); color:var(--ink); }
+  .f .help { display:block; margin-top:var(--s1); }
+  /* AN ERROR is never colour alone: a doubled line, a mark, and words that
+     say what to do — in ink, the strongest thing a monochrome page has */
+  .errmsg { display:flex; gap:var(--s2); align-items:baseline; font-size:12px; color:var(--ink); margin-top:var(--s1); }
+  .errmsg::before { content:''; flex:none; width:6px; height:6px; background:var(--ink); transform:translateY(-1px); }
+  .chk { display:flex; align-items:center; gap:var(--s2); min-height:28px; cursor:pointer; }
+  .chk input { width:14px; height:14px; margin:0; accent-color:var(--ink); cursor:pointer; }
+
+  /* TILES */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:var(--s3); }
+  .tile { position:relative; cursor:pointer; }
+  .tile img { display:block; width:100%; aspect-ratio:1; object-fit:contain; background:rgba(143,143,153,.12); outline:1px solid transparent; }
+  .tile.on img { outline:1px solid var(--ink); outline-offset:2px; }
+  .tile input { position:absolute; top:6px; right:6px; margin:0; width:14px; height:14px; accent-color:var(--ink); }
+  .tile small { display:block; font-size:12px; color:var(--text-2); margin-top:var(--s1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile.on small { color:var(--ink); }
+  .split { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:var(--s4); padding-top:var(--s3); }
+  .details { border-left:1px solid var(--rule); padding-left:var(--s4); }
+  @media (max-width: 1000px) { .split { grid-template-columns:minmax(0,1fr); } .details { border-left:0; padding-left:0; border-top:1px solid var(--rule); padding-top:var(--s3); } }
+
+  /* STATES MATRIX */
+  .mx { width:100%; border-collapse:collapse; }
+  .mx th { font-weight:400; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-2); text-align:left; padding:0 var(--s2) var(--s2) 0; }
+  .mx td { padding:var(--s2) var(--s2) var(--s2) 0; border-top:1px solid var(--rule); vertical-align:middle; }
+  .mx td:first-child { font-size:12px; color:var(--text-2); white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+
+  /* EMPTY / PROGRESS / MESSAGES */
+  .empty { max-width:28em; }
+  .empty p { margin:0 0 var(--s2); }
+  .prog { height:1px; background:var(--rule); position:relative; overflow:hidden; margin:var(--s2) 0; }
+  .prog::after { content:''; position:absolute; top:0; bottom:0; left:0; width:30%; background:var(--ink); animation:slide 1.2s linear infinite; }
+  .prog.det::after { width:60%; animation:none; }
+  @keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(340%); } }
+  @media (prefers-reduced-motion: reduce) { .prog::after { animation:none; } }
+  .status { display:flex; flex-wrap:wrap; gap:var(--s1) var(--s3); align-items:center; font-size:12px; color:var(--text-2); }
+  .status b { font-weight:400; color:var(--ink); }
+  .notice { border-left:1px solid var(--ink); padding:2px 0 2px var(--s3); max-width:36em; }
+  .notice p { margin:0 0 var(--s2); }
+  .notice .acts { display:flex; gap:var(--s2); flex-wrap:wrap; }
+
+  /* SPACING */
+  .sp { display:grid; grid-template-columns:40px 40px minmax(0,1fr); gap:var(--s2) var(--s3); align-items:center; font-size:12px; }
+  .sp i { display:block; height:12px; background:var(--ink); }
+  .sp span:nth-child(3n+3) { color:var(--text-2); }
+
+  /* HIT AREAS — hatching over every control's real box */
+  .show-hits :is(.b, .tg, .row, .ft a, .chk, .ed-now .btn) {
+    background-image:repeating-linear-gradient(45deg, rgba(143,143,153,.35) 0 2px, transparent 2px 6px); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Style specimen</h1>
+  <p class="intro">The proposed shared style for the site and Harvest, next to <b>today</b>, at actual size, in both themes.
+    Nothing here is adopted yet. The prose is in <b>STYLE-GUIDE.md</b>; the questions for Robert are at the end of it.</p>
+
+  <div class="knobs" role="group" aria-label="What to compare">
+    <div class="knob"><span>Site body size</span>
+      <button class="tg" data-size="11">11</button><button class="tg" data-size="12">12</button><button class="tg" data-size="13">13</button><button class="tg on" data-size="14">14</button>
+    </div>
+    <div class="knob"><span>Secondary grey</span>
+      <button class="tg on" data-grey="two">One per theme</button><button class="tg" data-grey="one">One fixed grey</button>
+    </div>
+    <div class="knob"><span>Tap areas</span>
+      <button class="tg" data-hits="off" id="hits">Show</button>
+    </div>
+  </div>
+
+  <!-- ================================================================ GREYS -->
+  <h2>1 · Greys</h2>
+  <p class="note">Readable text needs 4.5:1 against its background; a line that shows where a field or a button is needs 3:1; decoration needs nothing.
+    The numbers are measured live from the colours on screen.</p>
+  <div class="pair">
+    <div class="panel t-dark"><span class="tag">Dark</span><table class="gt"></table></div>
+    <div class="panel t-light"><span class="tag">Light</span><table class="gt"></table></div>
+  </div>
+  <template id="greyrows">
+    <tr><td class="nm">Today · labels, titles, buttons</td><td><span data-cr="color" data-need="4.5" style="color:var(--accent)">Exhibition, Fundraiser</span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Today · footer, copyright</td><td><span data-cr="color" data-need="4.5" style="color:var(--accent-dim)">ALL BUILD DESIGN ART</span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Proposed · secondary text</td><td><span data-cr="color" data-need="4.5" style="color:var(--text-2)">Exhibition, Fundraiser</span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Proposed · edge (lines, not text)</td><td><span class="sw-line" data-cr="border-top-color" data-need="3" style="border-color:var(--edge)"></span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Proposed · rule (decoration)</td><td><span class="sw-line" data-cr="border-top-color" data-need="0" style="border-color:var(--rule)"></span></td><td class="cr"></td></tr>
+  </template>
+
+  <!-- ================================================================ PORTFOLIO -->
+  <h2>2 · The site: a project, today and proposed</h2>
+  <p class="note">LIGHT WORK's real copy. Proposed: the title in ink, the detail lines one step smaller and grey, the body larger.
+    The footer keeps its size and spacing and only changes grey. The second proposed footer adds a line under the chosen section. The size buttons at the top change the proposed body size.</p>
+  <template id="entry">
+    <div class="pair">
+      <div class="panel">
+        <span class="tag">Today</span>
+        <div class="site-now">
+          <span class="hd">LIGHT WORK</span><br><br>Exhibition, Fundraiser<br>Co-Director, Curator<br>2021<br><br>
+          <p>In 2021, I co-directed and curated an art show and fundraiser called Light Work, a group exhibition addressing physicality and shared physical space. It was one of Portland’s first arts events to follow the Covid-19 pandemic. Money was raised for Portland Public Schools and was made available for teachers to provide unique arts opportunities for underserved students.</p>
+          <p><u>ORGANIZERS</u></p>
+          <p>Sean Light<br>Owner, High Order Studio<br>⮡ Producer · Creative Direction · Exhibition Design</p>
+          <img class="shot" src="../images/bus-stop/images/1/src.jpeg" alt="">
+          <div class="cap">Bus Stop Render 2</div>
+          <nav class="ft"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="tag">Proposed</span>
+        <div class="site-prop">
+          <span class="hd">LIGHT WORK</span>
+          <div class="facts">Exhibition, Fundraiser<br>Co-Director, Curator<br>2021</div>
+          <p>In 2021, I co-directed and curated an art show and fundraiser called Light Work, a group exhibition addressing physicality and shared physical space. It was one of Portland’s first arts events to follow the Covid-19 pandemic. Money was raised for Portland Public Schools and was made available for teachers to provide unique arts opportunities for underserved students.</p>
+          <p><u>ORGANIZERS</u></p>
+          <p>Sean Light<br>Owner, High Order Studio<br>⮡ Producer · Creative Direction · Exhibition Design</p>
+          <img class="shot" src="../images/bus-stop/images/1/src.jpeg" alt="">
+          <div class="cap">Bus Stop Render 2</div>
+          <nav class="ft"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+          <div class="rowlabel">With a line under the chosen section</div>
+          <nav class="ft marked" style="margin-top:0"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+        </div>
+      </div>
+    </div>
+  </template>
+  <div data-from="entry" data-theme="t-dark"></div>
+  <div data-from="entry" data-theme="t-light"></div>
+  <p class="note" style="margin-top:var(--s2)">The caption line is BUS STOP's alt text standing in: no project has a caption yet. ⮡ is not in the typeface, so it falls back to another font on the live site too.</p>
+
+  <!-- ================================================================ EDITOR -->
+  <h2>3 · Harvest: the same project, today and proposed</h2>
+  <p class="note">Today every control is the same small grey uppercase word. Proposed: three kinds of button for three kinds of job, readable sizes, and one place for each kind of control.
+    This is a sketch of where things go, not the UX-2 design.</p>
+  <template id="editor">
+    <div class="pair">
+      <div class="panel">
+        <span class="tag">Today</span>
+        <div class="ed-now">
+          <div class="bar">
+            <h3>HARVEST</h3>
+            <button class="btn">Collect</button><button class="btn on">Organize</button>
+            <button class="btn on">Projects</button>
+            <span class="dim">Last crawl: ~/Desktop/Projects/Bus Stop</span>
+            <button class="btn">Write to project</button><button class="btn" disabled>Publish</button>
+          </div>
+          <div class="bar">
+            <span class="cap">BUS STOP</span><span class="dim">4 works</span>
+            <button class="btn">List</button> <button class="btn on">Grid</button> <button class="btn">S</button> <button class="btn on">M</button> <button class="btn">L</button>
+            <input placeholder="Find by file name (⌘F)" style="display:inline-block;width:14em;margin:0">
+            <button class="btn">Same work — merge</button><button class="btn">Remove from project</button><button class="btn">Separate copies</button>
+            <button class="btn">Move to project</button><button class="btn">Text</button><button class="btn on">Preview</button><button class="btn">Project details</button>
+          </div>
+          <label>Alt text<input value=""></label>
+          <label>Caption<input value="Bus Stop Render 2"></label>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="tag">Proposed</span>
+        <div class="ed">
+          <div class="region"><span class="rl">Application header</span>
+            <span>Harvest</span>
+            <span><button class="tg">Collect</button><button class="tg on">Edit</button></span>
+            <span class="push"><span class="help">2 projects saved, not published</span><button class="b">Review and publish…</button></span>
+          </div>
+          <div class="region"><span class="rl">Project header</span>
+            <span class="ptitle">BUS STOP</span><span class="help">Design · 4 works</span>
+            <span class="push"><span class="help"><span class="dot"></span>Unsaved changes</span><button class="b">Preview</button><button class="b primary">Save project</button></span>
+          </div>
+          <div class="region"><span class="rl">Workspace toolbar</span>
+            <span class="f" style="margin:0;flex:1 1 12em;max-width:16em"><input placeholder="Find by file name  ⌘F"></span>
+            <span class="push"><span><button class="tg on">Grid</button><button class="tg">List</button></span>
+            <span><button class="tg">S</button><button class="tg on">M</button><button class="tg">L</button></span></span>
+          </div>
+          <div class="region"><span class="rl">Selection toolbar</span>
+            <span>2 selected</span>
+            <button class="b">Same work</button><button class="b">Separate</button><button class="b">Move to…</button>
+            <span class="push"><button class="b quiet">Remove</button><button class="b quiet">Clear selection</button></span>
+          </div>
+          <div class="split">
+            <div class="tiles">
+              <label class="tile"><img src="../images/bus-stop/images/0/src.jpeg" alt=""><input type="checkbox"><small>Bus Stop Render</small></label>
+              <label class="tile on"><img src="../images/bus-stop/images/1/src.jpeg" alt=""><input type="checkbox" checked><small>Bus Stop Render 2</small></label>
+              <label class="tile on"><img src="../images/bus-stop/images/2/src.jpeg" alt=""><input type="checkbox" checked><small>Bus Stop Render 3</small></label>
+              <label class="tile"><img src="../images/bus-stop/images/3/src.png" alt=""><input type="checkbox"><small>Bus Stop Render 4</small></label>
+            </div>
+            <div class="details">
+              <span class="rl">Details · work 2 of 4</span>
+              <label class="f err" style="margin-top:var(--s2)"><span>Alt text — required</span><input value="">
+                <span class="errmsg">Describe the picture for someone who can’t see it. Needed before saving.</span></label>
+              <label class="f"><span>Caption</span><input value="Bus Stop Render 2"><span class="help">Shown under the picture when it is opened.</span></label>
+              <span style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="b">Turn left</button><button class="b">Turn right</button><button class="b quiet">3 other copies</button></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+  <div data-from="editor" data-theme="t-dark"></div>
+  <div data-from="editor" data-theme="t-light"></div>
+
+  <!-- ================================================================ STATES -->
+  <h2>4 · Every state, side by side</h2>
+  <p class="note">Hover changes tone only. Keyboard focus is a thin outline around the control, so the two can never be confused. Something selected is darker AND carries a mark: a line under a tab, a bar beside a row, a frame and a tick on a tile.
+    Disabled stays readable. Every cell here is also live; hover it or press Tab.</p>
+  <template id="states">
+    <div class="scroll"><table class="mx ed">
+      <tr><th></th><th>Rest</th><th>Hover</th><th>Keyboard focus</th><th>Selected</th><th>Disabled</th></tr>
+      <tr><td>Primary</td><td><button class="b primary">Save project</button></td><td><button class="b primary is-hover">Save project</button></td><td><button class="b primary is-focus">Save project</button></td><td class="help">—</td><td><button class="b primary" disabled>Save project</button></td></tr>
+      <tr><td>Secondary</td><td><button class="b">Preview</button></td><td><button class="b is-hover">Preview</button></td><td><button class="b is-focus">Preview</button></td><td class="help">—</td><td><button class="b" disabled>Preview</button></td></tr>
+      <tr><td>Quiet</td><td><button class="b quiet">Remove</button></td><td><button class="b quiet is-hover">Remove</button></td><td><button class="b quiet is-focus">Remove</button></td><td class="help">—</td><td><button class="b quiet" disabled>Remove</button></td></tr>
+      <tr><td>Tab or toggle</td><td><button class="tg">Grid</button></td><td><button class="tg is-hover">Grid</button></td><td><button class="tg is-focus">Grid</button></td><td><button class="tg on">Grid</button></td><td><button class="tg" disabled>Grid</button></td></tr>
+      <tr><td>List row</td><td><div class="row" tabindex="0">CANOPY<span class="n">12</span></div></td><td><div class="row is-hover">CANOPY<span class="n">12</span></div></td><td><div class="row is-focus">CANOPY<span class="n">12</span></div></td><td><div class="row on">CANOPY<span class="n">12</span></div></td><td><div class="row off">CANOPY<span class="n">12</span></div></td></tr>
+      <tr><td>Field</td><td><label class="f" style="margin:0"><input value="Wave House"></label></td><td><label class="f" style="margin:0"><input class="is-hover" value="Wave House"></label></td><td><label class="f" style="margin:0"><input class="is-focus" value="Wave House"></label></td><td class="help">—</td><td><label class="f" style="margin:0"><input disabled value="Wave House"></label></td></tr>
+    </table></div>
+  </template>
+  <div class="pair stack">
+    <div class="panel t-dark"><span class="tag">Dark</span><div data-from="states"></div></div>
+    <div class="panel t-light"><span class="tag">Light</span><div data-from="states"></div></div>
+  </div>
+
+  <!-- ================================================================ FORMS -->
+  <h2>5 · Fields, choices and errors</h2>
+  <template id="forms">
+    <div class="ed">
+      <label class="f"><span>Title</span><input value="BUS STOP"><span class="help">The address stays bus-stop even if the title changes.</span></label>
+      <label class="f"><span>Section</span><select><option>Build</option><option selected>Design</option><option>Art</option></select></label>
+      <label class="f"><span>Detail lines</span><textarea placeholder="One per line: what, role, year"></textarea></label>
+      <label class="f err"><span>Grid icon — required</span><input value="" placeholder="One character, or choose an image">
+        <span class="errmsg">Add an icon. A project can’t go on the site without one.</span></label>
+      <label class="chk"><input type="checkbox">Hold back (not on the site)</label>
+      <label class="chk"><input type="checkbox" checked>Allow pictures to open full size</label>
+    </div>
+  </template>
+  <div class="pair">
+    <div class="panel t-dark"><span class="tag">Dark</span><div data-from="forms"></div></div>
+    <div class="panel t-light"><span class="tag">Light</span><div data-from="forms"></div></div>
+  </div>
+
+  <!-- ================================================================ LISTS -->
+  <h2>6 · Lists, empty places, work in progress, messages</h2>
+  <template id="misc">
+    <div class="ed">
+      <span class="rl">Build</span>
+      <div class="rows"><div class="row" tabindex="0">REGENERATIONS<span class="n">3</span></div><div class="row" tabindex="0">SP CHAIR<span class="n">0</span></div></div>
+      <span class="rl" style="display:block;margin-top:var(--s3)">Design</span>
+      <div class="rows"><div class="row on" tabindex="0">BUS STOP<span class="n">4</span></div><div class="row" tabindex="0">DAILY SHAPES<span class="n">0</span></div></div>
+
+      <div style="margin-top:var(--s5)" class="empty">
+        <span class="rl">Pending · 0</span>
+        <p style="margin-top:var(--s2)">Nothing waiting for review.</p>
+        <p class="help">New material arrives here after you look through a folder or a website for this project.</p>
+        <button class="b">Add a source…</button>
+      </div>
+
+      <div style="margin-top:var(--s5)">
+        <span class="rl">Working</span>
+        <div class="prog"></div>
+        <div class="status"><b>Reading Bus Stop</b><span>128 files so far</span><button class="b quiet">Stop</button></div>
+        <div class="prog det" style="margin-top:var(--s3)"></div>
+        <div class="status"><b>Saving BUS STOP</b><span>step 3 of 5 · pictures</span></div>
+      </div>
+
+      <div style="margin-top:var(--s5)">
+        <span class="rl">Messages</span>
+        <p class="status" style="margin:var(--s2) 0 var(--s3)"><b>Saved on this Mac.</b><span>Not on the site until you publish.</span></p>
+        <div class="notice">
+          <p>Publishing didn’t finish. Nothing was lost: BUS STOP and CANOPY are still saved on this Mac.</p>
+          <p class="help">GitHub turned the change away because the site had newer changes.</p>
+          <div class="acts"><button class="b">Try again</button><button class="b quiet">Show details</button></div>
+        </div>
+      </div>
+    </div>
+  </template>
+  <div class="pair">
+    <div class="panel t-dark"><span class="tag">Dark</span><div data-from="misc"></div></div>
+    <div class="panel t-light"><span class="tag">Light</span><div data-from="misc"></div></div>
+  </div>
+
+  <!-- ================================================================ SPACING -->
+  <h2>7 · Spacing</h2>
+  <div class="pair stack"><div class="panel">
+    <div class="sp">
+      <span>4</span><i style="width:4px"></i><span>inside a control: a mark and its words, a field and its help line</span>
+      <span>8</span><i style="width:8px"></i><span>between controls that belong together</span>
+      <span>12</span><i style="width:12px"></i><span>inside a button, between groups in a toolbar, between fields</span>
+      <span>20</span><i style="width:20px"></i><span>around a region; between a title and what follows</span>
+      <span>32</span><i style="width:32px"></i><span>between regions and between sections</span>
+    </div>
+    <p class="note" style="margin:var(--s4) 0 0">Every Harvest control is at least 28px tall. On the site the tap areas stay as they are (the footer’s are 25px); “Tap areas” at the top shows them hatched.</p>
+  </div></div>
+
+</div>
+<script>
+  // Each template is drawn once per place that names it, so dark and light
+  // can never drift apart inside this page.
+  for (const slot of document.querySelectorAll('[data-from]')) {
+    const node = document.getElementById(slot.dataset.from).content.cloneNode(true);
+    if (slot.dataset.theme) node.querySelectorAll('.panel').forEach(p => p.classList.add(slot.dataset.theme));
+    slot.replaceWith(node);
+  }
+  for (const t of document.querySelectorAll('.gt')) t.append(document.getElementById('greyrows').content.cloneNode(true));
+
+  // CONTRAST, measured from what is on screen: the colour as computed,
+  // composited over its panel's background (the greys are partly transparent)
+  const nums = s => s.match(/[\d.]+/g).map(Number);
+  const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const measure = () => {
+    for (const el of document.querySelectorAll('[data-cr]')) {
+      const c = nums(getComputedStyle(el)[el.dataset.cr]), a = c.length > 3 ? c[3] : 1;
+      const bg = nums(getComputedStyle(el.closest('.panel')).backgroundColor);
+      const fg = c.slice(0, 3).map((v, i) => v * a + bg[i] * (1 - a));
+      const x = lum(fg), y = lum(bg), r = (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+      const need = +el.dataset.need, out = el.closest('tr').querySelector('.cr');
+      out.textContent = r.toFixed(2) + ':1' + (need ? (r >= need ? ' · clears ' : ' · needs ') + need : ' · decoration');
+      out.classList.toggle('fail', need > 0 && r < need);
+    }
+  };
+  measure();
+
+  // the knobs at the top: each group lights one button
+  const pick = (sel, b) => document.querySelectorAll(sel).forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('[data-size]').forEach(b => b.onclick = () => {
+    document.documentElement.style.setProperty('--body', b.dataset.size + 'px'); pick('[data-size]', b); });
+  document.querySelectorAll('[data-grey]').forEach(b => b.onclick = () => {
+    document.body.classList.toggle('one-grey', b.dataset.grey === 'one'); pick('[data-grey]', b); measure(); });
+  const hits = document.getElementById('hits');
+  hits.onclick = () => hits.classList.toggle('on', document.body.classList.toggle('show-hits'));
+  // a tick on a tile is its selection; the frame follows it
+  document.querySelectorAll('.tile input').forEach(i => i.onchange = () => i.closest('.tile').classList.toggle('on', i.checked));
+  document.querySelectorAll('.rows .row').forEach(r => r.onclick = () => {
+    r.closest('.ed').querySelectorAll('.rows .row').forEach(x => x.classList.toggle('on', x === r)); });
+</script>
+</body>
+</html>

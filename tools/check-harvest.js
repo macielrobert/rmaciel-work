@@ -42,6 +42,12 @@ let depth = 0, bad = false;
 for (const c of css) { if (c === '{') depth++; if (c === '}' && --depth < 0) bad = true; }
 check(!bad && depth === 0, 'css braces balance');
 
+// the colours and sizes page.css copies from the site (STYLE-GUIDE.md)
+let same = true;
+try { execFileSync(process.execPath, [path.join(TOOLS, 'check-tokens.js')], { stdio: 'pipe' }); }
+catch (e) { same = false; console.log(String(e.stdout)); }
+check(same, 'design values match the site');
+
 const html = fs.readFileSync(path.join(PAGE, 'page.html'), 'utf8');
 const js = fs.readFileSync(path.join(PAGE, 'page.js'), 'utf8');
 const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));

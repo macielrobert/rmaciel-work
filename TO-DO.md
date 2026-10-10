@@ -99,28 +99,51 @@ to about 2.78:1 on white versus 5.42:1 on black: light and dark are not equally
 legible. Normal text should meet 4.5:1; decorative rules need not use the same
 grey as readable labels. Reference: [W3C contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum).
 
-- [ ] Create `STYLE-GUIDE.md`: one visual identity with explicit portfolio
+- [x] Create `STYLE-GUIDE.md`: one visual identity with explicit portfolio
       and editor applications. Preserve PP Neue Montreal, monochrome themes,
       fine rules, left-aligned reading, and purposeful motion.
-- [ ] Prototype these starting values: editor text/controls 13–14px Book,
+- [x] Prototype these starting values: editor text/controls 13–14px Book,
       portfolio body 14px, secondary labels 12px, spacing 4/8/12/20/32px.
       Judge at actual size with real copy before adopting. Reserve Light and
       uppercase for intentional roles; do not enlarge settled navigation by
       changing a global type rule indiscriminately.
-- [ ] Specify readable primary/secondary text, title/facts/body/caption
+- [x] Specify readable primary/secondary text, title/facts/body/caption
       hierarchy, primary/secondary actions, disabled states, selected states,
       hover, focus, validation errors, empty states, and background progress.
       Selection must have a persistent marker as well as tone; keyboard focus
       must be visibly different from hover. Give controls consistent hit areas.
-- [ ] Separate theme-aware text greys from decorative hairlines. This
+- [x] Separate theme-aware text greys from decorative hairlines. This
       deliberately revisits the existing fixed-grey rule for legibility;
       document the measured reason and retain navigation geometry/behavior.
-- [ ] Choose one maintainable source for shared design values and matching
+- [x] Choose one maintainable source for shared design values and matching
       preview styles. Verify drift without adding a runtime stylesheet request
       or an editor dependency to the shipped portfolio.
 
 **Done when:** representative text, controls, forms, and states can be compared
 side by side in both themes, and the guide explains their roles and placement.
+
+**Record, 2026-10-10 — Claude.** Branch `ux-1-style-guide`.
+- **Scope:** the guide and the specimen. **Nothing is adopted**; the site and
+  Harvest look exactly as before. Adopting the values is gated on Robert's
+  answers, the five questions at the end of `STYLE-GUIDE.md`.
+- **What changed:** `STYLE-GUIDE.md` (roles, values, states, placement, where
+  values live). `tools/specimen.html`, today next to proposed in both themes
+  at actual size with LIGHT WORK's and BUS STOP's real copy, plus a size
+  switch for the site body and the one-grey alternative. `tools/check-tokens.js`
+  fails when page.css or keystatic.config.tsx disagrees with index.html on a
+  shared value; check-harvest.js runs it. A `specimen` entry in
+  `.claude/launch.json` serves the repository so the fonts load.
+- **Measured:** today's grey is 5.42:1 on black and 2.78:1 on white, and the
+  footer's is 2.29 and 1.68. Proposed `--text-2` is 5.44 / 5.52, `--edge`
+  (lines, not text) 6.56 / 3.20. The only single grey that clears 4.5 on both
+  is `rgb(117,117,126)`, at 4.60 / 4.56. The specimen measures these live.
+- **Checks:** specimen viewed at 1024px and 375px, both themes, no sideways
+  scroll, fonts loaded, no console errors; check-tokens passes on the repo and
+  fails on a copy with a drifted colour and mark size.
+- **Needs Robert:** the five questions. Once answered, 1, 2 and 5 ship on their
+  own (a few lines of index.html, and the single-grey rule in `AGENTS.md`
+  rewritten); the body size goes with UX-4; Harvest takes the editor values
+  with UX-2.
 
 ### UX-2 — Reorganize Harvest around the selected project
 
