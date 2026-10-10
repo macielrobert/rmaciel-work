@@ -49,6 +49,12 @@ completed work or blanket acceptance of every proposed pixel value. Claude
 should work in the sequence below, show the concrete designs, and record
 results against the same task IDs. Do not create a competing backlog.
 
+Follow `AGENTS.md` → **Process for substantial UX changes** for the standing
+workflow. The task-specific proof is the UX-1 sample in both themes, the
+isolated BUS STOP journey in UX-6, and early validation of formatted-text
+round trips and unsaved preview in UX-5. Prove these before broad rollout;
+the sequence below is not permission to defer all validation to the end.
+
 ### Boundaries and handoff
 
 - Preserve the icon row, category behavior, fixed-size/adaptive-count rule,
@@ -261,6 +267,12 @@ and the interface never confuses pending edits, saved files, and the live site.
 Implement in focused steps: **UX-1 guide → UX-2 shell with UX-3 state model →
 UX-4 site layouts → UX-5 connected editing/preview → complete journey checks.**
 Resolve save semantics while restructuring the editor, not after polishing it.
+
+Before extending the prototype across the editor, record the sample/design
+review, save/reopen and preview evidence, and difficult-case results here or
+in the linked test record. Claude supplies concrete options with recommended
+defaults; Codex reviews consistency and gaps; Robert judges material visual
+choices. Remaining unknowns stay explicit rather than being called complete.
 
 - [ ] First prototype: one complete **BUS STOP** session on isolated content
       and state. Find material → keep it → edit text → order/select images →

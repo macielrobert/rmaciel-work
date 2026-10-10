@@ -161,6 +161,45 @@ memory: what one learned in a conversation, the other never sees.
 
 ---
 
+## Process for substantial UX changes
+
+Codex owns strategy and review; Claude owns implementation and technical
+recommendations; Robert resolves material design choices by judging concrete
+results. This process applies to substantial changes in layout, navigation,
+editing, saving, or preview behavior. Small fixes use the existing focused
+diagnosis, verification, and shipping process; they do not need a full
+prototype cycle.
+
+1. **Establish the shared visual rules.** Use the style guide and show
+   representative text, controls, forms, and states at actual size in both
+   themes. Proposed values are starting points until judged in context.
+2. **Prototype one complete workflow on isolated data.** Demonstrate the
+   journey from input through editing, preview, save, and reopen before
+   applying the design broadly. Preserve working content and the running app.
+3. **Prove uncertain technical behavior early.** Check that content and
+   formatting survive save/reopen and that preview represents the state its
+   label promises, without silently saving or publishing. The implementing
+   agent investigates alternatives and recommends an approach; Robert should
+   not have to choose a package or resolve an unexplained technical question.
+4. **Test difficult cases before broad rollout.** Include long and sparse
+   content, varied image shapes and collection sizes, failed saves, unsaved
+   project switches, keyboard use, both themes, and relevant viewport sizes.
+   Use the existing test records and applicable regression checks.
+5. **Record decisions and evidence, then deliver focused PRs.** Present
+   concrete designs with recommended defaults. Record accepted choices,
+   verification evidence, and unresolved issues in the repository. Keep the
+   repeatable process here, design rules in `STYLE-GUIDE.md` when created,
+   and task-specific scope and acceptance criteria in `TO-DO.md`. Do not claim
+   complete confidence from a plan alone; distinguish tested behavior from
+   assumptions and follow up on findings from sustained use.
+
+This process does not add an approval stop for routine implementation choices
+or change the standing PR/merge protocol. Documentation and strategy changes
+also get committed, pushed, and merged through a PR; docs-only and tools-only
+commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
+
+---
+
 ## Architecture — seven systems, one file
 
 1. **Content block + adapter.** All editable copy lives in one labelled CONTENT block near the top of the IIFE, between the CONTENT:START and CONTENT:END markers. buildData() translates that authoring shape into the internal shape the code runs on. **This adapter is the CMS seam**, and it has now survived two CMSs: Decap wrote JSON, Keystatic writes `.mdoc`, and `buildData()` never changed a line for either. The markers are parsed by a script. Do not reformat, rename, or move them, and do not hand-edit CONTENT in the built output — the CMS is the source of truth and the next build overwrites it.
