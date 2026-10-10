@@ -133,6 +133,6 @@ Warnings are different from failures. `section "art" has no published projects` 
 ## Where the other documents fit
 
 - **`TO-DO.md`** — the master to-do list, including the domain move. Start here when deciding what's next.
-- **`CLAUDE.md`** — context for Claude. Read it if you want to know why the site is built the way it is.
+- **`AGENTS.md`** — context for the AI agents (Claude and Codex). `CLAUDE.md` only points Claude at it. Read it if you want to know why the site is built the way it is.
 - **`STRESS-TESTS.md`** — the testing checklist.
 - **`DNS-BASELINE.md`** — a record of your domain's settings as they were before any of this. The restore point if something goes wrong.

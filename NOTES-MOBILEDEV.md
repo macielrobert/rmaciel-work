@@ -126,7 +126,7 @@ Two moves, no new controls:
   menu did nothing at all before, so claiming it is free. The dominant axis
   wins, so a trackpad's horizontal swipe and shift+wheel still work.
 
-Arrows were considered and rejected; the reasons are in the CLAUDE.md
+Arrows were considered and rejected; the reasons are in the AGENTS.md
 rejected-alternatives table so they do not get re-proposed. The wheel now also
 overscrolls and springs back like the finger does — it used to clamp dead,
 which was most obvious on a trackpad, whose momentum keeps sending deltas
