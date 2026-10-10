@@ -82,19 +82,37 @@
     /* the whole theme is these two values — .light swaps them */
     --bg:  #000;
     --ink: #fff;
-    /* THE ACCENT GREY — everything that is not ink and not background: the
-       resting state of every control and label, the seam, the hairlines, the
-       footer row, the copyright. Ink is what is ACTIVE; this is what is
-       merely present.
-       ONE LINE CHANGES IT. --accent-rgb is the colour and the only thing to
-       edit; the two below are the alphas it is used at, and nothing else in
-       the file writes the number.
-       DELIBERATELY NOT SWAPPED BY .light. --bg and --ink invert with the
-       device theme; this one is picked to sit legibly on both fields, so
-       inverting it would only move it to the wrong side of one of them. */
+    /* THE GREYS — everything that is not ink and not background. Ink is what
+       is ACTIVE; grey is what is merely present. Three jobs, so three tokens
+       (STYLE-GUIDE.md, Colour), each the one place its value is written:
+         --text-2  WORDS: labels, titles, captions, the footer, the copyright,
+                   every resting control. Has to be READ: 4.5:1 or better.
+         --edge    a line that says where a control IS — a field's underline.
+                   Has to be SEEN: 3:1 or better.
+         --rule    decoration: the seam, the divider, the quote bar. No minimum.
+       The icon row's grey is a fourth, drawn by the shader alone: it reads
+       --accent-rgb and mirrors its alpha as ACCENT_ALPHA. No word uses it.
+
+       WAS ONE GREY FOR EVERYTHING — --accent, at 0.9 for type and 0.5 for the
+       footer and hairlines — "picked to sit legibly on both fields". Measured
+       (UX-1, 2026-10-10) it did so only on black: 5.42:1 there and 2.78:1 on
+       white, and the footer's 2.29:1 and 1.68:1, against the 4.5:1 that text
+       needs. Lines and decoration never needed that ratio; words did, so the
+       words got a grey of their own.
+
+       STILL NOT SWAPPED BY .light — Robert's call (2026-10-10). 117,117,126 is
+       the one grey that clears 4.5:1 on BOTH fields, 4.60 on black and 4.56
+       on white, so the single fixed grey survives, at the price of no margin
+       above the minimum. Rejected: a grey per theme at ~5.5:1 each — more
+       margin, but two values to keep in step and a theme swap for a colour
+       that is meant to be neither. It keeps --accent-rgb's touch of blue.
+       --accent-rgb stays the only place ITS number is written: --edge is it at
+       full strength (6.56:1 on black, 3.20:1 on white) and --rule is it at
+       half, which is the old --accent-dim exactly. */
     --accent-rgb: 143,143,153;
-    --accent:     rgba(var(--accent-rgb), 0.9);   /* type and marks */
-    --accent-dim: rgba(var(--accent-rgb), 0.5);   /* hairlines, footer, copyright */
+    --text-2: rgb(117,117,126);                 /* words */
+    --edge:   rgb(var(--accent-rgb));           /* lines that mark a control */
+    --rule:   rgba(var(--accent-rgb), 0.5);     /* decoration */
     /* l-grid cell width. Fixed like the icon cell — only the column COUNT
        responds to width. min(...,100%) is the one concession: below ~250px
        of window there is no room for a 200px cell, so it gives way. */
@@ -201,9 +219,9 @@
   #nl-grid    { flex: 0 0 auto; height: 50%; }
 
   /* menu half — the icon grid (canvas sized in JS) */
-  /* the hairline is the seam between the halves — accent grey holds on both themes */
+  /* the hairline is the seam between the halves — the decoration grey holds on both themes */
   #nl-grid  { display: flex; align-items: center; justify-content: center;
-              border-top: 1px solid var(--accent-dim); }
+              border-top: 1px solid var(--rule); }
   /* THE SEAM IS NOT DRAWN UNTIL THE LAYOUT IT DIVIDES EXISTS. With a shader
      the height is already right at first paint (placeSeam()), but the no-WebGL
      fallback measures a wrapped list of titles and cannot know its height
@@ -275,12 +293,13 @@
      lands inside it, fighting the transform. */
   #nl-keys.scroll-row { clip-path: inset(0); }
   #nl-keys [data-key] { position: absolute; display: block; outline: none; }
-  /* THE FOCUS MARK — a DOM hairline on the cell, drawn in the structural
-     accent, the same stroke as the seam. :focus-visible, so it appears for
+  /* THE FOCUS MARK — a DOM hairline on the cell, in ink like every keyboard
+     focus mark (STYLE-GUIDE.md, States). It was the accent grey, the seam's
+     stroke, which measured 2.78:1 on white. :focus-visible, so it appears for
      keyboard use and never behind a tap. It is a CONTROL, so by the standing
      rule it stays resolved: it does not churn with the art underneath it. */
   #nl-keys [data-key]:focus-visible {
-    outline: 1px solid var(--accent);
+    outline: 1px solid var(--ink);
     outline-offset: 2px;
   }
 
@@ -329,15 +348,15 @@
        of commas. Anything looser reads as the list being adrift. */
     padding: 4px 8px;
     font-size: 11px; line-height: 1.5; letter-spacing: 0.05em;
-    color: var(--accent);
+    color: var(--text-2);
     cursor: pointer;
   }
   /* the coherent one, in text */
   /* OUTSIDE THE BAND. The shader draws this as accent-grey art; here it is the
      same demotion said in type. Three levels, which is what the row needs now
-     that it always shows every project: ink = the open one, accent = the
-     section the footer is pointing at, accent-dim = the rest. */
-  #noiselab.nogl #nl-keys [data-key].dim { color: var(--accent-dim); }
+     that it always shows every project: ink = the open one, --text-2 = the
+     section the footer is pointing at, --rule = the rest. */
+  #noiselab.nogl #nl-keys [data-key].dim { color: var(--rule); }
   #noiselab.nogl #nl-keys [data-key][aria-selected="true"] { color: var(--ink); }
   @media (hover: hover) {
     #noiselab.nogl #nl-keys [data-key]:hover { color: var(--ink); }
@@ -486,13 +505,13 @@
   #nl-back {
     padding: 6px 10px 6px 0;                   /* fat tap target */
     font-size: 13px; line-height: 1;
-    color: var(--accent);
+    color: var(--text-2);
     cursor: pointer;
     user-select: none;
   }
   #nl-back:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-back:hover { color: var(--ink); } }
-  #nl-exp-hd { color: var(--accent); }
+  #nl-exp-hd { color: var(--text-2); }
   #nl-exp-stage {
     flex: 1 1 auto; min-height: 0;
     margin-top: 10px;
@@ -521,17 +540,17 @@
     overflow-y: auto;
     scrollbar-width: none;
     padding-top: 6px;
-    color: var(--accent);
+    color: var(--text-2);
     visibility: hidden;
   }
   #nl-exp-cap::-webkit-scrollbar { display: none; }
-  #nl-window .hd { color: var(--accent); }
+  #nl-window .hd { color: var(--text-2); }
 
   /* ------------------------------------------------- the sibling row
      TWO OR MORE WORKS UNDER ONE CLIENT. The icon is the client; this row is
      which of their projects the window is showing. It is the FOOTER'S
      GRAMMAR, one level in: labels against the same left margin every text
-     column starts at, the chosen one in ink, the rest in accent grey.
+     column starts at, the chosen one in ink, the rest in the text grey.
 
      COLOUR SAYS IT, not churn. The band already established that division —
      coherence is churn, the band is colour — and it holds here: the icon
@@ -556,7 +575,7 @@
     margin: 0 0 var(--nl-m, 12px) -8px;
   }
   #nl-window-text .sib {
-    color: var(--accent);
+    color: var(--text-2);
     padding: 4px 8px;
     /* the row is navigation, not prose: it does not take the body's 1.9 */
     line-height: 1.5;
@@ -564,7 +583,7 @@
   #nl-window-text .sib.on { color: var(--ink); }
   #nl-window-text .sib[role="button"] { cursor: pointer; }
   #nl-window-text .sib:focus { outline: none; }
-  #nl-window-text .sib:focus-visible { color: var(--ink); outline: 1px solid var(--accent); }
+  #nl-window-text .sib:focus-visible { color: var(--ink); }   /* the outline is the shared focus rule's, at the end */
   @media (hover: hover) {
     #nl-window-text .sib[role="button"]:hover { color: var(--ink); }
   }
@@ -705,17 +724,17 @@
      marks, both of which already mean something else here. */
   #nl-window-text .body blockquote, #nl-about-text blockquote {
     margin: 0 0 1em; padding-left: 1em;
-    border-left: 1px solid var(--accent-dim);
+    border-left: 1px solid var(--rule);
   }
   #nl-window-text .body blockquote p:last-child,
   #nl-about-text blockquote p:last-child { margin-bottom: 0; }
 
-  /* DIVIDER — a hairline at the same accent grey as the seam between the two
+  /* DIVIDER — a hairline in the same --rule grey as the seam between the two
      halves of the page, so the one horizontal rule in the copy matches the
      one horizontal rule in the layout. */
   #nl-window-text .body hr, #nl-about-text hr {
     border: 0; height: 1px; margin: 1.6em 0;
-    background: var(--accent-dim);
+    background: var(--rule);
   }
 
   /* LINK — underlined, offset to clear descenders like the underline mark,
@@ -729,13 +748,13 @@
     transition: color 0.18s ease;
   }
   /* Hover DIMS rather than brightens: everywhere else on this site the
-     accent grey is the resting state and ink is the active one — the footer,
+     text grey is the resting state and ink is the active one — the footer,
      the caret, the close mark all go grey -> ink on hover. A link starts at
      ink because it is content, so it has to travel the other way to say the
      same thing. Focus matches, for the keyboard. */
-  #nl-window-text .body a:focus, #nl-about-text a:focus { color: var(--accent); }
+  #nl-window-text .body a:focus, #nl-about-text a:focus { color: var(--text-2); }
   @media (hover: hover) {
-    #nl-window-text .body a:hover, #nl-about-text a:hover { color: var(--accent); }
+    #nl-window-text .body a:hover, #nl-about-text a:hover { color: var(--text-2); }
   }
 
   /* STRIKETHROUGH */
@@ -777,7 +796,7 @@
     margin-top: 2px;
     padding: 4px 12px 4px 0;                   /* fat tap target */
     font-size: 13px; line-height: 1;
-    color: var(--accent);
+    color: var(--text-2);
     pointer-events: auto; cursor: pointer;
     user-select: none;
   }
@@ -941,7 +960,7 @@
     z-index: 1;                                /* stays above the expand layer */
     padding: 8px 10px;                         /* fat tap target */
     font-size: 13px; line-height: 1;
-    color: var(--accent);
+    color: var(--text-2);
     pointer-events: auto; cursor: pointer;
     user-select: none;
   }
@@ -949,16 +968,18 @@
   @media (hover: hover) { #nl-close:hover { color: var(--ink); } }
 
   /* ------------------------------------------------ contact form (last icon) */
-  /* Fields are bare — no boxes, just the accent underline, ink on focus.
+  /* Fields are bare — no boxes, just an --edge underline, ink on focus. The
+     line is the only thing that says a field is there, so it gets the 3:1 of a
+     control's edge; it was --accent-dim, 1.68:1 on white.
      (Pointer events come from #nl-window-text; no per-entry rule needed.) */
   #nl-window label {
     display: block; margin: 8px 0 0;
-    color: var(--accent); letter-spacing: 0.05em;
+    color: var(--text-2); letter-spacing: 0.05em;
   }
   #nl-window input, #nl-window textarea {
     display: block; width: 100%;
     background: transparent; color: var(--ink);
-    border: 0; border-bottom: 1px solid var(--accent-dim);
+    border: 0; border-bottom: 1px solid var(--edge);
     border-radius: 0; outline: none;
     font: inherit; letter-spacing: inherit;
     padding: 4px 0 5px; margin-top: 1px;
@@ -967,7 +988,7 @@
   #nl-window input:focus, #nl-window textarea:focus { border-bottom-color: var(--ink); }
   #nl-window .send {
     display: inline-block; margin-top: 14px;
-    color: var(--accent); cursor: pointer; letter-spacing: 0.15em;
+    color: var(--text-2); cursor: pointer; letter-spacing: 0.15em;
   }
   #nl-window .send:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
   @media (hover: hover) { #nl-window .send:hover { color: var(--ink); } }
@@ -998,7 +1019,7 @@
     width:  var(--nl-m, 24px);                 /* the margin strip itself */
     display: flex;
     justify-content: center;                   /* centered ACROSS the strip */
-    color: var(--accent-dim);              /* the footer's grey */
+    color: var(--text-2);                  /* the footer's grey */
     pointer-events: none;
     user-select: none;
   }
@@ -1047,7 +1068,7 @@
                                                   and JS reads the same number
                                                   as SEC_H */
     font-size: 11px; letter-spacing: 0.15em;
-    color: var(--accent-dim);              /* project accent — legible on both fields */
+    color: var(--text-2);                  /* words: was --accent-dim, 1.68:1 on white */
     pointer-events: none;                      /* only the words are live */
     user-select: none;
   }
@@ -1177,7 +1198,7 @@
      that fixture, and two ink labels is the one thing the footer is not
      allowed to show — so the whole wheel drops to the resting grey and keeps
      only its relative shape. */
-  #nl-sec.off { color: var(--accent-dim); }
+  #nl-sec.off { color: var(--text-2); }
 
   /* --------------------------------------------------- the field's one control
      Hidden by default and shown only where the mode can actually be had: a
@@ -1207,6 +1228,21 @@
   /* the active section reads as the coherent one — ink against the grey row.
      (applied by JS once section switching is wired) */
   #nl-fns > [data-nav].on { color: var(--ink); }
+
+  /* KEYBOARD FOCUS DRAWS AN OUTLINE (Robert, 2026-10-10; STYLE-GUIDE.md,
+     States). Focus used to be the same change to ink that hover makes, so a
+     keyboard user could not tell where they were from where the pointer was.
+     1px of ink, 2px outside the control's own box — its padding is its tap
+     target, so the ring goes round the target, not the word. :focus-visible
+     only, as everywhere here: a tap never draws it. Each of these still turns
+     ink on focus as well; the outline is what hover never does. */
+  #nl-back:focus-visible, #nl-close:focus-visible, #nl-more:focus-visible,
+  #nl-window .send:focus-visible, #nl-fns > [data-nav]:focus-visible,
+  #nl-field:focus-visible, #nl-window-text .sib:focus-visible,
+  #nl-window-text .body a:focus-visible, #nl-about-text a:focus-visible {
+    outline: 1px solid var(--ink);
+    outline-offset: 2px;
+  }
 
 </style>
 </head>
@@ -1612,8 +1648,11 @@
   // is what the jump FEELS like, and it is the reason the jump is a jump and
   // not a cut. Damping sits just above critical (2 * sqrt(K) = 35.8), so it
   // arrives once and stops rather than ringing.
-  // --accent's alpha, mirrored from the stylesheet. The canvas cannot use a
-  // CSS colour directly, so this one number is duplicated; the COLOUR is not.
+  // THE ICON ROW'S GREY is --accent-rgb at this alpha. It used to mirror the
+  // stylesheet's --accent, which words shared until they got --text-2 (UX-1,
+  // 2026-10-10); now only the canvas uses it, so the alpha lives here alone.
+  // The canvas cannot use a CSS colour directly; the COLOUR is still read
+  // from --accent-rgb, never copied.
   const ACCENT_ALPHA = 0.9;
 
   const ROW_SNAP_K    = 320;    // spring rate toward the target, /s^2

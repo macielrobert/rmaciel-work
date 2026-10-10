@@ -9,8 +9,11 @@
      proposed ones, in both themes, at actual size, with the site's real copy.
      STYLE-GUIDE.md is the prose that goes with it.
 
-     A PROTOTYPE, NOT A SOURCE. Nothing here is adopted until Robert has looked
-     at it, and nothing here ships: build.js copies index.html, fonts/ and
+     SECOND DRAFT (2026-10-10): Robert's answers applied — one fixed grey, the
+     site body at 12px, and a zigzag under the chosen footer label, which is
+     the one new thing here to judge.
+
+     A PROTOTYPE, NOT A SOURCE. Nothing here ships: build.js copies index.html, fonts/ and
      images/, never tools/. When values are adopted they go into index.html and
      page.css, and tools/check-tokens.js keeps those two agreeing — this file is
      not checked, because it holds the old values on purpose.
@@ -30,24 +33,21 @@
     /* TODAY, as index.html and page.css write them */
     --accent: rgba(143,143,153,.9);
     --accent-dim: rgba(143,143,153,.5);
-    /* PROPOSED — the names STYLE-GUIDE.md uses. These two are the same in
-       both themes: --edge is today's grey at full strength, which clears the
-       3:1 a field line or an outline needs on white AND on black; --rule is
-       today's --accent-dim, unchanged, because decoration needs no ratio. */
+    /* DECIDED — the names STYLE-GUIDE.md uses, the same in both themes.
+       --text-2 is the one grey that clears 4.5:1 on black AND white (Robert
+       chose it over a grey per theme); --edge is today's grey at full
+       strength, 3:1 or better on both for a line that marks a control; --rule
+       is today's --accent-dim, unchanged, because decoration needs no ratio. */
+    --text-2: rgb(117,117,126);
     --edge: rgb(143,143,153);
     --rule: rgba(143,143,153,.5);
     --s1:4px; --s2:8px; --s3:12px; --s4:20px; --s5:32px;
-    --body: 14px;                       /* the size buttons move it */
-    --bg:#000; --ink:#fff; --text-2:rgb(129,129,138);
+    --body: 12px;                       /* the site's body size, decided */
+    --bg:#000; --ink:#fff;
   }
-  @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; --text-2:rgb(104,104,113); } }
-  /* --text-2, THE PROPOSED READABLE GREY, is the one value that differs by
-     theme: each is picked for the same ~5.5:1 on its own background. The
-     "one fixed grey" button swaps in the alternative that keeps today's
-     single-grey rule — the only grey that clears 4.5:1 on both, by a hair. */
-  .t-dark  { --bg:#000; --ink:#fff; --text-2:rgb(129,129,138); }
-  .t-light { --bg:#fff; --ink:#000; --text-2:rgb(104,104,113); }
-  .one-grey, .one-grey .t-dark, .one-grey .t-light { --text-2:rgb(117,117,126); }
+  @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
+  .t-dark  { --bg:#000; --ink:#fff; }
+  .t-light { --bg:#fff; --ink:#000; }
 
   * { box-sizing:border-box; }
   html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
@@ -88,7 +88,7 @@
   .site-now .cap { color:var(--accent); }
   /* PROPOSED: title -> facts -> body, each a step apart. Facts and caption
      follow the body size down so they never end up larger than it. */
-  .site-prop { font:400 var(--body)/1.6 var(--face); letter-spacing:.01em; max-width:33em; }
+  .site-prop { font:400 var(--body)/1.7 var(--face); letter-spacing:.02em; max-width:33em; }
   .site-prop .hd { display:block; letter-spacing:.08em; margin:0 0 var(--s3); }
   .site-prop .facts { font-size:max(11px, calc(var(--body) - 2px)); line-height:1.5; color:var(--text-2); margin:0 0 var(--s4); }
   .site-prop .cap { font-size:max(11px, calc(var(--body) - 2px)); line-height:1.5; color:var(--text-2); }
@@ -102,10 +102,34 @@
   .ft .right { margin-left:auto; }
   .site-now .ft  { color:var(--accent-dim); }
   .site-prop .ft { color:var(--text-2); }
-  .ft.marked a.on { text-decoration:underline; text-underline-offset:.55em; text-decoration-thickness:1px; }
+  /* THE CHOSEN LABEL'S MARK — Robert, 2026-10-10: a zigzag, not a straight
+     line, with 90° vertices, about as tall as the x-height. PP Neue Montreal's
+     x-height measures 0.51em: 6.1px at the 12px body, 5.6px at the footer's
+     11px. So 6px from the centre of a low vertex to the centre of a high one;
+     and because each vertex is a right angle, every run is 45°, 6px across
+     for 6px up: one tooth every 12px.
+     A MASK over currentColor, so it is ink in either theme like the label,
+     and drawn in whole px rather than scaled from em, so the 1px stroke stays
+     1px. It starts on a low vertex under the word's first letter and stops
+     under its last — the trailing tracking after the last letter is not the
+     word. Its top sits ~4px under the baseline (the straight underline was 6).
+     Under whichever label is chosen: a section, ALL, or an open
+     ABOUT / CONTACT. */
+  .site-prop .ft a { position:relative; }
+  /* the zigzag hangs ~3px below the label's box, so the focus ring sits 4px
+     out instead of 2 to clear it — otherwise the ring's bottom edge cuts
+     through the teeth */
+  .site-prop .ft a:focus-visible, .site-prop .ft a.is-focus { outline-offset:4px; }
+  .site-prop .ft a.on::after {
+    content:''; position:absolute; left:8px; right:calc(8px + .15em); top:calc(100% - 5px); height:8px;
+    background:currentColor;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M-6 1L0 7L6 1L12 7L18 1' fill='none' stroke='black'/%3E%3C/svg%3E") 0 0 / 12px 8px repeat-x;
+            mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M-6 1L0 7L6 1L12 7L18 1' fill='none' stroke='black'/%3E%3C/svg%3E") 0 0 / 12px 8px repeat-x;
+  }
   /* index.html's own narrow rules for the strip, so a phone sees what the site does */
   @media (max-width: 500px) { .ft { justify-content:center; } .ft .right { margin-left:0; } }
-  @media (max-width: 400px) { .ft { letter-spacing:.06em; } .ft a { padding-left:6px; padding-right:6px; } }
+  @media (max-width: 400px) { .ft { letter-spacing:.06em; } .ft a { padding-left:6px; padding-right:6px; }
+                              .site-prop .ft a.on::after { left:6px; right:calc(6px + .06em); } }
   .rowlabel { font-size:11px; color:var(--text-2); letter-spacing:.05em; margin-top:var(--s3); }
 
   /* ===================================================== 3. EDITOR, TODAY */
@@ -241,16 +265,11 @@
 <div class="page">
 
   <h1>Style specimen</h1>
-  <p class="intro">The proposed shared style for the site and Harvest, next to <b>today</b>, at actual size, in both themes.
-    Nothing here is adopted yet. The prose is in <b>STYLE-GUIDE.md</b>; the questions for Robert are at the end of it.</p>
+  <p class="intro"><b>Second draft.</b> The shared style for the site and Harvest, next to today, at actual size, in both themes,
+    with Robert’s answers applied: one fixed grey, the site’s body at 12px, and a <b>zigzag under the chosen footer label</b>,
+    the one new thing to judge. The prose is in <b>STYLE-GUIDE.md</b>.</p>
 
   <div class="knobs" role="group" aria-label="What to compare">
-    <div class="knob"><span>Site body size</span>
-      <button class="tg" data-size="11">11</button><button class="tg" data-size="12">12</button><button class="tg" data-size="13">13</button><button class="tg on" data-size="14">14</button>
-    </div>
-    <div class="knob"><span>Secondary grey</span>
-      <button class="tg on" data-grey="two">One per theme</button><button class="tg" data-grey="one">One fixed grey</button>
-    </div>
     <div class="knob"><span>Tap areas</span>
       <button class="tg" data-hits="off" id="hits">Show</button>
     </div>
@@ -267,15 +286,15 @@
   <template id="greyrows">
     <tr><td class="nm">Today · labels, titles, buttons</td><td><span data-cr="color" data-need="4.5" style="color:var(--accent)">Exhibition, Fundraiser</span></td><td class="cr"></td></tr>
     <tr><td class="nm">Today · footer, copyright</td><td><span data-cr="color" data-need="4.5" style="color:var(--accent-dim)">ALL BUILD DESIGN ART</span></td><td class="cr"></td></tr>
-    <tr><td class="nm">Proposed · secondary text</td><td><span data-cr="color" data-need="4.5" style="color:var(--text-2)">Exhibition, Fundraiser</span></td><td class="cr"></td></tr>
-    <tr><td class="nm">Proposed · edge (lines, not text)</td><td><span class="sw-line" data-cr="border-top-color" data-need="3" style="border-color:var(--edge)"></span></td><td class="cr"></td></tr>
-    <tr><td class="nm">Proposed · rule (decoration)</td><td><span class="sw-line" data-cr="border-top-color" data-need="0" style="border-color:var(--rule)"></span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Decided · secondary text</td><td><span data-cr="color" data-need="4.5" style="color:var(--text-2)">Exhibition, Fundraiser</span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Decided · edge (lines, not text)</td><td><span class="sw-line" data-cr="border-top-color" data-need="3" style="border-color:var(--edge)"></span></td><td class="cr"></td></tr>
+    <tr><td class="nm">Decided · rule (decoration)</td><td><span class="sw-line" data-cr="border-top-color" data-need="0" style="border-color:var(--rule)"></span></td><td class="cr"></td></tr>
   </template>
 
   <!-- ================================================================ PORTFOLIO -->
-  <h2>2 · The site: a project, today and proposed</h2>
-  <p class="note">LIGHT WORK's real copy. Proposed: the title in ink, the detail lines one step smaller and grey, the body larger.
-    The footer keeps its size and spacing and only changes grey. The second proposed footer adds a line under the chosen section. The size buttons at the top change the proposed body size.</p>
+  <h2>2 · The site: a project, today and second draft</h2>
+  <p class="note">LIGHT WORK's real copy, with the body at 12px. The title in ink and the detail lines at 11px in grey are still a proposal; UX-4 settles them.
+    The footer keeps its size and spacing. Its grey is now readable, and the chosen label carries the zigzag. The last row shows the keyboard outline on DESIGN.</p>
   <template id="entry">
     <div class="pair">
       <div class="panel">
@@ -291,7 +310,7 @@
         </div>
       </div>
       <div class="panel">
-        <span class="tag">Proposed</span>
+        <span class="tag">Second draft</span>
         <div class="site-prop">
           <span class="hd">LIGHT WORK</span>
           <div class="facts">Exhibition, Fundraiser<br>Co-Director, Curator<br>2021</div>
@@ -301,8 +320,10 @@
           <img class="shot" src="../images/bus-stop/images/1/src.jpeg" alt="">
           <div class="cap">Bus Stop Render 2</div>
           <nav class="ft"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
-          <div class="rowlabel">With a line under the chosen section</div>
-          <nav class="ft marked" style="margin-top:0"><a>ALL</a><a>BUILD</a><a class="on">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
+          <div class="rowlabel">ABOUT open</div>
+          <nav class="ft" style="margin-top:0"><a>ALL</a><a>BUILD</a><a>DESIGN</a><a>ART</a><a class="right">CONTACT</a><a class="on">ABOUT</a></nav>
+          <div class="rowlabel">Keyboard focus on DESIGN</div>
+          <nav class="ft" style="margin-top:6px"><a>ALL</a><a>BUILD</a><a class="on is-focus">DESIGN</a><a>ART</a><a class="right">CONTACT</a><a>ABOUT</a></nav>
         </div>
       </div>
     </div>
@@ -502,12 +523,6 @@
   };
   measure();
 
-  // the knobs at the top: each group lights one button
-  const pick = (sel, b) => document.querySelectorAll(sel).forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('[data-size]').forEach(b => b.onclick = () => {
-    document.documentElement.style.setProperty('--body', b.dataset.size + 'px'); pick('[data-size]', b); });
-  document.querySelectorAll('[data-grey]').forEach(b => b.onclick = () => {
-    document.body.classList.toggle('one-grey', b.dataset.grey === 'one'); pick('[data-grey]', b); measure(); });
   const hits = document.getElementById('hits');
   hits.onclick = () => hits.classList.toggle('on', document.body.classList.toggle('show-hits'));
   // a tick on a tile is its selection; the frame follows it

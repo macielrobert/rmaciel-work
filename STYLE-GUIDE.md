@@ -6,11 +6,14 @@ for and where it goes. **`tools/specimen.html`** shows every piece at actual
 size, in both themes, today's version next to the proposed one. Open it
 served, not as a file (see the comment at its top).
 
-**Status, 2026-10-10 (UX-1):** a proposal. Anything marked **PROPOSED** is not
-in the site or in Harvest yet. It is adopted only after Robert has looked at
-the specimen and answered the questions at the end of this file. Where this
-file and the code disagree, the code describes what is live and this file
-describes where it is going.
+**Status, 2026-10-10 (UX-1, second draft):** Robert has answered the five
+questions; his answers are at the end of this file. **DECIDED** marks a value
+he has chosen, and **LIVE** a value that is already in the site. **PROPOSED**
+marks a value that still waits for the task that adopts it (UX-2 for Harvest,
+UX-4 for the window's text). The one open item is the zigzag under the chosen
+footer label: he set its shape, and it waits on his look at the specimen.
+Where this file and the code disagree, the code describes what is live and
+this file describes where it is going.
 
 Words used below:
 
@@ -57,24 +60,23 @@ These are the identity. Both the site and Harvest keep them.
 |---|---|---|---|---|
 | `--bg` | `#000` | `#fff` | background | — |
 | `--ink` | `#fff` | `#000` | text, anything active or chosen | 21:1 |
-| `--text-2` **PROPOSED** | `rgb(129,129,138)` | `rgb(104,104,113)` | readable secondary text: labels, details, captions, resting controls, the footer | 5.44 / 5.52 |
-| `--edge` **PROPOSED** | `rgb(143,143,153)` | same | lines that show where a control is: field underlines, button outlines. Never text | 6.56 / 3.20 |
-| `--rule` | `rgba(143,143,153,.5)` | same | decoration only: the seam, dividers, hairlines between list items | 2.29 / 1.68 |
+| `--text-2` **LIVE** | `rgb(117,117,126)` | same | readable secondary text: labels, details, captions, resting controls, the footer, the copyright | 4.60 / 4.56 |
+| `--edge` **LIVE** | `rgb(143,143,153)` | same | lines that show where a control is: field underlines, button outlines. Never text | 6.56 / 3.20 |
+| `--rule` **LIVE** | `rgba(143,143,153,.5)` | same | decoration only: the seam, dividers, hairlines between list items | 2.29 / 1.68 |
+| `--accent-rgb` | `143,143,153` | same | the one place that grey's number is written: `--edge` is it at full strength, `--rule` at half, and the icon row's shader draws it at 0.9. No text uses it | — |
 
-**Why change the grey.** Today one grey, `--accent`, is used for every
-secondary word. It was chosen to "sit legibly on both fields", but measured it
+**Why the grey changed.** Until 2026-10-10 one grey, `--accent`, was used for
+every secondary word. It was chosen to "sit legibly on both fields", but measured it
 does so only on black: 5.42:1 on black and **2.78:1 on white**. Labels drawn in
 `--accent-dim`, which includes the whole footer row and the copyright, measure
-2.29:1 on black and **1.68:1 on white**. The rule failed at its own purpose,
-so the proposal keeps the purpose and gives up the rule. Each theme gets its
-own readable grey (`--text-2`), picked so both themes land at the same
-~5.5:1.
+2.29:1 on black and **1.68:1 on white**. Lines and decoration never needed
+4.5:1, but words did, so words now have a grey of their own (`--text-2`).
 
-**Option B, shown in the specimen ("One fixed grey").** `rgb(117,117,126)` is
-the only grey that clears 4.5:1 on both black and white, at 4.60 and 4.56. It
-keeps the one-grey rule, but it sits right at the minimum in both themes, with
-no margin for 11–12px type. That is why it is the alternative and not the
-recommendation.
+**One fixed grey: Robert's choice, 2026-10-10.** `rgb(117,117,126)` is the
+only grey that clears 4.5:1 on both black and white, at 4.60 and 4.56, so the
+single-grey rule survives. Rejected alternative: a grey per theme at ~5.5:1
+each. It has more margin above the minimum, but it means two values to keep
+in step, and a theme swap for a colour that is meant to be neither.
 
 **What does not change.** `--edge` is today's grey at full strength. It
 already clears 3:1 on both backgrounds, so field lines and outlines keep the
@@ -92,12 +94,12 @@ who cannot see the difference in tone.
 
 | Role | Site | Harvest |
 |---|---|---|
-| Body text | **PROPOSED** 14px Book, line height 1.6, tracking .01em. Today: 11px, 1.9, .05em | 13px Book, 1.5, .01em. Today: 11px **Light**, 1.7, .05em |
+| Body text | **DECIDED** 12px Book, line height 1.7, tracking .02em (adopted with UX-4). Today: 11px, 1.9, .05em | **PROPOSED** 13px Book, 1.5, .01em (adopted with UX-2). Today: 11px **Light**, 1.7, .05em |
 | Title | **PROPOSED** body size, uppercase as written, tracking .08em, in ink. Today: 11px in grey | Project name 16px, tracking .06em |
-| Details and facts | **PROPOSED** 2px under the body (12px), `--text-2`, line height 1.5 | — |
-| Caption, help and meta text | **PROPOSED** 12px `--text-2` | 12px `--text-2` |
+| Details and facts | **PROPOSED** 11px `--text-2`, line height 1.5 | — |
+| Caption, help and meta text | **PROPOSED** 11px `--text-2` | 12px `--text-2` |
 | Region labels | — | 11px uppercase, tracking .12em, `--text-2` |
-| Footer labels | 11px uppercase, tracking .15em. Settled; only the grey changes | — |
+| Footer labels | 11px uppercase, tracking .15em. Settled. **LIVE**: `--text-2`. The chosen one carries the zigzag (below) | — |
 | Glyph controls (×, ←, the caret) | 13px. Settled | — |
 
 The rules behind the table:
@@ -110,11 +112,11 @@ The rules behind the table:
   uppercase, the site's footer labels, and Harvest's region labels. It is
   **not** used for buttons. Today every Harvest button is an uppercase grey
   word, so navigation, actions and toggles all look alike.
-- **Tracking follows size and case.** Uppercase needs .08–.15em. Mixed case at
-  13–14px needs only .01em. The .05em everywhere today was compensation for
+- **Tracking follows size and case.** Uppercase needs .08–.15em. Mixed case
+  needs .02em at 12px and .01em at 13px. The .05em everywhere today was compensation for
   11px type.
 - **The measure** (`--measure: 33em`) is in em, so it grows with the body
-  size: 462px at 14px. After adopting a new size, count the characters on a
+  size: 396px at 12px. After adopting the new size, count the characters on a
   full line again, as `AGENTS.md` says. Never re-tune it by arithmetic.
 - **Descriptions are previewed in the site's own numbers.** Harvest's
   description preview is set at 13px against the site's 11px today. UX-5 fixes
@@ -181,13 +183,41 @@ The rules behind the table:
 
 - **Hover changes tone. Only keyboard focus draws an outline**, so the two are
   never confused. Focus appears for keyboard use only (`:focus-visible`), never
-  on a click. On the site today, focus on ×, ←, the caret, SEND and the footer
-  is the same colour change as hover. The PROPOSED change gives them the same
-  outline.
+  on a click. **LIVE** on the site since 2026-10-10: ×, ←, the caret, SEND,
+  the footer labels, the field mark, the sibling row, links, and the icon
+  row's keys. Before that, focus on most of them was the same colour change
+  as hover, and the keys' ring was the grey that measured 2.78:1 on white.
 - **A chosen item carries a mark as well as a tone**: a line, a bar, or a frame
   and a tick. In Harvest, tone alone is never the only signal.
 - **Disabled stays readable.** You should be able to read what a button would
   do once it becomes available.
+
+## The chosen footer label: the zigzag
+
+**DRAFT 2: Robert set the shape on 2026-10-10. It goes live once he has
+looked at it in the specimen.** It replaces the straight underline that was
+proposed under the chosen footer label.
+
+- **Shape:** a zigzag with right-angled (90°) vertices, so every stroke runs
+  at 45°.
+- **Height:** about the x-height. PP Neue Montreal's x-height measures 0.51em,
+  which is 6.1px at the 12px body and 5.6px at the footer's 11px. So it is
+  **6px** from the centre of a low vertex to the centre of a high one. With
+  45° strokes, each tooth is 12px wide.
+- **Stroke:** 1px, in ink: the label's own colour, so it follows the theme.
+  It is drawn as a CSS mask over `currentColor` at fixed pixel sizes, so the
+  stroke is never scaled to a fraction of a pixel.
+- **Extent:** it starts on a low vertex under the word's first letter and
+  stops under its last. The tracking after the last letter is not part of the
+  word.
+- **Placement:** its top sits about 4px under the baseline, where the straight
+  line sat at 6px. It appears under whichever label is chosen: a section, ALL,
+  or ABOUT or CONTACT while open.
+- **Keyboard focus on the footer** sits 4px out instead of 2. The zigzag hangs
+  about 3px below the label's tap area, and a ring at 2px would cut through
+  its teeth.
+- **Harvest's tabs keep a straight line** under the chosen tab. The zigzag
+  answers the site's footer question only, until Robert says otherwise.
 
 ## Fields and errors
 
@@ -253,8 +283,10 @@ the visitor nothing extra to download.
   sizes (Smaller .85em, Larger 1.27em).
 - **`node tools/check-tokens.js`** fails when a name declared in both files
   has different values, or when a mark size differs. `tools/check-harvest.js`
-  runs it too. Today it covers five shared tokens (`--bg`, `--ink`,
-  `--accent-rgb`, `--accent`, `--accent-dim`) and both mark sizes.
+  runs it too. Today it covers three shared tokens (`--bg`, `--ink`,
+  `--accent-rgb`) and both mark sizes. Harvest's `--accent` and
+  `--accent-dim` are its own until UX-2 moves it to `--text-2`, `--edge` and
+  `--rule`. From then on the check covers those three as well.
 - When values are adopted, the type sizes become tokens as well (body size,
   line height, tracking). Harvest's description preview then reads the same
   numbers the site does, and the check covers them without being changed.
@@ -271,33 +303,19 @@ Copying is cheap, and the check is what keeps the copies honest.
 
 ---
 
-## Adopting — questions for Robert
+## Decisions — Robert, 2026-10-10
 
-Each question has a recommendation. Look at the specimen first. Nothing below
-ships until you answer.
+1. **The secondary grey: one fixed grey**, `rgb(117,117,126)`, 4.60:1 on
+   black and 4.56:1 on white. **Live.**
+2. **The footer and the copyright use the readable grey: yes.** **Live.**
+3. **The chosen footer label: a zigzag**, not a straight line, with 90°
+   vertices, about the x-height tall (see above). **Draft 2, waiting on his
+   look.**
+4. **The site's body text: 12px.** It is adopted with **UX-4**, because the
+   body size moves the window's layout and UX-4 rebuilds that anyway.
+5. **A keyboard focus outline on the site's controls: yes.** **Live.**
 
-1. **The secondary grey.** Recommended: **one per theme**, the same ~5.5:1 in
-   each. The alternative keeps a single grey at about 4.6:1 in both. Either
-   way, `AGENTS.md`'s single-grey rule gets rewritten to match.
-2. **The footer and the copyright move to the readable grey.** Recommended:
-   **yes**. They are the most-read secondary words on the site, and they
-   measure 1.68:1 on white today. Their size and spacing don't change.
-3. **A line under the chosen footer section.** Recommended: **no**. Ink
-   against the new grey is already a 3.8:1 difference, which shows without
-   colour vision, and the icon row's band marks the section a second time. A
-   third mark would be furniture. In Harvest, a chosen item always carries a
-   mark.
-4. **The site's body size.** Recommended: **14px**, to judge on the phone
-   first. The specimen's size buttons show 11–14. Titles, details and captions
-   follow the body size, and the measure grows with it.
-5. **A focus outline on the site's controls** (×, ←, the caret, SEND, the
-   footer). Recommended: **yes**. Mouse and touch users never see it.
-
-Once answered, the work goes in this order:
-
-- Questions 1, 2 and 5 are a few lines in `index.html` and can ship on their
-  own.
-- Question 4 goes with **UX-4**, because a bigger body changes the window's
-  layout.
-- Harvest takes the editor values with **UX-2**, which rebuilds its shell
-  anyway, so nothing is restyled twice.
+Harvest takes the editor values with **UX-2**, which rebuilds its shell
+anyway, so nothing gets restyled twice. Until then, Harvest's `page.css` still
+holds the old greys; `tools/check-tokens.js` compares only the names both
+files declare.
