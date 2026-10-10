@@ -257,6 +257,23 @@ the server compares the state snapshot twice a second and writes only when it
 changed. `poll()` in page.js is now a one-shot refresh after the page's own
 actions.
 
+## The Preview pane (built 2026-10-10)
+
+Organize › **Preview**: the site itself in a pane right of the works (and of
+Text), drag-resizable up to 75 % of the window (`data-right` seam). **As
+written** is `dist/` served by a second server inside harvest.js on its own
+port (`PREVIEW` in `/api/state`), rebuilt by build.js on every load of `/`
+(~0.1 s; `buildSite()` queues it with Publish's build, both empty dist/). Own
+port because from Harvest's origin the site's script would pass the Origin
+check on `/api/` POSTs — verified 403 from the preview port. **Live** is `LIVE`.
+`loadPreview()` reloads it with `?v=<time>#section/slug` on every `loadOrg()`
+(project switch, after Write); a held-back project is not in the build, so the
+pane says so. The boundary is HarvestApp.swift: a clicked link inside a frame
+may only stay on the frame's host; anything else (and any `target=_blank`)
+opens in the default browser. In a plain browser (Harvest.command) there is
+no boundary. Testing in the in-app browser: changing the tab's viewport size
+made the cross-origin frame screenshot black; a fresh tab rendered it.
+
 ## Finder's right-click menu (built 2026-10-04)
 
 **Not offered inside iCloud Drive** — Robert's Desktop and Documents are

@@ -19,7 +19,7 @@
 import Cocoa
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate {
   var window: NSWindow!
   var web: WKWebView!
   let server = Process()
@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     let config = WKWebViewConfiguration()
     web = WKWebView(frame: .zero, configuration: config)
     web.uiDelegate = self
+    web.navigationDelegate = self
     window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
                       styleMask: [.titled, .closable, .miniaturizable, .resizable],
                       backing: .buffered, defer: false)
@@ -123,6 +124,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate {
     p.canChooseDirectories = false
     p.allowsMultipleSelection = parameters.allowsMultipleSelection
     p.beginSheetModal(for: window) { r in completionHandler(r == .OK ? p.urls : nil) }
+  }
+
+  /* THE PREVIEW PANE'S BOUNDARY (Organize › Preview, a frame inside the page).
+     Harvest's page may point the frame anywhere — the site as written, or the
+     live site — but a link CLICKED inside it may only move within the address
+     it is showing. Another site, an email address: opened in the default
+     browser instead, so the pane only ever shows Robert's site. By link click,
+     not by who started the navigation: WKNavigationAction.sourceFrame is
+     declared never-nil and can be nil, which crashes Swift. The site moves
+     between its own pages by the part after #, which stays on its address. */
+  func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+               decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    guard action.navigationType == .linkActivated, let frame = action.targetFrame, !frame.isMainFrame,
+          let url = action.request.url, let here = frame.request.url?.host, url.host != here
+    else { return decisionHandler(.allow) }
+    NSWorkspace.shared.open(url)
+    decisionHandler(.cancel)
+  }
+
+  // A link that asks for a new window (target="_blank", window.open) has no
+  // window to go to here: it opens in the default browser instead.
+  func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+               for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+    if let url = action.request.url, ["http", "https", "mailto"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
+    return nil
   }
 
   @objc func reloadPage() { web.reload() }

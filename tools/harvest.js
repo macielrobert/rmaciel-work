@@ -200,7 +200,7 @@ const catchUp = () => new Promise((ok) => execFile('git', ['-C', REPO, 'pull', '
 async function publish() {
   const changed = await git('status', '--porcelain', '--', 'content', 'images');
   if (!changed.trim()) { unpublished.clear(); return { message: 'Nothing new to publish.' }; }
-  try { await sh(process.execPath, [path.join(REPO, 'build.js')]); }
+  try { await buildSite(); }
   catch (e) { throw new Error('The site would not build, so nothing was published: ' + String(e.stderr || e.message).trim().split('\n').pop()); }
   const slugs = [...new Set(changedProjects(changed))];
   await git('add', '--', 'content', 'images');
@@ -1713,7 +1713,7 @@ const listeners = new Set();
 function stateView() {
   const pending = {};
   for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
-  return { root: state.root, home: HOME, job, rev, unpublished: [...unpublished],
+  return { root: state.root, home: HOME, job, rev, unpublished: [...unpublished], preview: PREVIEW, live: LIVE,
     site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
     projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
 }
@@ -1962,6 +1962,39 @@ function body(req) {
 // way. Here, not in a launcher, so the app and Harvest.command both get it.
 try { execFileSync('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000, stdio: 'ignore' }); } catch {}
 try { for (const s of changedProjects(execFileSync('git', ['-C', REPO, 'status', '--porcelain', '--', 'content', 'images'], { encoding: 'utf8' }))) unpublished.add(s); } catch {}
+
+/* ---------------------------------------------------------- preview */
+/* THE SITE ITSELF, for Organize's Preview pane: dist/ as build.js makes it,
+   rebuilt on every load of the page (the build takes ~0.1 s), so it shows the
+   files as Write to project left them, before Publish. On a port of its own,
+   not a route on this server: from Harvest's address the site's script would
+   pass the Origin check every /api/ POST relies on. Not printed:
+   HarvestApp.swift takes the first address this process prints as Harvest's. */
+const DIST = path.join(REPO, 'dist');
+let building = Promise.resolve();
+// one build at a time: Publish and a preview load both empty dist/ first
+const buildSite = () => (building = building.catch(() => {}).then(() => sh(process.execPath, [path.join(REPO, 'build.js')])));
+const SITE_TYPES = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+let PREVIEW = '';
+const previewServer = http.createServer(async (req, res) => {
+  try {
+    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (rel === '/' || rel === '/index.html') {
+      try { await buildSite(); }
+      catch (e) {
+        // what build.js said, so the pane explains itself instead of going blank
+        const why = String(e.message).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+        res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end('<pre style="font:12px/1.6 -apple-system,sans-serif;padding:16px;white-space:pre-wrap">The site would not build, so there is nothing to preview. Write to project says why too.\n\n' + why + '</pre>');
+      }
+    }
+    const abs = path.join(DIST, rel === '/' ? 'index.html' : rel);
+    if (!abs.startsWith(DIST + path.sep) || !fs.statSync(abs, { throwIfNoEntry: false })?.isFile()) { res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, { 'content-type': SITE_TYPES[ext(abs)] || 'application/octet-stream', 'cache-control': 'no-store' });
+    fs.createReadStream(abs).pipe(res);
+  } catch (e) { console.warn('preview: ' + e.message); res.writeHead(400); res.end(); }
+});
+previewServer.listen(0, '127.0.0.1', () => { PREVIEW = `http://127.0.0.1:${previewServer.address().port}/`; });
 
 server.listen(0, '127.0.0.1', () => {
   ORIGIN = `http://127.0.0.1:${server.address().port}`;
