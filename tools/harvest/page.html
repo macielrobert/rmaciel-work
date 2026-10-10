@@ -65,6 +65,7 @@
       <span class="dim" id="orgcount"></span>
       <button class="btn" id="orgshowrm" hidden title="Removed works wait here until Write to project takes them off the site. Show them to Restore one.">Show removed</button>
       <span id="orgviews"><button class="btn" data-ov="list">List</button> <button class="btn" data-ov="grid">Grid</button> <span id="orgsizes"><button class="btn" data-cell="100">S</button> <button class="btn" data-cell="170">M</button> <button class="btn" data-cell="280">L</button></span></span>
+      <input id="orgq" type="search" placeholder="Find by file name (⌘F)">
       <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
       <button class="btn" id="orgremove" disabled title="Take the ticked works off this project. Write to project is what takes them off the site; Restore brings them back before then.">Remove from project</button>
       <button class="btn" id="orgsplit" disabled title="Undo a grouping: every copy in the ticked works becomes a work of its own">Separate copies</button>
@@ -77,7 +78,7 @@
          are the works below. Filled by loadProj() in page.js. -->
     <div id="orgbody"><div id="orgmain">
     <div id="proj" hidden>
-      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span></div>
+      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span><span id="punsaved" hidden>Unsaved <button class="btn" id="pwrite">Write to project</button></span></div>
       <div class="pgrid">
         <label>Title<input data-p="title"></label>
         <label>Section<select data-p="section"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select></label>
@@ -88,7 +89,7 @@
         <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
         <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
         <div class="field">Grid icon
-          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Uploaded mark</option></select>
+          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Image (PNG or SVG)</option></select>
           <input data-p="icon_glyph" placeholder="One character">
           <div class="mark" data-mark="icon_image"></div>
         </div>

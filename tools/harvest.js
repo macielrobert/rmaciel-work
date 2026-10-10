@@ -1805,6 +1805,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/thumb') {
       const abs = url.searchParams.get('p');
       if (!IMAGE_EXT.has(ext(abs)) || !fs.existsSync(abs)) return send(404, 'text/plain', 'not found');
+      // sips keeps one frame of a GIF, so a GIF the site would take is shown as itself; one over MAX_GIF stays a still (Write refuses it anyway)
+      if (ext(abs) === '.gif' && fs.statSync(abs).size <= MAX_GIF) return send(200, 'image/gif', fs.readFileSync(abs));
       // Every thumbnail goes through sips, not just HEIC: a page of forty
       // full-size camera files is a gigabyte of decoding for the browser.
       const t = path.join(THUMBS, id(abs, fs.statSync(abs).mtimeMs) + '.jpg');

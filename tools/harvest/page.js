@@ -76,6 +76,13 @@ function drawProjects() {
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d || e.target.closest('.rename')) return;
+  // Asked BEFORE switching. It used to be asked by loadProj, after the list,
+  // header and works had already moved on, so Cancel kept only the panel: one
+  // project's details over another's works, asking again at every click.
+  if (pd && pdDirty && pd.slug !== d.dataset.s) {
+    if (!confirm($('ptitle').textContent + ' has unsaved project details. Discard them?\n\nCancel to stay on ' + $('ptitle').textContent + ' — Write to project saves them.')) return;
+    setDirty(false); pd = null;
+  }
   save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; $('msg').textContent = '';
   shown.pending = shown.accepted = shown.rejected = 100;
@@ -456,6 +463,9 @@ $('orgviews').addEventListener('click', (e) => {
   if (b.dataset.cell) remember('orgCell', orgCell = b.dataset.cell);
   if (org) drawOrg(); else orgLook();
 });
+$('orgq').addEventListener('input', () => { if (org) drawOrg(); });
+// ⌘F: Harvest.app's web view has no find bar, so on Organize it goes to the find box
+document.addEventListener('keydown', (e) => { if (view === 'organize' && (e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); $('orgq').focus(); $('orgq').select(); } });
 async function loadOrg() {
   if (!project) { $('orgtitle').textContent = 'Pick a project'; $('stacks').innerHTML = ''; $('orgwrite').disabled = true; return; }
   $('orgtitle').textContent = S.projects.find(p => p.slug === project).title;
@@ -470,7 +480,10 @@ function drawOrg() {
   const copies = org.stacks.reduce((n, t) => n + t.members.length, 0);
   $('orgcount').textContent = live.length + ' work' + (live.length === 1 ? '' : 's') + ' · ' + copies + ' picture' + (copies === 1 ? '' : 's');
   $('orgwrite').disabled = false;   // with no works there may still be details or text to write
-  const gone = org.stacks.length - live.length, shown = showRemoved ? org.stacks : live;
+  // the find box matches EVERY copy's name, so a work turns up even when the copy it was found by is not the kept one
+  const q = $('orgq').value.trim().toLowerCase();
+  const named = (t) => !q || t.members.some(m => m.name.toLowerCase().includes(q));
+  const gone = org.stacks.length - live.length, shown = (showRemoved ? org.stacks : live).filter(named);
   $('orgshowrm').hidden = !gone;
   $('orgshowrm').textContent = showRemoved ? 'Hide removed' : 'Show ' + gone + ' removed';
   for (const k of [...opick]) if (!shown.some(t => t.id === k)) opick.delete(k);   // a hidden work is never acted on unseen
@@ -482,7 +495,8 @@ function drawOrg() {
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick"' + (opick.has(t.id) ? ' checked' : '') + '>' +
         '<div class="under"><small>' + tileLabel(t) + '</small>' +
-        '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div></div>';
+        '<button class="btn" data-turn="-1" title="Turn left — applied to the file on Save">↺</button><button class="btn" data-turn="1" title="Turn right — applied to the file on Save">↻</button></div>' +
+        '<div class="fname">' + esc(k.name) + '</div></div>';
     }).join('');
     return;
   }
@@ -503,7 +517,7 @@ function drawOrg() {
       (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
       (t.suggest.length ? '<div class="chips">' + t.suggest.map(x => '<button class="btn chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
       '</div></div>';
-  }).join('') : '<p class="dim">' + (gone ? 'Every work here is removed. Write to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
+  }).join('') : '<p class="dim">' + (q ? (org.stacks.some(named) ? 'Only removed works are named “' + esc(q) + '” — Show removed to see them.' : 'No file here is named “' + esc(q) + '”.') : gone ? 'Every work here is removed. Write to project takes them off the site.' : 'No pictures yet. Accept some in Collect, or add them to the project in Keystatic.') + '</p>';
 }
 async function orgOp(body, redraw = true) {
   busy(1);
@@ -668,7 +682,7 @@ async function saveDetails() {
   if (!Object.keys(data).length && body === undefined) return false;
   $('orgmsg').textContent = 'Saving project details — checking the site still builds…';
   const r = await api('/api/project', { project: pd.slug, data, body });
-  pdDirty = false;
+  setDirty(false);
   return !r.unchanged;
 }
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
@@ -730,7 +744,8 @@ async function createProject() {
     // scroll the Projects column only: scrollIntoView also moved the whole window
     const el = document.querySelector('[data-s="' + d.slug + '"]'), col = el && el.closest('section');
     if (col) col.scrollTop = el.offsetTop - col.offsetTop - col.clientHeight / 2;
-    say('Created ' + title + ' as a draft — it is selected below. Add a grid icon in /keystatic before it can go live.');
+    // the panel uploads an icon; Keystatic is not needed for it
+    say('Created ' + title + ' as a draft' + (project === d.slug ? ' — it is selected below' : '') + '. Give it a grid icon in Organize › Project details before it can go live.');
   } catch (err) { oops(err); newLabel(); }
   finally { busy(-1); }
 }
@@ -865,6 +880,11 @@ async function extractWork(id) {
    The panel remembers WHICH project it holds (pd.slug), and Save goes there,
    never to whatever project is selected now. */
 let pd = null, pdDirty = false;
+// The panel says when it holds edits, and has the one Write right there: with
+// the button only at the top right, a panel of edits looked unsaveable (Robert,
+// 2026-10-10). Still ONE write — this clicks the header's — not a second Save.
+function setDirty(v) { pdDirty = v; $('punsaved').hidden = !v; }
+$('pwrite').addEventListener('click', () => $('orgwrite').click());
 const marks = {};   // icon_image / wordmark: a site path, '' for none, or { upload, name } waiting for Save
 let projOpen = remember('projOpen') === '1';
 function projLook() { $('proj').hidden = !projOpen; $('projtoggle').classList.toggle('on', projOpen); }
@@ -902,13 +922,15 @@ function fillProj() {
   drawMarks();
   $('pbody').value = pd.body || '';
   $('ptitle').textContent = d.title || pd.slug;
-  $('paddr').textContent = 'Address #' + v.section + '/' + pd.slug + ' — permanent, it does not change with the title';
+  addr(v.section);
   $('pmsg').textContent = '';
-  pdDirty = false;
+  setDirty(false);
   // what the form showed when loaded: Save sends only what differs from it
   pd.shown = formValues(); pd.shownBody = $('pbody').value;
   showDesc();
 }
+// follows the Section menu: it said #build beside a menu reading ART
+const addr = (section) => { $('paddr').textContent = 'Address #' + section + '/' + pd.slug + ' — permanent, it does not change with the title'; };
 function formValues() {
   const out = { icon_image: marks.icon_image, wordmark: marks.wordmark };
   for (const el of document.querySelectorAll('#proj [data-p]')) out[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
@@ -917,19 +939,21 @@ function formValues() {
 function drawMarks() {
   const glyph = document.querySelector('#proj [data-p=icon_type]').value === 'glyph';
   document.querySelector('#proj [data-p=icon_glyph]').hidden = !glyph;
-  document.querySelector('[data-mark=icon_image]').hidden = glyph;
   for (const box of document.querySelectorAll('#proj [data-mark]')) {
     const k = box.dataset.mark, m = marks[k];
+    const pick = '<label class="btn">Choose file…<input type="file" accept=".png,.svg,image/png,image/svg+xml" hidden></label>';
+    // a typed icon still offers the upload, which switches the icon to it: hidden
+    // behind the menu, the upload was missed and Keystatic looked like the only way
+    if (k === 'icon_image' && glyph) { box.innerHTML = '<span>Or an image (PNG or SVG)</span>' + pick; continue; }
     const src = !m ? '' : typeof m === 'object' ? m.upload : m;
     box.innerHTML = (src ? '<div class="tile"><img src="/raw?p=' + encodeURIComponent(src) + '"></div>' : '') +
-      '<span>' + (typeof m === 'object' ? esc(m.name) + ' — saved with the project' : src ? esc(src.split('/').pop()) : 'None') + '</span>' +
-      '<label class="btn">Choose file…<input type="file" accept=".png,.svg,image/png,image/svg+xml" hidden></label>' +
+      '<span>' + (typeof m === 'object' ? esc(m.name) + ' — saved with the project' : src ? esc(src.split('/').pop()) : 'None') + '</span>' + pick +
       (k === 'wordmark' && m ? '<button class="btn" data-unmark>Remove</button>' : '');
   }
 }
 $('proj').addEventListener('input', (e) => {
-  pdDirty = true;
-  if (e.target.dataset.p === 'section') partOfOptions(e.target.value, document.querySelector('#proj [data-p=part_of]').value);
+  setDirty(true);
+  if (e.target.dataset.p === 'section') { partOfOptions(e.target.value, document.querySelector('#proj [data-p=part_of]').value); addr(e.target.value); }
   if (e.target.dataset.p === 'icon_type') drawMarks();
   if (e.target.id === 'pbody') { clearTimeout(showDesc.t); showDesc.t = setTimeout(showDesc, 300); }
 });
@@ -938,12 +962,12 @@ $('proj').addEventListener('change', async (e) => {
   const k = e.target.closest('[data-mark]').dataset.mark, f = e.target.files[0];
   const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
   busy(1);
-  try { marks[k] = { upload: (await api('/api/project/upload', { name: f.name, data })).upload, name: f.name }; pdDirty = true; drawMarks(); }
+  try { marks[k] = { upload: (await api('/api/project/upload', { name: f.name, data })).upload, name: f.name }; if (k === 'icon_image') document.querySelector('#proj [data-p=icon_type]').value = 'image'; setDirty(true); drawMarks(); }
   catch (err) { $('pmsg').textContent = '⚠ ' + err.message; }
   finally { busy(-1); }
 });
 $('proj').addEventListener('click', (e) => {
-  if (e.target.closest('[data-unmark]')) { marks[e.target.closest('[data-mark]').dataset.mark] = ''; pdDirty = true; drawMarks(); }
+  if (e.target.closest('[data-unmark]')) { marks[e.target.closest('[data-mark]').dataset.mark] = ''; setDirty(true); drawMarks(); }
   const b = e.target.closest('[data-md]'); if (b) markup(b.dataset.md);
 });
 // The description is Markdoc, as Keystatic writes it. The buttons put the
@@ -959,7 +983,7 @@ function markup(kind) {
     const e = t.value.indexOf('\n', b); b = e < 0 ? t.value.length : e;
     t.setRangeText(t.value.slice(a, b).split('\n').map((l, i) => PREFIX[kind](i) + l).join('\n'), a, b, 'select');
   } else if (kind === 'divider') t.setRangeText('\n\n---\n\n', b, b, 'end');
-  t.focus(); pdDirty = true; showDesc();
+  t.focus(); setDirty(true); showDesc();
 }
 async function showDesc() {
   try { const d = await api('/api/preview', { body: $('pbody').value }); $('ppreview').innerHTML = d.error ? '<span class="dim">' + esc(d.error) + '</span>' : d.html; }
