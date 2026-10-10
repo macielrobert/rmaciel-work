@@ -1,12 +1,13 @@
 # SVG Noise Lab — Master Plan
 
-Code debt and the domain/email migration interleaved in the order they
-actually need doing. Current build: **v80**.
+Product work, code debt, and the domain/email migration. The v70–v80 labels
+below identify historical work; Git records the current version.
 
 > **Where work happens now.** Phases 1–3 are finished: the repository, the
 > Netlify build, the CMS, and the Claude Code loop all exist and work. The
-> current job is populating real work and fixing user-facing problems as they
-> surface — open-ended, no checklist.
+> current job is populating real work and improving the portfolio and Harvest
+> together. **Start with CURRENT — Shared UX plan below** for the design and
+> editor work. Codex owns strategy; Claude owns implementation.
 >
 > Everything that must be true **before the domain moves** has been pulled
 > out into **`PUNCH-LIST.md`**, which is the gate. The launch phases below are
@@ -31,6 +32,255 @@ These never change and apply at every phase below.
 3. **Never cancel the domain subscription.** It carries the MX records.
 4. **Never touch Google Workspace.** In Squarespace's UI "cancel" means two
    different things and one of them suspends your inbox. Leave it alone.
+
+---
+
+## CURRENT — Shared UX plan: portfolio + Harvest (2026-10-10)
+
+**Requested by Robert:** make the site and Harvest follow one style guide,
+with straightforward, legible interactions. The site's icon row and category
+navigation are essentially settled; focus site work on the content area.
+Harvest should become a strong desktop website editor, with clearer Collect /
+Organize logic and logically placed toolbars.
+
+**Ownership:** Codex is the strategist and reviewer; Claude implements.
+The checklist below records the proposed direction from the UX review, not
+completed work or blanket acceptance of every proposed pixel value. Claude
+should work in the sequence below, show the concrete designs, and record
+results against the same task IDs. Do not create a competing backlog.
+
+### Boundaries and handoff
+
+- Preserve the icon row, category behavior, fixed-size/adaptive-count rule,
+  permanent slugs, keyboard navigation, and no-WebGL fallback. These are not
+  invitations to redesign navigation or introduce a runtime framework.
+- Preserve the unpublished Harvest content, NOISE alt-text hold, and Robert's
+  ownership of the favicon and 404 design. Testing uses isolated copies and
+  scratch state, never his working content or running Harvest session.
+- Keystatic remains the fallback and schema of record. Any new authoring
+  field must work through Keystatic, Harvest, the build, and the site together.
+- This plan does not authorize content publication, DNS changes, the second
+  media domain, or the proposed Netlify split. Existing holds remain in force.
+- Per implementation task, Claude records: task ID, scope, branch/commit,
+  what changed, checks and visual evidence, remaining issues, and any decision
+  that needs Robert. Codex reviews against this plan; Robert resolves design
+  choices. Use separate worktrees when agents edit concurrently.
+
+### Existing work this plan overlaps
+
+| Existing record | Relationship to this plan |
+|---|---|
+| DONE: desktop text measure | Preserve the bounded reading width; UX-1 retunes typography, not the principle |
+| Phase 4 / `STRESS-TESTS.md` | UX-6 adds editor journeys and runs the existing site regression checks |
+| Phase 7 / `PUNCH-LIST.md` §1 | Real-copy layout tests and placeholder removal are shared work with UX-4, not a second content migration |
+| `PUNCH-LIST.md` §0 and Keystatic setup notes | UX-3 addresses save/publish clarity and the existing pull-request requirement; no CMS replacement |
+| NEXT: video/audio | Keep its existing hosting decision and backlog; future media controls follow UX-1 and fit UX-2/4 |
+| HANDOFF: Netlify build cost | Separate infrastructure work; a redesigned editor or preview does not depend on splitting hosts |
+| `AGENTS.md`: Harvest direction | UX-2/5 make that direction concrete; existing project fields already work and should be reorganized, not rebuilt blindly |
+
+The punch list remains the launch gate. When a shared task passes, update its
+existing launch/test entry with the evidence instead of creating another copy.
+Old handoffs describe earlier states: verify implementation before treating
+their unchecked items or old project counts as current blockers.
+
+### UX-1 — Establish the shared style and interaction guide
+
+**Finding:** there is a visual language in `AGENTS.md`, the design notes and
+CSS, but no complete guide for hierarchy, controls, states, and placement.
+Harvest largely uses 11px Light text and unpadded uppercase text buttons for
+navigation, actions, and toggles alike. The shared secondary grey calculates
+to about 2.78:1 on white versus 5.42:1 on black: light and dark are not equally
+legible. Normal text should meet 4.5:1; decorative rules need not use the same
+grey as readable labels. Reference: [W3C contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum).
+
+- [ ] Create `STYLE-GUIDE.md`: one visual identity with explicit portfolio
+      and editor applications. Preserve PP Neue Montreal, monochrome themes,
+      fine rules, left-aligned reading, and purposeful motion.
+- [ ] Prototype these starting values: editor text/controls 13–14px Book,
+      portfolio body 14px, secondary labels 12px, spacing 4/8/12/20/32px.
+      Judge at actual size with real copy before adopting. Reserve Light and
+      uppercase for intentional roles; do not enlarge settled navigation by
+      changing a global type rule indiscriminately.
+- [ ] Specify readable primary/secondary text, title/facts/body/caption
+      hierarchy, primary/secondary actions, disabled states, selected states,
+      hover, focus, validation errors, empty states, and background progress.
+      Selection must have a persistent marker as well as tone; keyboard focus
+      must be visibly different from hover. Give controls consistent hit areas.
+- [ ] Separate theme-aware text greys from decorative hairlines. This
+      deliberately revisits the existing fixed-grey rule for legibility;
+      document the measured reason and retain navigation geometry/behavior.
+- [ ] Choose one maintainable source for shared design values and matching
+      preview styles. Verify drift without adding a runtime stylesheet request
+      or an editor dependency to the shipped portfolio.
+
+**Done when:** representative text, controls, forms, and states can be compared
+side by side in both themes, and the guide explains their roles and placement.
+
+### UX-2 — Reorganize Harvest around the selected project
+
+**Finding:** Collect has five competing columns (Folders, Projects, Pending,
+Accepted, Rejected). Organize's wrapping toolbar mixes project settings,
+image operations, view controls and panel toggles. Editing already happens
+in both modes, making the boundary hard to understand.
+
+- [ ] Prototype **Collect / Edit** as two working modes, with Edit replacing
+      Organize's label. They are revisitable workspaces, not mandatory wizard
+      steps. Keep the selected project and sidebar position stable across them.
+- [ ] Keep Projects at the left in BUILD / DESIGN / ART order (currently
+      alphabetical). Keep project creation there; move working titles and
+      less frequent settings into the selected project's settings.
+- [ ] Collect answers “Which material belongs in this project?” Put folders
+      and websites in its Sources area. Present one review workspace with
+      Pending / Kept / Rejected filters and counts, Pending by default; do not
+      permanently give rejected material an equal column. Preserve source
+      provenance, individual/batch decisions, and the existing review history.
+- [ ] Clarify actions: Keep makes material available to Edit; Reject remembers
+      an unwanted match; Reset decision permits reconsideration. Put less
+      frequent queue housekeeping in a secondary menu, explicitly stating
+      whether it hides an item or forgets a decision. Rename existing states
+      carefully; do not discard history or change recrawl behavior accidentally.
+- [ ] Edit exposes **Content / Images / Layout**, with Project settings for
+      grouping, working titles, and share/search information. Reuse existing
+      fields and operations. Account for ABOUT, CONTACT and site settings as
+      well, so “main editor” does not mean project editing only.
+- [ ] Use an image grid for overview and ordering; selection opens a stable
+      details panel for caption, alt text, rotation, and alternate copies.
+      Preserve list inspection, grouping/separation, moves, removed-item
+      recovery, and comparison of copies without showing a large form per tile.
+- [ ] Apply this control placement consistently:
+
+| Location | Scope |
+|---|---|
+| Application header | Collect/Edit, background activity, site-wide publishing review |
+| Project header | Project name, saved state, Save project, Preview |
+| Workspace toolbar | Search, grid/list, thumbnail size |
+| Selection toolbar | Selection count, group/separate, move, remove |
+| Details panel | Fields and actions for the selected object |
+
+- [ ] Show selection actions when applicable; keep their location stable.
+      Put InDesign scanning beside source controls in Collect. Right-click
+      menus accelerate visible actions rather than being their only entrance.
+      Preserve keyboard operation and offer alternatives to drag-only actions.
+
+**Done when:** a user can identify the selected project, current mode, affected
+items, and next action without interpreting a tooltip or a wrapping button row.
+
+### UX-3 — Make saving and publishing states unambiguous
+
+**Finding:** review decisions persist, image edits live in Harvest's state,
+project details can remain only on screen, and Write to project executes
+several writes that can partially succeed. Publish applies across projects,
+even while a different project is selected.
+
+- [ ] Map the actual storage behavior before changing labels. Define visible
+      states for unsaved edits, material kept in Harvest, saved local project
+      files, and published content. Keep project visibility (held back) separate
+      from whether edits are saved. Never describe every persisted state as
+      “on the site.”
+- [ ] Provide one clearly scoped Save project action and persistent status.
+      Preserve unsaved work across mode/project changes or explicitly offer
+      save/discard/cancel. Show which parts saved if a later step fails;
+      preflight applicable validation before writes where practical. Do not
+      imply the current multi-step write is one all-or-nothing operation.
+- [ ] Surface missing requirements next to their fields and link a concise
+      summary to the affected item. Keep NOISE's existing alt-text gate and
+      hold unchanged; this task is not permission to fill or bypass it.
+- [ ] Design a site-wide publishing review that names included projects and
+      changes, distinguishing saved work from newer unsaved edits. Reconcile
+      Harvest's direct-push implementation with the required pull-request flow.
+      Distinguish submitted/merged, deploying, deployed, and failure; a push
+      alone is not evidence that visitors see the new content.
+- [ ] Keep publishing tests isolated while Harvest output is held. Provide
+      actionable error recovery without losing local work or including unrelated
+      edits. No real content publication is needed to complete this UX task.
+
+**Done when:** switching projects, reopening the app, a validation failure, and
+a failed publish all leave the user able to tell what was retained and where.
+
+### UX-4 — Refine the site's content layouts
+
+**Finding:** Standard puts the image left and text right, then expanded viewing
+moves the image right. Thumbnails consume roughly a quarter of content height;
+titles have little emphasis. Grid uses cropped 16:9 cells. Missing imagery can
+still silently produce placeholders. Some sparse pages also lack authored copy,
+which styling alone cannot fix.
+
+- [ ] Prototype three understandable choices: **Project** (existing
+      `standard`), **Collection** (`grid`), and **Text** (`text`). Keep existing
+      stored values/URLs compatible; the contact form retains its own layout.
+- [ ] Project: keep the main image in a stable region across overview and
+      expanded viewing. Keep title, close, and return controls predictable;
+      preserve local return versus global close and history behavior.
+- [ ] Establish title → short project facts → description hierarchy. Try a
+      bounded thumbnail strip instead of a fixed share of the content height,
+      while preserving the established size caps and reading measure.
+- [ ] Separate client identification from project imagery: a wordmark should
+      not automatically displace the main photograph. If this needs a new
+      authoring choice, carry it through the schema, editors, build, and site.
+- [ ] Collection: brief introduction plus image grid. Offer deliberate whole
+      image versus crop behavior; respect portrait drawings and other aspect
+      ratios. Keep text expansion local and restore the reader's position on
+      return. Text layout retains a readable column and clear hierarchy.
+- [ ] Handle missing descriptions/images deliberately, without inventing copy
+      or substituting fake artwork. Coordinate the existing placeholder-removal
+      task in Phase 7 / `PUNCH-LIST.md` §1; verify usages before removal.
+
+**Done when:** real sparse, long-copy, portrait-image, and many-image projects
+work in desktop and phone views. Larger screens gain space without unbounded
+images or lines; the settled navigation remains intact.
+
+### UX-5 — Connect composition to an accurate preview
+
+**Finding:** As written previews saved files, not all unsaved edits. The separate
+description preview uses 13px type against the site's 11px and loads fewer font
+styles. The editor can therefore show a different composition from the result.
+
+- [ ] Show formatted description editing directly, keeping the current Markdoc
+      vocabulary and Keystatic compatibility. Select an editor approach on its
+      merits; editor dependencies must not reach the public site. Preserve all
+      supported marks, lists, links, quotes, and dividers through save/reopen.
+- [ ] Use the actual site rendering for page preview and distinguish **Editing
+      preview**, **Saved preview**, and **Live**. An editing preview must include
+      pending edits without silently saving them into the project or publishing.
+      Until it exists, label the saved preview accurately.
+- [ ] Provide a large preview mode plus optional side-by-side viewing, desktop
+      and phone sizes, and layout choices with useful visual examples. Changing
+      the editor's pane width must not masquerade as a chosen device size.
+- [ ] Make selecting content and seeing its result a short round trip. Match
+      fonts, formatting, image order, crop behavior, and layout with the site;
+      remove competing approximate previews or identify their limited purpose.
+- [ ] Preserve the preview's separate origin and prevent editing previews from
+      overwriting `dist/` used by another process. Check responsiveness during
+      edits and project switches; do not rebuild expensively per keystroke.
+
+**Done when:** save/reopen produces the composition shown in the editing preview,
+and the interface never confuses pending edits, saved files, and the live site.
+
+### UX-6 — Sequence and acceptance journey
+
+Implement in focused steps: **UX-1 guide → UX-2 shell with UX-3 state model →
+UX-4 site layouts → UX-5 connected editing/preview → complete journey checks.**
+Resolve save semantics while restructuring the editor, not after polishing it.
+
+- [ ] First prototype: one complete **BUS STOP** session on isolated content
+      and state. Find material → keep it → edit text → order/select images →
+      choose layout → preview → save → reopen → compare the saved result.
+      Preserve source files and prior decisions. Test publishing failures without
+      releasing Robert's held content.
+- [ ] Add long text (LIGHT WORK), a portrait work, a many-image collection,
+      sparse content, and a held-back project. Use isolated fixtures where real
+      content is incomplete; do not edit NOISE to manufacture a passing test.
+- [ ] Check both themes, keyboard focus and operation, readable labels and
+      validation, selected/batch states, empty/loading/error states, narrow
+      desktop windows, and phone previews. Measure long-session tasks such as
+      repeated project switches and image reordering, including responsiveness.
+- [ ] Run applicable `STRESS-TESTS.md` checks for routing/history, image return,
+      contact behavior, resize, keyboard/VoiceOver, and no-WebGL fallback.
+      Extend that test record with these journeys rather than maintaining a
+      second test log. Follow the Harvest skill for isolated tests and PID cleanup.
+- [ ] Update the guide and relevant operating instructions with final behavior;
+      record completed task IDs and evidence here. Reconcile overlapping launch
+      checklist items only when their actual acceptance checks pass.
 
 ---
 
@@ -106,8 +356,10 @@ account connection above supersedes it.
 
 **Optional, later:** Claude Code locally on the MacBook, for long sessions.
 
-**Optional:** branch protection on `main`. Claude Code on the web opens pull
-requests anyway, so this is a safety net rather than a requirement.
+**Update, 2026-10-10:** the shared instructions record an enforced
+pull-request ruleset on `main`; this is no longer optional setup. UX-3 must
+make Harvest's publishing flow agree with it. Keystatic's response to a
+blocked save still needs verification; use a branch in the editor.
 
 Known gap: routes share the **code and `AGENTS.md`, not conversation memory**.
 Decisions that matter get written into `AGENTS.md` or the commit message, or
@@ -133,7 +385,8 @@ Half the closed debt is only verifiable here. See `STRESS-TESTS.md`.
 > Tracked in `PUNCH-LIST.md`. Work from there; kept here for the reasoning.
 
 - [ ] **Share + search metadata** — description, Open Graph tags, favicon,
-      `<h1>`, real `<title>`. Currently a link preview is a blank rectangle.
+      `<h1>`. The real `<title>` is already generated by `build.js` from
+      `content/site.json` (verified 2026-10-10); do not redo that part.
 - [ ] **404 page** — `404.html`, or the host serves its own, which won't be
       this site
 - [ ] **Form endpoint** — replace the mailto with Netlify's native form
@@ -184,8 +437,10 @@ The site should not go live on your domain showing placeholders.
 - [ ] Every image record needs `ratio`
 - [ ] **Combinatorial layout test with the real copy** — a one-line summary
       and an over-long title, every layout, both orientations. This is the
-      class of bug placeholder copy hides.
-- [ ] Delete the ~120 lines of placeholder generators
+      class of bug placeholder copy hides. Implement alongside UX-4/6;
+      record the shared launch result in `PUNCH-LIST.md` §1.
+- [ ] Delete the placeholder generators once dependencies on them are gone
+      — shared with UX-4's deliberate empty-content handling, not a second pass.
 - [ ] Verify hidden-strip images stay off the wire (devtools, real images)
 
 ---
@@ -236,6 +491,10 @@ Wait about a week after Phase 9.
 ## NEXT — Video and audio players
 
 Requested 2026-10-09. Not started.
+
+Separate follow-on work from CURRENT — Shared UX plan. The editor/layout
+redesign can proceed without resolving media hosting. When these players are
+implemented, use UX-1's control rules and UX-2/4/5's editing and preview model.
 
 Two players, one design: the browser's own `<video>` and `<audio>` elements
 with their built-in controls switched off, and the site's own controls drawn
@@ -526,7 +785,9 @@ Robert, and where production picks up.
 
 ### Production — where it picks up
 
-Nothing here changes the queue; the open work is where it was.
+**Updated 2026-10-10:** CURRENT — Shared UX plan now sequences the portfolio
+and Harvest design work, with Codex on strategy and Claude on implementation.
+The infrastructure decisions below remain separate and held as recorded.
 
 - `PUNCH-LIST.md` is the gate before the domain moves. Section 1 (content)
   is the long pole.
