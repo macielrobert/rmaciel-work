@@ -53,11 +53,22 @@ The one time you skip the branch: a single genuinely urgent fix you want live th
 
 Same as above, but press **New Project**. Three fields decide where it lands:
 
-- **Section** — BUILD, DESIGN, or ART.
+- **Section** — BUILD, DESIGN, ART, SYSTEMS, or any section you've added (below).
 - **Position in grid** — low numbers come first. They go 10, 20, 30 so you can slot something in between later without renumbering everything.
 - **URL slug** — the permanent web address for that project, like `vessel-series`. **Set it once and never change it.** A link you've already sent to someone breaks if you do. Renaming the title is safe; changing the slug is not.
 
 **Hold back** keeps a project written but off the live site.
+
+---
+
+## To add a section
+
+In Harvest, type the name under **Projects** (next to "New section") and press **Add section**. In the editor, it's **Sections → New**.
+
+- It goes after the last section in the footer. To move it, change **Position in the footer** in the editor: low numbers come first.
+- **It stays off the site until a project in it is published.** Adding one changes nothing a visitor sees, so it's safe to do any time. Put a project in it, and its label appears in the footer.
+- Its name becomes its permanent web address (`#systems/…`), like a project's slug. **Name it once and don't rename the address.**
+- On a phone, more than three sections don't fit in one row, so the footer turns into the up-and-down wheel. That happens on its own.
 
 ---
 
@@ -106,7 +117,7 @@ The build stops on purpose rather than publishing something broken, and it alway
 
 To read the actual message: open the failed deploy in Netlify and look for the line beginning `BUILD FAILED`.
 
-Warnings are different from failures. `section "art" has no published projects` is a warning — the build finishes and the site publishes.
+Warnings are different from failures. `section "systems" has no published projects, so it is left off the site` is a warning — the build finishes and the site publishes, just without that section's label.
 
 ---
 

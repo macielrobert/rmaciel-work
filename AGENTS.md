@@ -206,10 +206,13 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
 2. **WebGL icon grid.** Icons baked to textures, warped by a shared simplex
    noise shader. Selection = coherence: the chosen icon freezes, all others
    churn.
-3. **Footer navigation.** ALL and the three sections (BUILD / DESIGN / ART)
-   against the left margin, ABOUT / CONTACT against the right. Primary nav,
-   not decoration. The sections have two renderings — a flat row of labels
-   (the default) and a vertical three-slot wheel (`?wheel`).
+3. **Footer navigation.** ALL and the sections (BUILD / DESIGN / ART /
+   SYSTEMS / …) against the left margin, ABOUT / CONTACT against the right.
+   Primary nav, not decoration. **The sections are content** —
+   `content/sections/*.json`, added from Harvest or Keystatic — and a section
+   with nothing published stays off the site. They have two renderings: a
+   flat row of labels and a vertical three-slot wheel (see below for which
+   shows when).
 4. **Window.** Per-entry text and imagery, swapped through a hard cut,
    arranged by a named layout (`standard` / `grid` / `text` / `form`). The
    swap used to churn every character through a pool of ASCII glyphs on the
@@ -311,13 +314,19 @@ understanding why it exists will reintroduce a solved bug.
   exists ONLY there: on a wide screen the layout already says it, and a mark
   that repeats what the layout says is furniture. It is `aria-hidden`,
   unfocusable and untappable — punctuation, not a label.
-- **The band has two renderings, and `?wheel` picks the other one.**
-  DEFAULT IS THE FLAT ROW — it is also the DOM's resting state, so a visitor
-  without the flag never sees a swap, and the flag is read at parse time
-  rather than in `boot()` so `?wheel` does not flash the flat row first.
-  Both are in the file and `updateNav` marks both; only one is painted.
-  `FOOTER_RESERVE` follows: 52 for one line of labels, 72 for three.
-  The rest of this entry is the wheel.
+- **The band has two renderings, and `wantWheel()` picks.** The flat row,
+  except: on a PHONE (the strip's own `max-width: 500px`) once there are
+  more than three sections (Robert, 2026-10-10: "wheel on phones"); wherever
+  the flat row does not fit, measured by `flatFits()`; and everywhere under
+  `?wheel`. A COUNT on phones, not the fit test, because a fourth section
+  fit a 375px phone by 9px and a 430px one by 0, close enough to flip with
+  font metrics, so the page would load as one footer and settle as the
+  other. Decided at parse time (the section labels are written from CONTENT
+  there, then `placeSeam()` runs) so the first paint is right, and again in
+  every `resize()`, since a phone can rotate across it. Both are always
+  built and `updateNav` marks both; only one is painted. `FOOTER_RESERVE`
+  follows: 52 for one line of labels, 72 for three. The rest of this entry
+  is the wheel.
 - **The wheel's centre IS the band.**
   ALL / BUILD / DESIGN / ART stacked three-at-a-time at the left margin:
   centre slot at full ink, the two neighbours at half. It is the menu
@@ -566,9 +575,10 @@ understanding why it exists will reintroduce a solved bug.
   address-bar tint keeps following the device either way — the theme-color
   metas are media-scoped and the browser picks between them itself.
   `location.search` only, same rule as `?wheel`.
-- **`?wheel`** on the URL swaps the flat section labels for the vertical
-  wheel. `location.search` only, never the hash — a project slugged `wheel`
-  would otherwise turn it on.
+- **`?wheel`** on the URL pins the vertical wheel at every width (it shows
+  on its own on phones once there are more than three sections).
+  `location.search` only, never the hash — a project slugged `wheel` would
+  otherwise turn it on.
 - **Verify before presenting.** At minimum: JS syntax check, CSS brace
   balance, and a grep that every new function is actually wired in. Several
   real bugs were caught this way. A change to a colour or size the site and
@@ -630,7 +640,7 @@ pull request. See `NOTES-KEYSTATIC-SETUP.md`.
 
 **Build.** Netlify runs `npm run build`, publish directory `dist`. That is two commands and **the order is load-bearing**: `node build.js` deletes `dist/` and rebuilds it, then `astro build` writes the editor's assets alongside with `emptyOutDir` off. Reversed, the second command wipes the first's output and the site disappears from the deploy — verified by running it both ways, not inferred from the comment.
 
-`build.js` reads `content/projects/*.mdoc` plus the three singleton files, sorts projects by order, drops anything flagged draft, reads image dimensions for ratio, writes the assembled CONTENT between the markers in the source template, and emits `dist/index.html`, `dist/fonts/` and `dist/images/`.
+`build.js` reads `content/sections/*.json`, `content/projects/*.mdoc` and the three singleton files, leaves off any section with nothing published, sorts projects by order, drops anything flagged draft, reads image dimensions for ratio, writes the assembled CONTENT between the markers in the source template, and emits `dist/index.html`, `dist/fonts/` and `dist/images/`.
 
 Both halves land in one `dist/` and neither shadows the other: the Netlify function Astro emits declares `path: '/*'` with `preferStatic: true`, so a request for `/` gets the static `index.html` and only `/keystatic` and its API route reach the function.
 

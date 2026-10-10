@@ -60,6 +60,7 @@ const { execFile, execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const PROJECTS = path.join(REPO, 'content/projects');
+const SECTIONS_DIR = path.join(REPO, 'content/sections');
 const HOME = path.resolve(os.homedir());
 const STORE = path.join(HOME, 'Library/Application Support/Harvest');
 fs.mkdirSync(STORE, { recursive: true });
@@ -183,7 +184,14 @@ function writeMdoc(file, data, body) {
    date by writeMdoc, rather than asking git on every poll. */
 const git = (...a) => sh('git', ['-C', REPO, ...a]);
 const unpublished = new Set();
-const changedProjects = (porcelain) => porcelain.split('\n').map(l => (l.slice(3).match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/) || []).slice(1).find(Boolean)).filter(Boolean);
+// a new or changed section counts too, named as one, so Publish lights for it
+const changedProjects = (porcelain) => porcelain.split('\n').map(l => {
+  const f = l.slice(3);
+  const m = f.match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/);
+  if (m) return m[1] || m[2];
+  const sec = f.match(/^content\/sections\/([^/]+)\.json/);
+  return sec ? sec[1] + ' (section)' : null;
+}).filter(Boolean);
 // CATCH UP — the latest from GitHub immediately before anything is written
 // into the repo (Write, Organize's Save, a new project), not only at launch:
 // Keystatic saves from the phone land on GitHub, and writing onto an old copy
@@ -228,12 +236,47 @@ function newProject(title, section) {
   title = String(title || '').trim();
   const slug = slugify(title);
   if (!slug) throw new Error('A new project needs a title.');
-  if (!['build', 'design', 'art'].includes(section)) throw new Error('Pick a section.');
+  if (!isSection(section)) throw new Error('Pick a section.');
   const file = path.join(PROJECTS, slug + '.mdoc');
   if (fs.existsSync(file)) throw new Error(`There is already a project called "${slug}".`);
   // A draft until it has a grid icon: build.js skips drafts before checking
   // them, so the site keeps building. Finish it in /keystatic.
   writeMdoc(file, { title, section, order: 10, draft: true, details: [], layout: 'standard', expand: true, icon_type: 'glyph', images: [] }, '');
+  return slug;
+}
+
+/* THE SECTIONS — the footer's BUILD / DESIGN / ART / ..., one file each in
+   content/sections/, as Keystatic writes them (build.js holds the rules and
+   says why they are content now). Read fresh every time: a handful of tiny
+   files, and a section added in Keystatic arrives with a pull without a
+   restart. */
+function sections() {
+  if (!fs.existsSync(SECTIONS_DIR)) return [];
+  return fs.readdirSync(SECTIONS_DIR).filter(f => f.endsWith('.json')).map(f => {
+    let d = {};
+    try { d = JSON.parse(fs.readFileSync(path.join(SECTIONS_DIR, f), 'utf8')); } catch {}
+    const id = f.slice(0, -5);
+    return { id, label: String(d.title || id), order: Number.isFinite(d.order) ? d.order : 10 };
+  }).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+const isSection = (x) => sections().some(sec => sec.id === x);
+
+// ADD SECTION (Robert, 2026-10-10). A file like the ones Keystatic writes,
+// placed after the last section. Safe at any moment: a section with nothing
+// published in it stays off the site (build.js), so it appears in the footer
+// only once a project in it goes live. The name's slug is its permanent
+// address, as a project's is.
+const RESERVED_SECTIONS = ['all', 'about', 'contact', 'field'];   // build.js refuses these too
+function newSection(title) {
+  title = String(title || '').trim();
+  const slug = slugify(title);
+  if (!slug) throw new Error('A new section needs a name.');
+  if (RESERVED_SECTIONS.includes(slug)) throw new Error(`"${title}" is already in the footer. Pick another name.`);
+  if (isSection(slug)) throw new Error(`There is already a section called "${slug}".`);
+  const order = sections().reduce((m, sec) => Math.max(m, sec.order), 0) + 10;
+  fs.mkdirSync(SECTIONS_DIR, { recursive: true });
+  writeAtomic(path.join(SECTIONS_DIR, slug + '.json'), JSON.stringify({ title, order }, null, 2) + '\n');
+  unpublished.add(slug + ' (section)');
   return slug;
 }
 
@@ -316,7 +359,7 @@ async function checkAlone(slug, text, uploads, tied) {
     for (const n of ['index.html', 'fonts', 'node_modules']) fs.symlinkSync(path.join(REPO, n), path.join(root, n));
     fs.mkdirSync(path.join(root, 'content', 'projects'), { recursive: true });
     const content = path.join(REPO, 'content');
-    for (const n of ['about.mdoc', 'contact.json', 'site.json']) if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
+    for (const n of ['about.mdoc', 'contact.json', 'site.json', 'sections']) if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
     fs.mkdirSync(path.join(root, 'images', slug), { recursive: true });
     for (const k of tied) {
       fs.writeFileSync(path.join(root, 'content', 'projects', k + '.mdoc'), k === slug ? text : fs.readFileSync(path.join(PROJECTS, k + '.mdoc')));
@@ -341,7 +384,7 @@ async function saveProject(slug, v, newBody) {
   // one rule per field; a field the page did not send is left as the file has it
   const set = {
     title: (x) => { if (!str(x)) throw new Error('A project needs a title.'); next.title = str(x); },
-    section: (x) => { if (!['build', 'design', 'art'].includes(x)) throw new Error('Pick a section.'); next.section = x; },
+    section: (x) => { if (!isSection(x)) throw new Error('Pick a section.'); next.section = x; },
     order: (x) => { const n = Number(x); if (str(x) === '' || !Number.isFinite(n)) throw new Error('Position in grid must be a number.'); next.order = Math.round(n); },
     draft: (x) => { next.draft = !!x; },
     part_of: (x) => optional('part_of', str(x)),
@@ -431,14 +474,18 @@ function preview(src) {
 // made elsewhere while it runs appear after a restart — the launcher pulls first.
 let projectsCache = null;
 function projects() {
-  return projectsCache ||= fs.readdirSync(PROJECTS).filter(f => f.endsWith('.mdoc')).map(f => {
+  if (projectsCache) return projectsCache;
+  // in the footer's order, not alphabetical; a section with no file sorts last
+  const ids = sections().map(sec => sec.id);
+  const rank = (id) => { const i = ids.indexOf(id); return i < 0 ? 1e9 : i; };
+  return projectsCache = fs.readdirSync(PROJECTS).filter(f => f.endsWith('.mdoc')).map(f => {
     const { data } = readMdoc(path.join(PROJECTS, f));
     return {
       slug: f.slice(0, -5), title: data.title || f, section: data.section, order: data.order ?? 10,
       draft: !!data.draft, nicknames: data.nicknames || [], part_of: data.part_of || null,
       siteImages: (data.images || []).map(i => path.join(REPO, String(i.src || '').replace(/^\/+/, ''))),
     };
-  }).sort((a, b) => (a.section || '').localeCompare(b.section || '') || a.order - b.order || a.title.localeCompare(b.title));
+  }).sort((a, b) => rank(a.section) - rank(b.section) || a.order - b.order || a.title.localeCompare(b.title));
 }
 
 /* ------------------------------------------------------------- matching */
@@ -1715,6 +1762,7 @@ function stateView() {
   for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
   return { root: state.root, home: HOME, job, rev, unpublished: [...unpublished], preview: PREVIEW, live: LIVE,
     site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
+    sections: sections(),
     projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
 }
 let lastSent = '', lastFinder = '';
@@ -1871,6 +1919,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
     if (p === '/api/preview') { try { return json({ html: preview(b.body) }); } catch (e) { return json({ html: '', error: 'No preview: ' + e.message.split('\n')[0] }); } }
     if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
+    if (p === '/api/newsection') { await catchUp(); return json({ slug: newSection(b.title) }); }
     if (p === '/api/crawlsite') {
       let url = String(b.url || '').trim();
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;

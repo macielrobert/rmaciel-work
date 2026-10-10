@@ -1068,6 +1068,9 @@
                                                   and JS reads the same number
                                                   as SEC_H */
     font-size: 11px; letter-spacing: 0.15em;
+    /* the strip is capitals whatever a section was typed as in Harvest or
+       Keystatic; the labels written in the template already are */
+    text-transform: uppercase;
     color: var(--text-2);                  /* words: was --accent-dim, 1.68:1 on white */
     pointer-events: none;                      /* only the words are live */
     user-select: none;
@@ -1088,6 +1091,9 @@
   #nl-fns > [data-nav] {
     color: inherit;
     position: relative;                        /* holds the zigzag, below */
+    white-space: nowrap;                       /* a two-word section reads as one
+                                                  label, and the fit test measures
+                                                  it at its full width */
     pointer-events: auto; cursor: pointer;
     padding: 6px 8px;                          /* tap target AND the separation
                                                   that the commas used to give */
@@ -1159,9 +1165,11 @@
      gives fling, snap, wheel and drag for free, and gets iOS's own
      deceleration rather than an imitation of it. Endless is the one thing it
      does not give, and JS adds that — see SEC_CYCLES. */
-  /* WHICH ONE IS SHOWING. The flat row is the default and the DOM's resting
-     state, so a visitor without the flag never sees a swap; ?wheel hides it
-     and shows the wheel instead. Both are in the file, one is painted. */
+  /* WHICH ONE IS SHOWING: the wheel on a phone once there are more than
+     three sections, wherever the flat row does not fit, and everywhere under
+     ?wheel; the flat row otherwise. The class is set by setWheel() at parse
+     time and again on every resize (see wantWheel()). Both are in the file,
+     one is painted. */
   #nl-sec { display: none; }
   #noiselab.wheel #nl-sec { display: block; }
   #noiselab.wheel #nl-fns > .sec { display: none; }
@@ -1357,11 +1365,13 @@
     <div id="nl-car"></div>
   </div>
 
-  <!-- primary navigation. ALL / BUILD / DESIGN / ART band the one row and
-       scroll it; CONTACT / ABOUT open the window without a grid selection.
+  <!-- primary navigation. ALL and the sections band the one row and scroll
+       it; CONTACT / ABOUT open the window without a grid selection. The
+       section labels go in after ALL at parse time, from CONTENT (see
+       footerSections()), because the list of sections is content now.
        Absolutely positioned, so it is a SIBLING of the window while sitting
        geometrically inside the grid half — see the below-the-seam exit. -->
-  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections, under ?wheel only --></div><span class="sec" role="button" tabindex="0" data-nav="all">ALL</span><span class="sec" role="button" tabindex="0" data-nav="build">BUILD</span><span class="sec" role="button" tabindex="0" data-nav="design">DESIGN</span><span class="sec" role="button" tabindex="0" data-nav="art">ART</span><span class="sep" aria-hidden="true">|</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
+  <div id="nl-fns"><div id="nl-sec" role="listbox" tabindex="0" aria-label="Section"><!-- slots built in boot() from DATA.sections --></div><span class="sec" role="button" tabindex="0" data-nav="all">ALL</span><span class="sep" aria-hidden="true">|</span><span role="button" tabindex="0" data-nav="contact">CONTACT</span><span role="button" tabindex="0" data-nav="about">ABOUT</span><span role="button" tabindex="0" id="nl-field" aria-pressed="false" aria-label="Enter the field">&#x25C7;</span></div>
 </div>
 
 <script>
@@ -1609,28 +1619,70 @@
   // real estate never does.
   const CELL_PX = 50;
 
-  // TWO SECTION NAVS, ONE FILE. ?wheel gives the vertical three-slot wheel;
-  // without it the sections are the flat row of labels they were before it.
-  // Same testing idiom as ?nogl and ?motion — one file, no confusable copies,
-  // and a phone switches between them by editing the URL.
+  // TWO SECTION NAVS, ONE FILE: the flat row of labels and the vertical
+  // three-slot wheel, which holds any number of sections, three in view.
+  // wantWheel() picks, at parse time so the first paint is already right, and
+  // again on every resize, since a phone that loads in landscape can rotate
+  // into portrait. The wheel is shown when any of three things holds:
   //
-  // THE FLAT ROW IS THE DEFAULT, and it is also the DOM's resting state, so a
-  // visitor without the flag never sees a swap. Read here at parse time
-  // rather than in boot(), which runs two frames later: the class has to be on
-  // the element before the first paint or ?wheel flashes the flat row first.
-  //
-  // location.search only, not the hash: a project slug called "wheel" would
-  // otherwise turn it on.
-  const SEC_WHEEL = /[?&]wheel\b/.test(location.search);
-  document.getElementById('noiselab').classList.toggle('wheel', SEC_WHEEL);
+  //   ?wheel — pinned at every width, the testing idiom of ?nogl and ?motion.
+  //     location.search only, not the hash: a project slug called "wheel"
+  //     would otherwise turn it on.
+  //   A PHONE WITH MORE THAN THREE SECTIONS (Robert, 2026-10-10: "wheel on
+  //     phones"). The phone row was drawn for ALL + three sections + CONTACT
+  //     and ABOUT. A fourth leaves it no room to breathe: measured with
+  //     SYSTEMS, it fit a 375px phone by 9px and a 430px one by 0. A test
+  //     that close flips with a pixel of font metrics, and the page would load
+  //     as one footer and settle as the other; a count does not move. Phone =
+  //     the strip's own narrow rule, max-width 500px, where it is already one
+  //     centred run rather than two ends.
+  //   THE FLAT ROW DOES NOT FIT, anywhere — the net under every other width,
+  //     for the day there are six sections and a 600px window (flatFits()).
+  const SEC_WHEEL_PINNED = /[?&]wheel\b/.test(location.search);
+  const PHONE_MQ = '(max-width: 500px)';
+  const PHONE_SECTIONS = 3;
+  let secWheel = false;
 
   // Strip reserved below the grid for the footer. The canvas sits flush on
   // top of it. 52 holds a single line of 11px type; the wheel is three slots
   // (3 * --sec-h = 48) plus the 20px the strip already stood off the bottom,
   // so 72 with the same few px of slack. THE SEAM MOVES WITH IT — the grid
   // half is canvas + this — which is the price of the wheel, and the reason
-  // the flat row does not pay it.
-  const FOOTER_RESERVE = SEC_WHEEL ? 72 : 52;      // px
+  // the flat row does not pay it. A LET, because the rendering can change
+  // with the width; setWheel() is the only thing that writes it.
+  let FOOTER_RESERVE = 52;      // px
+
+  // Does the flat row fit? Its labels' own widths against the strip's inner
+  // width, measured with the wheel class off for the length of the call
+  // (synchronous, so nothing is painted in between). The labels do not wrap
+  // (white-space: nowrap), so each is laid out at its full width either way.
+  // Before the typeface has loaded this measures the fallback face; boot()
+  // asks again once it has.
+  function flatFits() {
+    const root = document.getElementById('noiselab');
+    const fns  = document.getElementById('nl-fns');
+    const had  = root.classList.contains('wheel');
+    if (had) root.classList.remove('wheel');
+    const cs   = getComputedStyle(fns);
+    const room = fns.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    let need = 0;
+    for (const el of fns.children) need += el.offsetWidth;   // display:none is 0
+    if (had) root.classList.add('wheel');
+    return need <= room;
+  }
+  function wantWheel() {
+    return SEC_WHEEL_PINNED
+      || (matchMedia(PHONE_MQ).matches && CONTENT.sections.length > PHONE_SECTIONS)
+      || !flatFits();
+  }
+  // true when the rendering changed, so a caller can follow it up
+  function setWheel(on) {
+    if (on === secWheel) return false;
+    secWheel = on;
+    document.getElementById('noiselab').classList.toggle('wheel', on);
+    FOOTER_RESERVE = on ? 72 : 52;
+    return true;
+  }
 
   // LAST-RESORT cap: the grid half (canvas + footer reserve) may take at most
   // this fraction of the page, so the contact half always keeps working room.
@@ -1659,14 +1711,16 @@
   // at parse time — so when resize() arrives at this number it changes
   // nothing. Read at parse time for the reason ?wheel is: the element has to
   // be right before the first paint, not two frames after it.
-  (function placeSeam() {
+  // Called below, after footerSections(): the wheel decision it depends on
+  // needs the section labels in the strip, and those come from CONTENT.
+  function placeSeam() {
     const rootEl = document.getElementById('noiselab');   // 100dvh: laid out
     const gridEl = document.getElementById('nl-grid');    // by the time we run
     const maxCh  = rootEl.getBoundingClientRect().height * GRID_MAX_FRAC - FOOTER_RESERVE;
     const ch     = (maxCh > 0 && ROW_CANVAS_H > maxCh) ? maxCh : ROW_CANVAS_H;
     gridEl.style.paddingBottom = FOOTER_RESERVE + 'px';   // single source: the JS knob
     gridEl.style.height = (ch + FOOTER_RESERVE).toFixed(1) + 'px';
-  })();
+  }
 
   // ------------------------------------------------------- menu row feel
   // Knobs for the swipeable menu row (armed only while it overflows — see
@@ -1942,11 +1996,12 @@
                   art with real counterforms; brand colors are discarded.
                   Omitting it auto-fills a placeholder so layout can be seen.
 
-     SECTIONS: the work is split into three — BUILD / DESIGN / ART. Each is
-     its own list with its own icons; the footer switches between them. Order
-     of `sections` = order of the footer labels; order of a section's
-     `projects` = order in the grid. Adding a fourth section is one more
-     object here (plus its footer label).
+     SECTIONS: the work is split into BUILD / DESIGN / ART / ... — as many as
+     content/sections/ holds (build.js writes only the ones with published
+     work). Each is its own list with its own icons. Order of `sections` =
+     order of the footer labels; order of a section's `projects` = order in
+     the grid. A new section is a file in content/sections/, from Harvest or
+     Keystatic: its footer label and wheel slot are built from this list.
      ABOUT and CONTACT are fixtures ("chrome"): they belong to no section and
      sit apart from the lists entirely.
      ======================================================================= */
@@ -1961,6 +2016,31 @@
 
      Do not hand-edit between the markers: the next build overwrites it. */
   /* CONTENT:END */
+
+  // THE FOOTER'S SECTION LABELS, from CONTENT, at parse time. They were four
+  // spans in the template while the sections were code; written here, before
+  // the first paint, a new section's label is simply there, and the flat row
+  // is complete when flatFits() measures it. Same shape as the ALL span they
+  // follow: a button role, a tab stop, and the section id as data-nav.
+  (function footerSections() {
+    const sep = document.querySelector('#nl-fns > .sep');
+    for (const sec of CONTENT.sections) {
+      const el = document.createElement('span');
+      el.className = 'sec';
+      el.setAttribute('role', 'button');
+      el.tabIndex = 0;
+      el.setAttribute('data-nav', sec.id);
+      el.textContent = sec.label;
+      sep.before(el);
+    }
+  })();
+  // --nl-m now rather than at boot(): the strip's padding derives from it, and
+  // the fit test has to measure the strip at its real width, not at the 24px
+  // the CSS falls back to. Same value resize() will write (pitch * margin).
+  document.getElementById('noiselab').style.setProperty('--nl-m',
+    (ROW_PITCH_PX * MARGIN_RATIO).toFixed(1) + 'px');
+  setWheel(wantWheel());
+  placeSeam();
 
   /* ------------------------------------------------- host image transform
      THE DEPLOY SEAM — wired to Netlify, which is the host.
@@ -3056,6 +3136,11 @@ void main() {
       return;
     }
 
+    // FLAT ROW OR WHEEL, asked again at every width (see wantWheel()), before
+    // anything below reads FOOTER_RESERVE. When it flips, updateNav() brings
+    // the newly shown rendering into line with the band.
+    if (setWheel(wantWheel())) updateNav();
+
     const nlRect = rootEl.getBoundingClientRect();
     const availW = Math.max(80, nlRect.width);
 
@@ -3992,13 +4077,15 @@ void main() {
   const SEC_CYCLES = 9;
   const SEC_MID = (SEC_CYCLES - 1) / 2;
   // ALL is slot 0 because it is the state the page loads in. The rest come
-  // from DATA, so a fourth section is a build.js edit and nothing here — the
-  // four hand-written spans this replaced were the reason it used to be two.
+  // from DATA, so a new section needs nothing here.
+  //
+  // BUILT WHETHER OR NOT IT IS SHOWING: the rendering is re-decided on every
+  // resize, and a phone rotating into portrait needs its wheel to exist.
   const secIds  = ['all'].concat(DATA.sections.map(s => s.id));
   const secText = ['ALL'].concat(DATA.sections.map(s => s.label));
   const SEC_N   = secIds.length;
 
-  if (SEC_WHEEL) for (let c = 0; c < SEC_CYCLES; c++) {
+  for (let c = 0; c < SEC_CYCLES; c++) {
     for (let k = 0; k < SEC_N; k++) {
       const el = document.createElement('span');
       el.setAttribute('data-nav', secIds[k]);
@@ -4087,7 +4174,7 @@ void main() {
     secEl.scrollTo({ top: (secAt() + d) * SEC_H,
                      behavior: reduceMotion ? 'auto' : 'smooth' });
   });
-  if (SEC_WHEEL) {
+  if (secWheel) {
     secEl.scrollTop = SEC_MID * SEC_N * SEC_H; // open on the middle copy, at ALL
     secSettle();                               // and mark that slot selected
   }
@@ -4099,6 +4186,8 @@ void main() {
   // fixtures; under ?wheel the four section labels are display:none, so
   // marking them is free and there is no second code path to keep honest.
   // The wheel needs no .on of its own — its mask lights whatever is centred.
+  // Called again by resize() when the rendering flips, which is what brings
+  // a wheel that has just appeared round to the band.
   function updateNav() {
     for (const el of navEls) {
       const n = el.getAttribute('data-nav');
@@ -4106,7 +4195,7 @@ void main() {
       el.classList.toggle('on', on);
       el.setAttribute('aria-current', on ? 'true' : 'false');
     }
-    if (!SEC_WHEEL) return;
+    if (!secWheel) return;
     secEl.classList.toggle('off', fixture !== null);
     // NO GLIDE ON LOAD, for the reason the row does not bounce on load: a page
     // that arrives already in motion reads as a glitch.
@@ -5219,6 +5308,9 @@ void main() {
     else window.addEventListener('load', warmFirstViews, { once: true });
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', resize);
+    // the fit test ran on the fallback face if the typeface had not arrived;
+    // ask again when it has
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => resize());
     // keyboard freeze bookends: layout holds while typing; on blur, undo any
     // keyboard pan iOS applied to the (non-scrolling) page and re-derive
     document.addEventListener('focusin', (ev) => {

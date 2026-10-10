@@ -43,7 +43,13 @@ The launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 5. Bulk: tick cards → Accept / Reject / Move to project (moved cards arrive
    accepted; the original is kept rejected+hidden so a re-crawl can't refile it).
    Rejected → Clear hides them but keeps them rejected.
-6. New project (Projects column): writes a draft .mdoc; needs a grid icon
+6. Add section (Projects column, 2026-10-10): writes `content/sections/<slug>.json`
+   (`{ title, order }`, after the last), as Keystatic's Sections collection
+   does. The section lists, the menus and the Projects headings all come from
+   that folder (`sections()` in harvest.js, read fresh), and an empty one is
+   listed as such. It counts toward Publish as "<slug> (section)". build.js
+   leaves an empty section off the site, so adding one is always safe.
+7. New project (Projects column): writes a draft .mdoc; needs a grid icon
    before it can go live — Organize › Project details uploads one (a typed
    character shows "Or an image" under it; choosing a file switches to it).
 
