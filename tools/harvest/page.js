@@ -64,14 +64,34 @@ async function addFile(pr, file) {
   } catch (err) { oops(err); }
 }
 
+/* ---- sections: the footer's list, from content/sections/ (S.sections, in order) */
+// Both section menus are filled from the list, keeping what each had chosen.
+function drawSections() {
+  const opts = S.sections.map(sec => '<option value="' + esc(sec.id) + '">' + esc(sec.label.toUpperCase()) + '</option>').join('');
+  for (const sel of [$('newsection'), document.querySelector('#proj [data-p=section]')]) {
+    const keep = sel.value;
+    sel.innerHTML = opts;
+    if (S.sections.some(sec => sec.id === keep)) sel.value = keep;
+  }
+  newLabel();
+}
+const sectionLabel = (id) => ((S.sections.find(sec => sec.id === id) || {}).label || id || '').toUpperCase();
+
 /* ---- projects */
+// Under each section in the footer's order, empty ones included, so a section
+// just added is there to put a project in.
 function drawProjects() {
   if ($('projects').querySelector('.rename')) return;   // not under a rename being typed; it redraws when that ends
-  let last = null, h = '';
-  for (const p of S.projects) {
-    if (p.section !== last) { h += '<div class="sec cap">' + esc(p.section) + '</div>'; last = p.section; }
-    h += '<div data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"><span>' + esc(p.title) + (p.draft ? ' · draft' : '') + (p.nicknames.length ? '<small>aka ' + p.nicknames.map(esc).join(', ') + '</small>' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
+  const row = (p) => '<div data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"><span>' + esc(p.title) + (p.draft ? ' · draft' : '') + (p.nicknames.length ? '<small>aka ' + p.nicknames.map(esc).join(', ') + '</small>' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
+  const known = new Set(S.sections.map(sec => sec.id));
+  let h = '';
+  for (const sec of S.sections) {
+    const mine = S.projects.filter(p => p.section === sec.id);
+    h += '<div class="sec cap">' + esc(sec.label) + (mine.length ? '' : ' · empty') + '</div>' + mine.map(row).join('');
   }
+  // a project naming a section that has no file: shown, not lost
+  const lost = S.projects.filter(p => !known.has(p.section));
+  if (lost.length) h += '<div class="sec cap">No section</div>' + lost.map(row).join('');
   $('projects').innerHTML = h;
 }
 $('projects').addEventListener('click', (e) => {
@@ -126,6 +146,8 @@ function show(state) {
     : j.phase === 'Stopped' ? 'Stopped · ' + j.added + ' found before stopping' : '';
   $('stop').hidden = !j.running;
   // redrawn only when it changed: the state arrives whenever ANYTHING did
+  const sj0 = JSON.stringify(S.sections);
+  if (sj0 !== drawSections.last) { drawSections.last = sj0; drawSections(); drawProjects.last = null; }
   const pj = JSON.stringify(S.projects);
   if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); }
   const sj = JSON.stringify(S.site);
@@ -753,12 +775,37 @@ async function createProject() {
 function newLabel() {
   const t = $('newtitle').value.trim();
   $('newgo').disabled = !t;
-  $('newgo').textContent = t ? 'Create “' + t + '” in ' + $('newsection').selectedOptions[0].text : 'Create project';
+  const sec = $('newsection').selectedOptions[0];
+  $('newgo').textContent = t && sec ? 'Create “' + t + '” in ' + sec.text : 'Create project';
 }
 $('newtitle').addEventListener('input', newLabel);
 $('newsection').addEventListener('change', newLabel);
 $('newtitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProject(); });
 $('newgo').addEventListener('click', createProject);
+
+// ADD SECTION: written to content/sections/ after the last one. It shows in
+// the menus and the Projects column at once, and on the site only when a
+// project in it is published.
+async function createSection() {
+  const title = $('newsectitle').value.trim();
+  if (!title) return;
+  $('newsecgo').disabled = true; busy(1);
+  try {
+    await api('/api/newsection', { title });
+    $('newsectitle').value = ''; secLabel();
+    await poll();
+    say('Added the section ' + title.toUpperCase() + '. It goes on the site once a project in it is published; Publish sends the section itself.');
+  } catch (err) { oops(err); secLabel(); }
+  finally { busy(-1); }
+}
+function secLabel() {
+  const t = $('newsectitle').value.trim();
+  $('newsecgo').disabled = !t;
+  $('newsecgo').textContent = t ? 'Add section “' + t.toUpperCase() + '”' : 'Add section';
+}
+$('newsectitle').addEventListener('input', secLabel);
+$('newsectitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') createSection(); });
+$('newsecgo').addEventListener('click', createSection);
 
 /* ---- TEXT → ANY FIELD: the project's accepted passages beside the works.
    Click one (or right-click) and say where it goes. A project field is filled
@@ -933,7 +980,7 @@ async function loadProj() {
 function fillProj() {
   const d = pd.data;
   // Keystatic's defaults, for a field the file does not have yet
-  const v = { section: 'build', order: 10, layout: 'standard', icon_type: 'glyph', ...d, expand: d.expand !== false };
+  const v = { section: (S.sections[0] || {}).id, order: 10, layout: 'standard', icon_type: 'glyph', ...d, expand: d.expand !== false };
   for (const el of document.querySelectorAll('#proj [data-p]')) {
     const k = el.dataset.p;
     if (k === 'part_of') continue;
@@ -1104,7 +1151,7 @@ function projectMenu(slug) {
   const organize = () => { pick(); if (view !== 'organize') document.querySelector('[data-view=organize]').click(); };
   return [
     { label: 'Rename…', run: () => renameProject(slug) },
-    { label: 'Move to section', sub: ['build', 'design', 'art'].map(k => ({ label: k.toUpperCase(), off: k === p.section, run: () => setProject(slug, { section: k }, 'Moved ' + p.title + ' to ' + k.toUpperCase()) })) },
+    { label: 'Move to section', sub: S.sections.map(sec => ({ label: sectionLabel(sec.id), off: sec.id === p.section, run: () => setProject(slug, { section: sec.id }, 'Moved ' + p.title + ' to ' + sectionLabel(sec.id)) })) },
     p.draft ? { label: 'Stop holding back', run: () => setProject(slug, { draft: false }, p.title + ' will go on the site') }
             : { label: 'Hold back (do not publish)', run: () => setProject(slug, { draft: true }, p.title + ' is held back') },
     '-',

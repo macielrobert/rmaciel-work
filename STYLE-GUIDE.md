@@ -200,9 +200,12 @@ The rules behind the table:
 
 **LIVE, 2026-10-10.** Robert drew it; the third draft has his corrections.
 
-- **Where:** under the chosen label in the site's footer: ALL, BUILD, DESIGN,
-  ART, and ABOUT or CONTACT while open. **Nowhere else**: not on the site's
-  other controls, and not in Harvest, whose tabs keep a straight line.
+- **Where:** under the chosen label in the site's footer: ALL, the section
+  labels, and ABOUT or CONTACT while open. **Nowhere else**: not on the
+  site's other controls, and not in Harvest, whose tabs keep a straight line.
+  Where the sections are in the wheel (on phones once there are more than
+  three), the wheel's lit centre slot marks the chosen section and the
+  zigzag stays with ABOUT and CONTACT.
 - **Shape:** a zigzag with right-angled (90°) vertices, so every stroke runs
   at 45°.
 - **Height:** half the x-height. PP Neue Montreal's x-height measures 0.51em,

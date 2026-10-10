@@ -36,8 +36,14 @@
     <h2 class="cap">Projects</h2>
     <div id="newp">
       <input id="newtitle" placeholder="New project title">
-      <select id="newsection"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select>
+      <select id="newsection"><!-- the sections, filled by drawSections() --></select>
       <button class="btn" id="newgo" disabled>Create project</button>
+    </div>
+    <!-- a new section: a file in content/sections/, off the site until a
+         project in it is published -->
+    <div id="news">
+      <input id="newsectitle" placeholder="New section, e.g. SYSTEMS">
+      <button class="btn" id="newsecgo" disabled>Add section</button>
     </div>
     <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
@@ -82,7 +88,7 @@
       <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span><span id="punsaved" hidden>Unsaved <button class="btn" id="pwrite">Write to project</button></span></div>
       <div class="pgrid">
         <label>Title<input data-p="title"></label>
-        <label>Section<select data-p="section"><option value="build">BUILD</option><option value="design">DESIGN</option><option value="art">ART</option></select></label>
+        <label>Section<select data-p="section"><!-- filled by drawSections() --></select></label>
         <label>Position in grid<input data-p="order" type="number" step="1" placeholder="Low numbers first: 10, 20, 30"></label>
         <label class="chk"><input type="checkbox" data-p="draft">Hold back (do not publish)</label>
         <label>Sub-project of<select data-p="part_of"></select></label>

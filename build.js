@@ -40,7 +40,8 @@
      The split: STRUCTURE and FIELD errors fail. CONTENT-COMPLETENESS issues
      (a section with nothing published in it yet) warn on stderr and continue —
      that is a legitimate state while the site is being written, and failing on
-     it would make the CMS unusable until all three sections were full.
+     it would make the CMS unusable until every section was full. (An
+     empty section is now left off the site entirely: see assemble().)
 
    RUN
      node build.js            (from the repo root)
@@ -53,6 +54,7 @@ const ROOT     = __dirname;
 const SRC_HTML = path.join(ROOT, 'index.html');
 const CONTENT_DIR = path.join(ROOT, 'content');
 const PROJECTS_DIR = path.join(CONTENT_DIR, 'projects');
+const SECTIONS_DIR = path.join(CONTENT_DIR, 'sections');
 const IMAGES_DIR = path.join(ROOT, 'images');
 const FONTS_DIR = path.join(ROOT, 'fonts');
 const DIST     = path.join(ROOT, 'dist');
@@ -60,20 +62,47 @@ const DIST     = path.join(ROOT, 'dist');
 const START = '/* CONTENT:START */';
 const END   = '/* CONTENT:END */';
 
-/* THE SECTIONS ARE DEFINED HERE, NOT IN THE CMS.
-   A project picks its section from a fixed list (the `section` select in
-   keystatic.config.tsx). The list itself is not editable content, because adding a
-   fourth section is not a content change. Keeping the list here means the two
-   places that must agree are both in the repo, not one in the repo and one in
-   a CMS form. index.html is no longer one of them: the section wheel builds
-   its slots from DATA.sections, so a fourth section is this entry plus the
-   keystatic select and nothing else.
-   `id` must match the footer's data-nav value; `label` is what it reads. */
-const SECTIONS = [
-  { id: 'build',  label: 'BUILD'  },
-  { id: 'design', label: 'DESIGN' },
-  { id: 'art',    label: 'ART'    },
-];
+/* THE SECTIONS ARE CONTENT: one file each in content/sections/, written by
+   Keystatic or by Harvest's Add section.
+
+   THEY WERE DEFINED HERE, deliberately, until 2026-10-10: "adding a fourth
+   section is not a content change", because a section is a footer label and
+   the footer has a fixed width. Robert asked to add sections himself, and the
+   width is now the reason that is safe rather than the reason it is not: the
+   site measures whether the flat row of labels fits and turns it into the
+   section wheel when it does not (index.html, "the section wheel"). Any
+   number of sections fits, so a new one is content again.
+
+   The FILENAME is the section's id, its permanent address (#systems/...) and
+   the value a project's `section` stores; `title` is what the footer reads;
+   `order` places it after ALL. Loaded by assemble(), before the projects that
+   are checked against it. */
+const RESERVED_SECTIONS = ['all', 'about', 'contact', 'field'];   // footer labels and routes of their own
+let SECTIONS = null;
+function loadSections() {
+  if (!fs.existsSync(SECTIONS_DIR)) {
+    fail(`content/sections/ does not exist. Each section is a file there (build.json, design.json...); without them no project has a section to be in.`);
+  }
+  const out = fs.readdirSync(SECTIONS_DIR).filter(n => /\.json$/i.test(n)).sort().map(n => {
+    const label = 'content/sections/' + n;
+    const raw = readJSON(path.join(SECTIONS_DIR, n));
+    const id = n.replace(/\.json$/i, '');
+    if (!/^[a-z0-9-]+$/.test(id)) {
+      fail(`${label}: the filename is the section's address and must be lowercase letters, numbers and hyphens only`);
+    }
+    if (RESERVED_SECTIONS.includes(id)) {
+      fail(`${label}: "${id}" is already a footer label or an address of its own — the section needs another name`);
+    }
+    const title = String(need(raw, 'title', label)).trim();
+    if (!title) fail(`${label}: "title" is empty — it is what the footer reads`);
+    if (typeof raw.order !== 'number' || !Number.isFinite(raw.order)) {
+      fail(`${label}: required field "order" is missing or not a number`);
+    }
+    return { id, label: title, order: raw.order };
+  }).sort((a, b) => (a.order - b.order) || a.id.localeCompare(b.id));
+  if (!out.length) fail('content/sections/ has no sections in it. Every project needs one to belong to.');
+  return out;
+}
 
 /* ---------------------------------------------------------------- failure */
 
@@ -651,6 +680,7 @@ function groupSection(sec, mine, seen) {
 }
 
 function assemble() {
+  SECTIONS = loadSections();
   const { kept: projects, seen } = loadProjects();
 
   const sections = SECTIONS.map(sec => {
@@ -658,11 +688,16 @@ function assemble() {
       // ascending by order; ties resolve by filename so the build is
       // reproducible regardless of how the filesystem lists the directory
       .sort((a, b) => (a.order - b.order) || a.file.localeCompare(b.file));
-    if (!mine.length) warn(`section "${sec.id}" has no published projects.`);
+    if (!mine.length) warn(`section "${sec.id}" has no published projects, so it is left off the site until it has one.`);
     // sub-projects fold in behind the icon they share — see groupSection()
     const ordered = groupSection(sec, mine, seen);
     return { id: sec.id, label: sec.label, projects: ordered.map(p => p.project) };
-  });
+  /* AN EMPTY SECTION IS LEFT OFF THE SITE. It used to ship as a footer label
+     with nothing behind it — which never happened in practice with three
+     sections that all had work. Now a section is one click in Harvest, a new
+     one is empty until work moves in, and its label should not appear before
+     there is anything to jump to. */
+  }).filter(sec => sec.projects.length);
 
   /* THE THREE SINGLETON FILENAMES ARE NOT A CHOICE — Keystatic derives each
      one from the singleton's `format`, and reading a different name means the

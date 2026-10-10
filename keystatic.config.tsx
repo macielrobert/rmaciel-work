@@ -198,14 +198,16 @@ export default config({
             itemLabel: (p) => p.value,
           },
         ),
-        section: fields.select({
+        /* A PICKER OVER THE SECTIONS COLLECTION, not a fixed list. It was a
+           select with BUILD / DESIGN / ART written into this file, because a
+           section was code (build.js said so). Robert asked for sections he
+           can add himself (2026-10-10), so the list is content now and this
+           field points at it. The value stored is the section's slug, exactly
+           what the select stored, so no project file changed. */
+        section: fields.relationship({
           label: 'Section',
-          options: [
-            { label: 'BUILD', value: 'build' },
-            { label: 'DESIGN', value: 'design' },
-            { label: 'ART', value: 'art' },
-          ],
-          defaultValue: 'build',
+          collection: 'sections',
+          validation: { isRequired: true },
         }),
         order: fields.integer({
           label: 'Position in grid',
@@ -331,6 +333,38 @@ export default config({
           label: 'Share description',
           multiline: true,
           description: 'Plain text. Used in link previews and search results.',
+        }),
+      },
+    }),
+
+    /* THE SECTIONS — the footer's ALL / BUILD / DESIGN / ART / SYSTEMS… after
+       ALL. One small file each, content/sections/<slug>.json, so Keystatic and
+       Harvest can both add one. The slug is the address (#systems/…) and is
+       permanent, as a project's is; the title is what the footer reads. A
+       section with nothing published in it stays off the site until it has
+       work (build.js), so adding one changes nothing a visitor sees. */
+    sections: collection({
+      label: 'Sections',
+      slugField: 'title',
+      path: 'content/sections/*',
+      format: { data: 'json' },
+      columns: ['title', 'order'],
+      schema: {
+        title: fields.slug({
+          name: {
+            label: 'Label',
+            description: 'As the footer reads it, e.g. SYSTEMS.',
+          },
+          slug: {
+            label: 'Address',
+            description:
+              'Permanent: every project in this section is linked as #address/project. Set once and never change it.',
+          },
+        }),
+        order: fields.integer({
+          label: 'Position in the footer',
+          defaultValue: 10,
+          description: 'Low numbers first, after ALL. Use 10, 20, 30 to leave gaps.',
         }),
       },
     }),

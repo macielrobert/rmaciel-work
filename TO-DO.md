@@ -201,9 +201,11 @@ in both modes, making the boundary hard to understand.
 - [ ] Prototype **Collect / Edit** as two working modes, with Edit replacing
       Organize's label. They are revisitable workspaces, not mandatory wizard
       steps. Keep the selected project and sidebar position stable across them.
-- [ ] Keep Projects at the left in BUILD / DESIGN / ART order (currently
-      alphabetical). Keep project creation there; move working titles and
-      less frequent settings into the selected project's settings.
+- [ ] Keep Projects at the left in BUILD / DESIGN / ART order (in the
+      footer's order since 2026-10-10, when sections became content and Add
+      section arrived). Keep project creation and Add section there; move
+      working titles and less frequent settings into the selected project's
+      settings.
 - [ ] Collect answers “Which material belongs in this project?” Put folders
       and websites in its Sources area. Present one review workspace with
       Pending / Kept / Rejected filters and counts, Pending by default; do not
