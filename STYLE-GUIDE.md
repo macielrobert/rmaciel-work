@@ -6,12 +6,11 @@ for and where it goes. **`tools/specimen.html`** shows every piece at actual
 size, in both themes, today's version next to the proposed one. Open it
 served, not as a file (see the comment at its top).
 
-**Status, 2026-10-10 (UX-1, second draft):** Robert has answered the five
-questions; his answers are at the end of this file. **DECIDED** marks a value
-he has chosen, and **LIVE** a value that is already in the site. **PROPOSED**
-marks a value that still waits for the task that adopts it (UX-2 for Harvest,
-UX-4 for the window's text). The one open item is the zigzag under the chosen
-footer label: he set its shape, and it waits on his look at the specimen.
+**Status, 2026-10-10: UX-1 done (third draft).** Robert answered the five
+questions and corrected the zigzag; his decisions are at the end of this
+file. **DECIDED** marks a value he has chosen, and **LIVE** a value that is
+already in the site. **PROPOSED** marks a value that still waits for the task
+that adopts it: UX-2 for Harvest, UX-4 for the window's text.
 Where this file and the code disagree, the code describes what is live and
 this file describes where it is going.
 
@@ -178,46 +177,50 @@ the sibling row and SEND. Only their grey and their focus mark change.
 | Tab or toggle | `--text-2` | ink | 1px ink outline, 2px out | ink + line under | `--rule` text |
 | List row | `--text-2` | ink | 1px ink outline, inside | ink + bar at left | `--rule` text |
 | Field | `--edge` line | ink line | the line doubled, in ink | — | dashed `--rule` line |
+| Footer label (site) | `--text-2` | ink | ink + **bold zigzag**, no outline | ink + zigzag | — |
 
 The rules behind the table:
 
 - **Hover changes tone. Only keyboard focus draws an outline**, so the two are
   never confused. Focus appears for keyboard use only (`:focus-visible`), never
   on a click. **LIVE** on the site since 2026-10-10: ×, ←, the caret, SEND,
-  the footer labels, the field mark, the sibling row, links, and the icon
-  row's keys. Before that, focus on most of them was the same colour change
-  as hover, and the keys' ring was the grey that measured 2.78:1 on white.
-- **A chosen item carries a mark as well as a tone**: a line, a bar, or a frame
-  and a tick. In Harvest, tone alone is never the only signal.
+  the field mark, the sibling row, links, and the icon row's keys. Before that,
+  focus on most of them was the same colour change as hover, and the keys'
+  ring was the grey that measured 2.78:1 on white.
+- **A control that already carries a line thickens that line for focus**
+  instead of adding an outline, which would double the mark. A field doubles
+  its underline, and a footer label draws its zigzag in bold.
+- **A chosen item carries a mark as well as a tone**: a line, a bar, a frame
+  and a tick, or, in the site's footer only, the zigzag. In Harvest, tone
+  alone is never the only signal.
 - **Disabled stays readable.** You should be able to read what a button would
   do once it becomes available.
 
 ## The chosen footer label: the zigzag
 
-**DRAFT 2: Robert set the shape on 2026-10-10. It goes live once he has
-looked at it in the specimen.** It replaces the straight underline that was
-proposed under the chosen footer label.
+**LIVE, 2026-10-10.** Robert drew it; the third draft has his corrections.
 
+- **Where:** under the chosen label in the site's footer: ALL, BUILD, DESIGN,
+  ART, and ABOUT or CONTACT while open. **Nowhere else**: not on the site's
+  other controls, and not in Harvest, whose tabs keep a straight line.
 - **Shape:** a zigzag with right-angled (90°) vertices, so every stroke runs
   at 45°.
-- **Height:** about the x-height. PP Neue Montreal's x-height measures 0.51em,
-  which is 6.1px at the 12px body and 5.6px at the footer's 11px. So it is
-  **6px** from the centre of a low vertex to the centre of a high one. With
-  45° strokes, each tooth is 12px wide.
-- **Stroke:** 1px, in ink: the label's own colour, so it follows the theme.
-  It is drawn as a CSS mask over `currentColor` at fixed pixel sizes, so the
-  stroke is never scaled to a fraction of a pixel.
+- **Height:** half the x-height. PP Neue Montreal's x-height measures 0.51em,
+  which is 5.6px at the footer's 11px, so the zigzag is **3px** from the centre
+  of a low vertex to the centre of a high one. With 45° strokes, each tooth
+  is 6px wide. (The second draft was the full x-height, 6px; Robert halved it.)
+- **Stroke:** 1px, in the label's own colour, so it follows the theme. It is
+  drawn as a CSS mask over `currentColor` at fixed pixel sizes, so the stroke
+  is never scaled to a fraction of a pixel.
+- **Keyboard focus:** the same zigzag at **2px**, and no outline. This is the
+  field's rule: focus thickens the mark the control already has. Any footer
+  label under keyboard focus gets it, chosen or not, so thin means chosen and
+  bold means the keyboard is there.
 - **Extent:** it starts on a low vertex under the word's first letter and
   stops under its last. The tracking after the last letter is not part of the
   word.
-- **Placement:** its top sits about 4px under the baseline, where the straight
-  line sat at 6px. It appears under whichever label is chosen: a section, ALL,
-  or ABOUT or CONTACT while open.
-- **Keyboard focus on the footer** sits 4px out instead of 2. The zigzag hangs
-  about 3px below the label's tap area, and a ring at 2px would cut through
-  its teeth.
-- **Harvest's tabs keep a straight line** under the chosen tab. The zigzag
-  answers the site's footer question only, until Robert says otherwise.
+- **Placement:** along the bottom of the label's own tap area, about 3.5px
+  under the baseline. Nothing moves, and the tap target is unchanged.
 
 ## Fields and errors
 
@@ -309,11 +312,13 @@ Copying is cheap, and the check is what keeps the copies honest.
    black and 4.56:1 on white. **Live.**
 2. **The footer and the copyright use the readable grey: yes.** **Live.**
 3. **The chosen footer label: a zigzag**, not a straight line, with 90°
-   vertices, about the x-height tall (see above). **Draft 2, waiting on his
-   look.**
+   vertices. Corrected after the second draft: half the x-height (3px),
+   bold for keyboard focus in place of an outline, and in the footer only.
+   **Live.**
 4. **The site's body text: 12px.** It is adopted with **UX-4**, because the
    body size moves the window's layout and UX-4 rebuilds that anyway.
-5. **A keyboard focus outline on the site's controls: yes.** **Live.**
+5. **A keyboard focus outline on the site's controls: yes**, except the
+   footer labels, whose focus is the bold zigzag. **Live.**
 
 Harvest takes the editor values with **UX-2**, which rebuilds its shell
 anyway, so nothing gets restyled twice. Until then, Harvest's `page.css` still
