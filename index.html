@@ -789,6 +789,17 @@
             mask-image: linear-gradient(#000 calc(100% - 1.7em), transparent);
   }
   #nl-window.l-grid.more .body { max-height: none; overflow: visible; }
+  /* THE SAME FADE WHEREVER THE COPY SCROLLS (Robert, 2026-10-11). Project,
+     Text and ABOUT scroll their column in place, and on a phone a tall first
+     picture can leave one sliced line of the description above the strip,
+     with nothing to say the rest is there. While there is more below, the
+     last visible line fades: the faded edge is this site's scroll
+     affordance, as on the icon row. Gone at the end of the scroll; never
+     there when the copy fits. edgeFade() sets it. */
+  #nl-window-text.below {
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 1.7em), transparent);
+            mask-image: linear-gradient(#000 calc(100% - 1.7em), transparent);
+  }
 
   /* =======================================================================
      TEXT FORMATTING — the marks build.js emits from the CMS copy.
@@ -1601,10 +1612,17 @@
   // through a pool of ASCII glyphs on the way past, the DOM twin of the noise
   // the icons churn in. It read as a screen effect from another decade rather
   // than as this site's own material, so it is switched off at the knob rather
-  // than deleted: spanify() still runs, the spans and their thresholds are
-  // still there, and flipping this back to true restores it with no other
-  // edit. Everything else the swap does — the timing, the hard cut, the icon
-  // churn underneath it — is untouched.
+  // than deleted: flipping this back to true restores it with no other edit.
+  // Everything else the swap does — the timing, the hard cut, the icon churn
+  // underneath it — is untouched.
+  //
+  // OFF, spanify() splits nothing (2026-10-11). The copy used to be split into
+  // a span per letter anyway — 1,217 in LIGHT WORK alone — for an effect that
+  // never ran, and a screen reader is handed each of those as an element of
+  // its own: VoiceOver on a phone can read such text a letter at a time. The
+  // knob still restores the churn by itself, because spanify() asks it. If it
+  // goes back on, so does that risk: give each split element a plain-text
+  // twin for screen readers (aria-hidden on the spans) at the same time.
   //
   // Turning it off changes WHERE the cut lands; see applyContact.
   const TEXT_CHURN = false;
@@ -4314,6 +4332,7 @@ void main() {
   // structure and word shapes survive the churn.
   function spanify(el) {
     const spans = [];
+    if (!TEXT_CHURN) return spans;          // nothing to churn: the copy stays whole (see TEXT_CHURN)
     (function walk(node) {
       for (const k of Array.from(node.childNodes)) {
         if (k.nodeType === 3) {
@@ -4688,6 +4707,20 @@ void main() {
   applyLayout(winEntries[0]);                   // entry 0 is built visible; seed
   applyHero(winEntries[0]);                     // its layout class and hero
   setMore(false); updateMore();
+  // MORE BELOW? (#nl-window-text.below) Asked on every scroll, and whenever
+  // the column or an entry in it changes size — a picture arriving above it,
+  // a rotation, an entry swap, fonts — which one ResizeObserver hears without
+  // a call from each of those places. Without one, no fade: the copy is cut
+  // as it always was, and still scrolls.
+  function edgeFade() {
+    winTxt.classList.toggle('below', winTxt.scrollTop + winTxt.clientHeight < winTxt.scrollHeight - 2);
+  }
+  winTxt.addEventListener('scroll', edgeFade, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(edgeFade);
+    ro.observe(winTxt);
+    for (const en of winEntries) ro.observe(en.el);
+  }
 
   // ---------------------------------------------- expanded image (per entry)
   // The carousel is a miniature of the site: tap a thumb -> its image takes
