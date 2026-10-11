@@ -97,6 +97,39 @@ n++;
 if (back.textContent !== made.textContent) fails.push(`fixture: typed punctuation: the words changed\n  typed ${made.textContent}\n  read  ${back.textContent}\n${madeOut}`);
 if (!roundTrips(back)) fails.push(`fixture: typed punctuation: does not read back as itself\n${madeOut}`);
 
-console.log(fails.length ? 'FAIL description editor:\n  ' + fails.join('\n  ')
-  : `ok   description editor round-trips ${n} descriptions and fixtures${text ? ` (${text} open as Markdoc text)` : ''}`);
+// WHERE MARKS MEET THEIR NEIGHBOURS (Codex's review of PR #52): italic over
+// "(aside)" in "before(aside)after" was written *(aside)* and read back as
+// asterisks. Every mark against every kind of neighbouring character, marks
+// side by side and inside each other, line breaks at their edges, and lines
+// Markdown would take for structure — each made in the editor, saved, and
+// read back as the same document. The reported case is rendered by the site.
+const mk = (k) => k === 'link' ? schema.marks.link.create({ href: 'https://example.com' }) : schema.marks[k].create();
+const tx = (s, ...m) => schema.text(s, m.map(mk));
+const br = (m = [], kind = 'soft') => schema.nodes.hard_break.create({ kind }, null, m.map(mk));
+const para = (...c) => schema.node('doc', null, [schema.node('paragraph', null, c.filter(Boolean))]);
+const aside = para(tx('before'), tx('(aside)', 'em'), tx('after'));
+n++;
+if (!/before<em>\(aside\)<\/em>after/.test(renderMarkdoc(toMarkdoc(aside), 'fixture'))) fails.push('fixture: italic (aside) between words: ' + JSON.stringify(toMarkdoc(aside)) + ' renders ' + renderMarkdoc(toMarkdoc(aside), 'fixture'));
+const MARKS = ['strong', 'em', 'strike', 'underline', 'light', 'small', 'link'];
+const SIDE = ['', ' ', 'a', '(', ')', '“', '*', '_', '~', '1', 'é', '字', '😀'];
+let edges = 0;
+const edge = (d, label) => { edges++; if (!roundTrips(d)) fails.push(`${label}: saved as ${JSON.stringify(toMarkdoc(d))}, reads back differently`); };
+for (const m of MARKS) for (const b of SIDE) for (const a of SIDE) for (const i of ['x', '(x)', '“x”', 'x.', '.x', '*', 'x y'])
+  edge(para(b && tx(b), tx(i, m), a && tx(a)), `${m} over ${JSON.stringify(i)} between ${JSON.stringify(b)} and ${JSON.stringify(a)}`);
+for (const m1 of MARKS) for (const m2 of MARKS) if (m1 !== m2) for (const b of ['', 'a', '(']) for (const i of ['x', '(x)']) {
+  edge(para(b && tx(b), tx(i, m1), tx(i, m2), tx('z')), `${m1} beside ${m2} after ${JSON.stringify(b)}`);
+  edge(para(b && tx(b), tx(i, m1, m2), tx(i, m1), tx('z')), `${m2} at the start of ${m1}`);
+  edge(para(tx('a'), tx(i, m1), tx(i, m1, m2), b && tx(b)), `${m2} at the end of ${m1}`);
+  edge(para(tx(b || 'w'), br([m1]), tx(i, m1), br([m1, m2], 'hard'), tx(i, m2), br([m2]), tx('e')), `line breaks at the edges of ${m1} and ${m2}`);
+}
+for (const line of [' - x', '  1. x', ' > x', '   # x', '===', '---', ' + x', '12) x', ' ', '']) {
+  const L = line ? [tx(line)] : [];
+  edge(para(...L, br(), tx('b')), `a first line ${JSON.stringify(line)}`);
+  edge(para(tx('a'), br(), ...L, br(), tx('b')), `a middle line ${JSON.stringify(line)}`);
+  edge(para(tx('a'), br(), ...L), `a last line ${JSON.stringify(line)}`);
+}
+n += edges;
+
+console.log(fails.length ? 'FAIL description editor:\n  ' + fails.slice(0, 20).join('\n  ') + (fails.length > 20 ? `\n  … and ${fails.length - 20} more` : '')
+  : `ok   description editor round-trips ${n - edges} descriptions and fixtures and ${edges} mark edges${text ? ` (${text} open as Markdoc text)` : ''}`);
 process.exit(fails.length ? 1 : 0);

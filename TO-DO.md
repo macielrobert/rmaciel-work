@@ -779,6 +779,36 @@ content touched; nothing published.
   the in-app browser: import maps and modules need Safari 16.4+, which macOS
   26 has.
 
+**Review fixes, 2026-10-11 — Claude**, for Codex's two P2 findings on PR
+#52. Branch `ux-5-review-fixes`.
+- **P2, formatting at punctuation came back as asterisks.** Italic over
+  "(aside)" in "before(aside)after" was written `before*(aside)*after`,
+  which Markdown cannot read as italic (a `*` between a letter and
+  punctuation neither opens nor closes). A sweep of every mark against
+  every kind of neighbour found three such arrangements, now all handled
+  without changing a word: punctuation inside and a letter outside — the
+  letter is written as a character reference (`befor&#101;*(aside)*&#97;fter`;
+  `&#101;` is "e", shown and read back as "e"); italic touching bold, which
+  printed `***` — that italic is written with `_`; a line break at a mark's
+  edge — moved outside it. Also found on the way: an empty line made with
+  Shift-Return (it read as a new paragraph; now a backslash break), a break
+  at the very end of a paragraph (left off: the site shows nothing there),
+  and a line starting with spaces then "-" (it became a list). The check now
+  runs 9,319 such edges, editor-made, plus the reported case rendered by
+  build.js; with the fix switched off it fails. **Every edit is checked
+  now, not only opening:** a formatting button whose result would not save
+  as shown is refused with a note; typing that would is kept, with a
+  warning — seen in the browser with a test hook forcing the failure
+  (removed). The reported case, through the toolbar in the browser and a
+  reload: `before<em>(aside)</em>after` both times, and the same in the
+  Editing preview.
+- **P2, an animated GIF from a website became a JPEG in the Editing
+  preview.** The preview now takes a website picture the way Save does — the
+  same download, named by its bytes — and keeps any JPEG, PNG, WebP or GIF as
+  it is. Checked with a two-frame GIF served from a scratch web server as a
+  website picture of BUS STOP: the preview's picture is that GIF, byte for
+  byte.
+
 ### UX-6 — Sequence and acceptance journey
 
 Implement in focused steps: **UX-1 guide → UX-2 shell with UX-3 state model →

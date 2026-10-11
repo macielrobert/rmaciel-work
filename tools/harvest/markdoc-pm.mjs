@@ -140,10 +140,20 @@ function li(c) {
 }
 // The marks over a paragraph's text, as nested Markdoc nodes: the run of
 // marks still open is kept, closed where a mark ends, opened where one starts.
+// A line break at the very end of a paragraph shows nothing on the site and
+// Markdown cannot hold it ("a\" is a backslash): it is left off. One at the
+// start of a line — the paragraph's first, or after another — would make a
+// blank line, which Markdown reads as a new paragraph: it is written as a
+// backslash break, which holds.
 function runs(para) {
   const root = { children: [] }, stack = [{ mark: null, node: root }];
-  let lineStart = true;
-  para.forEach(n => {
+  // lineStart: text here begins a source line (for escape); empty: nothing
+  // shown on this line yet — a mark opening is not, and expel() moves a break
+  // out of a mark's edge anyway
+  let lineStart = true, empty = true, last = -1;
+  para.forEach((n, _, i) => { if (n.type.name !== 'hard_break') last = i; });
+  para.forEach((n, _, i) => {
+    if (i > last) return;
     const marks = n.marks;
     let keep = 1;
     while (keep < stack.length && keep - 1 < marks.length && stack[keep].mark.eq(marks[keep - 1])) keep++;
@@ -155,10 +165,14 @@ function runs(para) {
       lineStart = false;
     }
     const into = stack[stack.length - 1].node.children;
-    if (n.isText) { into.push(new Ast.Node('text', { content: escape(n.text, lineStart, ['strong', 'em', 'strike'].includes(stack[stack.length - 1].mark?.type.name)) })); lineStart = false; }
-    else if (n.type.name === 'hard_break') { into.push(new Ast.Node(n.attrs.kind === 'hard' ? 'hardbreak' : 'softbreak')); lineStart = true; }
+    // a line of spaces is an empty line too
+    if (n.isText) { into.push(new Ast.Node('text', { content: escape(n.text, lineStart, ['strong', 'em', 'strike'].includes(stack[stack.length - 1].mark?.type.name)) })); lineStart = false; if (/\S/.test(n.text)) empty = false; }
+    else if (n.type.name === 'hard_break') { into.push(new Ast.Node(n.attrs.kind === 'hard' || empty ? 'hardbreak' : 'softbreak')); lineStart = empty = true; }
   });
-  return expel(root.children);
+  const kids = expel(root.children);
+  markers(kids, null);
+  fence(kids, undefined, undefined);
+  return kids;
 }
 function wrapper(m) {
   const T = m.type.name;
@@ -169,23 +183,91 @@ function wrapper(m) {
   t.inline = true;
   return t;
 }
-// Markdown reads "** word**" as two asterisks, not bold: whitespace at the edge
-// of bold, italic and strikethrough goes outside it (as Keystatic does)
+/* WHERE BOLD, ITALIC AND STRIKETHROUGH START AND END. Markdown decides
+   whether a * or ~~ opens or closes from the characters either side of it
+   (CommonMark's "flanking" rules), and three arrangements the editor can
+   make read back as literal asterisks (Codex's review of PR #52):
+     space or a line break just inside   "** word**"      -> expel()
+     italic touching bold                "**a***b*"       -> markers()
+     punctuation inside, a letter outside "a*(b)*c"       -> fence()
+   Each is fixed without changing a word: tools/check-description.mjs runs
+   every mark against every kind of neighbour. */
+const EMPH = { strong: '**', em: '*', s: '~~' };
+const isBreak = (n) => n?.type === 'softbreak' || n?.type === 'hardbreak';
+// whitespace and line breaks at the edge go outside it (as Keystatic does
+// for whitespace); outside, they look the same
 function expel(children) {
   const res = [];
   for (const c of children) {
     if (c.children.length) c.children = expel(c.children);
-    if (!['strong', 'em', 's'].includes(c.type)) { res.push(c); continue; }
-    const first = c.children[0], last = c.children[c.children.length - 1];
-    let lead = '', trail = '';
-    if (first?.type === 'text') { lead = /^\s*/.exec(first.attributes.content)[0]; first.attributes.content = first.attributes.content.slice(lead.length); }
-    if (last?.type === 'text') { trail = /\s*$/.exec(last.attributes.content)[0]; last.attributes.content = last.attributes.content.slice(0, last.attributes.content.length - trail.length); }
-    c.children = c.children.filter(x => x.type !== 'text' || x.attributes.content);
-    if (lead) res.push(new Ast.Node('text', { content: lead }));
-    if (c.children.length) res.push(c);
-    if (trail) res.push(new Ast.Node('text', { content: trail }));
+    if (!EMPH[c.type]) { res.push(c); continue; }
+    const lead = [], trail = [], k = c.children;
+    for (let n = k[0]; n && (isBreak(n) || (n.type === 'text' && /^\s/.test(n.attributes.content))); n = k[0]) {
+      if (isBreak(n)) { lead.push(k.shift()); continue; }
+      const w = /^\s+/.exec(n.attributes.content)[0];
+      lead.push(new Ast.Node('text', { content: w }));
+      n.attributes.content = n.attributes.content.slice(w.length);
+      if (!n.attributes.content) k.shift();
+    }
+    for (let n = k[k.length - 1]; n && (isBreak(n) || (n.type === 'text' && /\s$/.test(n.attributes.content))); n = k[k.length - 1]) {
+      if (isBreak(n)) { trail.unshift(k.pop()); continue; }
+      const w = /\s+$/.exec(n.attributes.content)[0];
+      trail.unshift(new Ast.Node('text', { content: w }));
+      n.attributes.content = n.attributes.content.slice(0, -w.length);
+      if (!n.attributes.content) k.pop();
+    }
+    res.push(...lead);
+    if (k.length) res.push(c);
+    res.push(...trail);
   }
   return res;
+}
+// Italic touching bold — beside it, or at the edge of it, or bold at the edge
+// of italic — would print *** or ****, which Markdown splits some other way.
+// That italic is written with _ instead (Markdoc's `marker`); _ needs
+// punctuation outside it next to a letter, which fence() then gives it.
+function markers(kids, parent) {
+  kids.forEach((n, i) => {
+    if (n.children.length) markers(n.children, n);
+    const edge = i === 0 || i === kids.length - 1;
+    if (n.type === 'em' && [kids[i - 1], kids[i + 1], n.children[0], n.children[n.children.length - 1]].some(x => x?.type === 'strong')
+        || n.type === 'em' && parent?.type === 'strong' && edge) n.attributes.marker = '_';
+  });
+}
+// The character a node prints first or last, as format() prints it
+const delim = (n) => n.attributes.marker || EMPH[n.type];
+function edgeChar(n, end) {
+  if (!n) return undefined;
+  if (n.type === 'text') { const cs = [...n.attributes.content]; return end ? cs[cs.length - 1] : cs[0]; }
+  if (isBreak(n)) return end || n.type === 'softbreak' ? '\n' : '\\';
+  if (n.type === 'link') return end ? ')' : '[';
+  if (n.type === 'tag') return end ? '}' : '{';
+  return delim(n)[0];
+}
+const PUNCT = /[!-/:-@[-`{-~]|\p{P}/u;
+const kind = (c) => c === undefined || /\s/u.test(c) ? 'space' : PUNCT.test(c) ? 'punct' : 'word';
+// A delimiter between a letter outside and punctuation inside — "a*(b)*c" —
+// cannot open or close, and neither can a _ beside a letter. The LETTER is
+// written as a character reference instead: &#97; is "a", read back as "a"
+// and shown as "a", and its ";" is punctuation, which is what the delimiter
+// needs beside it. Children first: fencing inside can change a node's first
+// or last character.
+function fence(kids, before, after) {
+  kids.forEach((n, i) => {
+    if (!n.children.length) return;
+    fence(n.children, n.type === 'link' ? '[' : n.type === 'tag' ? '}' : EMPH[n.type] ? delim(n).slice(-1) : undefined,
+                      n.type === 'link' ? ']' : n.type === 'tag' ? '{' : EMPH[n.type] ? delim(n)[0] : undefined);
+    if (!EMPH[n.type]) return;
+    const under = delim(n)[0] === '_', prev = kids[i - 1], next = kids[i + 1];
+    if (kind(i ? edgeChar(prev, true) : before) === 'word' && (under || kind(edgeChar(n.children[0], false)) === 'punct')) asRef(prev, true);
+    if (kind(next ? edgeChar(next, false) : after) === 'word' && (under || kind(edgeChar(n.children[n.children.length - 1], true)) === 'punct')) asRef(next, false);
+  });
+}
+// only text prints a letter, so the neighbour to change is always text
+function asRef(t, end) {
+  const cs = [...t.attributes.content], at = end ? cs.length - 1 : 0;
+  cs[at] = '&#' + cs[at].codePointAt(0) + ';';
+  t.attributes.content = cs.join('');
 }
 // Text stays text: Markdown's punctuation is escaped, and at the start of a
 // line what would begin a list or a divider is too. Not what format() escapes
@@ -193,12 +275,36 @@ function expel(children) {
 // >, and "# ", anywhere else — or the backslash would be doubled and shown.
 export function escape(t, lineStart, wrapped) {
   t = t.replace(wrapped ? /[\\`{}[\]<>|]/g : /[\\`*_{}[\]<>|~]/g, '\\$&').replace(/&(?=#?\w+;)/g, '\\&');
-  return lineStart ? t.replace(/^([+=-])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2') : t;
+  return lineStart ? t.replace(/^(\s*)([+=-])/, '$1\\$2').replace(/^(\s*\d+)([.)])/, '$1\\$2') : t;
 }
 
 /* The document the editor would save, read back: if it is not the document
    the editor holds, saving would change what Robert sees. Asked of every
-   description before it is shown formatted (editor.mjs). */
+   description before it is shown formatted, and after every edit
+   (editor.mjs). Compared without what Markdown cannot keep and the site
+   never shows: spaces at the start or end of a line, which kind of line
+   break it was (both are a <br>), whether a break was inside bold (a break
+   has no letters to show it; expel() moves one out of a mark's edge), and a
+   break at the very end of a paragraph (runs() leaves it off). */
 export function roundTrips(doc) {
-  try { return fromMarkdoc(toMarkdoc(doc)).eq(doc); } catch { return false; }
+  try { return settled(fromMarkdoc(toMarkdoc(doc))) === settled(doc); } catch { return false; }
+}
+function settled(doc) {
+  const walk = (n) => {
+    if (n.type === 'hard_break') return { type: n.type };
+    if (!n.content) return n;
+    let c = n.content.map(walk);
+    if (schema.nodes[n.type].isTextblock) {
+      // emptied at a line's edge, the next one is at the edge: until nothing changes
+      for (let was = -1; was !== c.length;) {
+        was = c.length;
+        const br = (x) => !x || x.type === 'hard_break';
+        c = c.map((x, i) => x.type !== 'text' ? x : { ...x, text: x.text.replace(br(c[i - 1]) ? /^[ \t]+/ : /^$/, '').replace(br(c[i + 1]) ? /[ \t]+$/ : /^$/, '') })
+             .filter(x => x.type !== 'text' || x.text);
+        while (c.length && c[c.length - 1].type === 'hard_break') c.pop();
+      }
+    }
+    return { ...n, content: c };
+  };
+  return JSON.stringify(walk(doc.toJSON()));
 }
