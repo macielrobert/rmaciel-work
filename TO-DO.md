@@ -872,14 +872,23 @@ Evidence, case by case, is in `STRESS-TESTS.md`, **Editor journeys**.
     and Netlify) that UX-3 and UX-5 each built by hand.
 - **Measured:** project switches 7–42 ms, a reorder 7–17 ms, a 13-picture
   crawl 0.5 s, Save of 13 new pictures 1.0 s.
-- **For Robert to judge:**
-  - **Phone, Project layout, tall first picture:** the description starts
-    below the fold. The text column scrolls, but nothing says so. Recommended:
-    fade its last visible line, as the Collection's introduction already does.
-  - **VoiceOver:** each character of the window copy is its own element in
-    the accessibility tree, churn off or on. Needs a check on the iPhone; if
-    it reads letters, skip `spanify()` while churn is off — that changes an
-    AGENTS.md rule, so it is his call (`STRESS-TESTS.md`, Grid keyboard).
+- **Judged and done, 2026-10-11:**
+  - **Phone, Project layout, tall first picture:** the description started
+    below the fold with nothing to say the column scrolls. Robert: fade the
+    last line. Now wherever the window's copy scrolls (Project, Text, ABOUT),
+    its last visible line fades while there is more below, as the
+    Collection's introduction does, and stops at the end. Checked at 390×844
+    and 375×667 (fades, gone at the end), 1280×800, 812×375 and copy that
+    fits (never there), after a project switch and a picture closed. Limit:
+    when the cut lands in the blank under the picture there is no ink to
+    fade — on a 375×667 phone with a tall portrait first.
+  - **VoiceOver:** each character of the window copy was its own element,
+    churn off or on. Robert was unsure; Claude's call: with churn off,
+    `spanify()` splits nothing (AGENTS.md, system 4, reworded — the knob
+    still restores the churn by itself). Every line of copy measured the
+    same before and after at 390 and 1280; letters now kern as the typeface
+    spaces them, a pixel or less. One VoiceOver listen on the iPhone left
+    (`STRESS-TESTS.md`, Grid keyboard).
 - **Not done:** VoiceOver itself, Harvest.app's own WebKit, the real `gh`
   and SSH push, a real WebGL failure. The `PUNCH-LIST.md` §3 items ran
   clean on a local build and stay unticked: their acceptance is the deploy

@@ -61,11 +61,12 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] **VoiceOver:** 13 options, correct titles, selected state announced.
 - [ ] **VoiceOver:** confirm window copy reads as words, not letter-by-letter
       (the `spanify` per-character wrapping). *Also debt item 10.*
-      **UX-6, 2026-10-11:** still open, and now likelier to matter. Chrome's
-      accessibility tree has one text node PER CHARACTER in the window copy
-      (3,573 spans in LIGHT WORK), even with `TEXT_CHURN` off. Needs VoiceOver
-      on the iPhone. If it reads letters, the fix is to skip `spanify()` while
-      `churnOff()` — which changes the AGENTS.md rule that it always runs.
+      **UX-6, 2026-10-11:** the accessibility tree had one text node PER
+      CHARACTER, even with `TEXT_CHURN` off (1,217 spans in LIGHT WORK).
+      Fixed the same day: with churn off `spanify()` splits nothing, and the
+      tree now holds whole sentences — no line of copy moved; letters now
+      kern as the typeface spaces them, a pixel or less. Tick this after one
+      listen with VoiceOver on the iPhone.
 
 ---
 

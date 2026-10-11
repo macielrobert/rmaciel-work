@@ -220,9 +220,13 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
    swap used to churn every character through a pool of ASCII glyphs on the
    way past — the DOM twin of the icons' noise. **It is OFF**, at the
    `TEXT_CHURN` knob rather than deleted: it read as a screen effect from
-   another decade instead of as this site's own material. `spanify()` and the
-   per-character thresholds still run, so flipping the constant back to `true`
-   restores it with no other edit.
+   another decade instead of as this site's own material. Flipping the
+   constant back to `true` restores it with no other edit, because
+   `spanify()` asks the knob: with churn off it splits nothing, and the copy
+   stays whole. It used to split every letter regardless, and a screen reader
+   was handed each one as an element of its own (2026-10-11). Turning churn
+   back on brings that back — give the split copy a plain twin for screen
+   readers in the same change.
 5. **Image expand.** In-flow view swap inside the window; swipe to navigate;
    two-scope exits (`←` local, `×` global).
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
