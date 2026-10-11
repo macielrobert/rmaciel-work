@@ -56,7 +56,6 @@ for (const cls of ['t-s', 't-l']) {
   const want = markSize(html, cls);
   const label = cls === 't-s' ? 'Smaller' : 'Larger';
   const copies = {
-    'tools/harvest/page.css': markSize(read('tools/harvest/page.css'), cls),
     // Keystatic writes the size as a style object beside the mark's class
     'keystatic.config.tsx': (ks.match(new RegExp("className:\\s*'" + cls + "',\\s*style:\\s*\\{\\s*fontSize:\\s*'([\\d.]+em)'")) || [])[1],
   };

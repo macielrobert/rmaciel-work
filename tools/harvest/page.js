@@ -939,7 +939,7 @@ $('newsecgo').addEventListener('click', createSection);
    both of which Save's text step skips. It stays in the column, dimmed, so it
    can be placed again. Text read out of a picture (a work's right-click ›
    Extract text) arrives here already `organize`, waiting to be placed. */
-/* ---- PREVIEW: the site itself, beside Edit. "As saved" is built from the
+/* ---- PREVIEW: the site itself, beside Edit. "Last saved" is built from the
    files on this Mac each time it loads (harvest.js, on a port of its own),
    so it shows what Save project changed before Publish; "Live" is what
    visitors get now. It opens on the selected project. A fresh load every time
@@ -954,8 +954,13 @@ function loadPreview() {
   if (!prevOpen || view !== 'edit' || !S) return;
   const pr = S.projects.find(p => p.slug === project), shown = pr && !pr.draft;
   // a held-back project is not in the build, and the site would quietly show everything instead
-  $('prevmsg').textContent = pr && pr.draft ? pr.title + ' is held back, so the site does not show it yet.' : '';
+  previewMessage();
   $('prevframe').src = (prevSrc === 'live' ? S.live : S.preview) + '?v=' + Date.now() + (shown ? '#' + pr.section + '/' + pr.slug : '');
+}
+function previewMessage() {
+  const pr = S?.projects.find(p => p.slug === project);
+  $('prevmsg').textContent = pr?.draft ? pr.title + ' is held back, so the site does not show it yet.'
+    : prevSrc === 'live' ? 'Published website.' : 'Saved on this Mac. Unsaved edits are not shown.';
 }
 $('prevtoggle').addEventListener('click', () => { prevOpen = !prevOpen; remember('prevOpen', prevOpen ? '1' : '0'); loadPreview(); });
 $('prevsrc').addEventListener('click', (e) => { const b = e.target.closest('[data-src]'); if (b) { remember('prevSrc', prevSrc = b.dataset.src); loadPreview(); } });
@@ -975,7 +980,7 @@ async function loadTexts() {
 function drawTexts() {
   const src = (f) => /^https?:/.test(f.path) ? new URL(f.path).pathname : f.path.split('/').pop();
   const where = (f) => f.used ? ' · in ' + f.used : f.target === 'caption' ? ' · used as a caption' : '';
-  $('texts').innerHTML = '<h2 class="cap">Kept text</h2><p class="help">Click a passage to put it in a field, or on a work’s caption or alt text.</p>' + (otexts.length ? otexts.map(f =>
+  $('texts').innerHTML = '<h2 class="cap">Kept text</h2><p class="help">Source material kept from a crawl or extraction. Click a passage to place it in a field, caption or alt text.</p>' + (otexts.length ? otexts.map(f =>
     '<div class="tblock' + (armed === f.id ? ' on' : '') + (where(f) ? ' used' : '') + '" tabindex="0" data-passage="' + f.id + '">' +
     '<small>' + esc(src(f) + where(f)) + '</small>' + esc(String(f.edited ?? f.text)) + '</div>').join('')
     : '<p class="help">No kept text for this project. Keep passages in Collect, or right-click a work in Images › Extract text.</p>');
@@ -1021,7 +1026,7 @@ async function place(id, k) {
   el.value = k === 'body' ? [cur, mdEscape(text)].filter(Boolean).join('\n\n')
     : k === 'details' || k === 'nicknames' ? [cur, ...text.split('\n').map(s => s.trim())].filter(Boolean).join('\n')
     : text.replace(/\s+/g, ' ');
-  el.dispatchEvent(new Event('input', { bubbles: true }));   // marks the panel unsaved; the description's preview follows
+  el.dispatchEvent(new Event('input', { bubbles: true }));   // marks the panel unsaved
   el.scrollIntoView({ block: 'nearest' });
   await mark(f, 'organize', PLACES[k].toLowerCase());
   tell('Put in ' + (el.closest('[data-tab=settings]') ? 'Settings › ' : '') + PLACES[k] + ' — Save project when ready.');
@@ -1106,7 +1111,6 @@ function fillProj() {
   setDirty(false);
   // what the form showed when loaded: Save sends only what differs from it
   pd.shown = formValues(); pd.shownBody = $('pbody').value;
-  showDesc();
 }
 // follows the Section menu: it said #build beside a menu reading ART
 const addr = (section) => { $('paddr').textContent = 'Address #' + section + '/' + pd.slug + ' — permanent, it does not change with the title'; };
@@ -1134,7 +1138,6 @@ $('proj').addEventListener('input', (e) => {
   setDirty(true);
   if (e.target.dataset.p === 'section') { partOfOptions(e.target.value, document.querySelector('#proj [data-p=part_of]').value); addr(e.target.value); }
   if (e.target.dataset.p === 'icon_type') drawMarks();
-  if (e.target.id === 'pbody') { clearTimeout(showDesc.t); showDesc.t = setTimeout(showDesc, 300); }
 });
 $('proj').addEventListener('change', async (e) => {
   if (e.target.type !== 'file' || !e.target.files[0]) return;
@@ -1150,7 +1153,8 @@ $('proj').addEventListener('click', (e) => {
   const b = e.target.closest('[data-md]'); if (b) markup(b.dataset.md);
 });
 // The description is Markdoc, as Keystatic writes it. The buttons put the
-// marks in for you; the preview shows what the site will make of them.
+// marks in for you. Use the site preview after Save project to see the result.
+// A second rendered description beneath this field duplicated the site pane.
 const WRAP = { bold: ['**', '**'], italic: ['_', '_'], strike: ['~~', '~~'], underline: ['{% underline %}', '{% /underline %}'],
   light: ['{% light %}', '{% /light %}'], small: ['{% small %}', '{% /small %}'], large: ['{% large %}', '{% /large %}'], link: ['[', '](https://)'] };
 const PREFIX = { list: () => '- ', numbered: (i) => (i + 1) + '. ', quote: () => '> ' };
@@ -1162,11 +1166,7 @@ function markup(kind) {
     const e = t.value.indexOf('\n', b); b = e < 0 ? t.value.length : e;
     t.setRangeText(t.value.slice(a, b).split('\n').map((l, i) => PREFIX[kind](i) + l).join('\n'), a, b, 'select');
   } else if (kind === 'divider') t.setRangeText('\n\n---\n\n', b, b, 'end');
-  t.focus(); setDirty(true); showDesc();
-}
-async function showDesc() {
-  try { const d = await api('/api/preview', { body: $('pbody').value }); $('ppreview').innerHTML = d.error ? '<span class="dim">' + esc(d.error) + '</span>' : d.html; }
-  catch { /* a preview is a convenience; Save project is what checks */ }
+  t.focus(); setDirty(true);
 }
 
 /* ---- RIGHT-CLICK MENU — on a project, a folder or file in the tree, a card,

@@ -231,13 +231,7 @@
   #proj textarea[data-p] { min-height:72px; }
   #mdbar { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0 4px; }
   #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:13px; }
-  .pdesc { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:20px; }
   #pbody { min-height:240px; font-size:13px; }
-  /* the site's body copy and its three custom marks (values mirror index.html, as keystatic.config.tsx's do) */
-  #ppreview { font-size:13px; font-weight:400; letter-spacing:0; line-height:1.5; color:var(--ink); max-width:33em; padding-top:6px; }
-  #ppreview p { margin:0 0 1em; }
-  #ppreview .w-l { font-weight:300; } #ppreview .t-s { font-size:.85em; } #ppreview .t-l { font-size:1.27em; }
-  #ppreview a { color:inherit; }
   #texts { overflow:auto; padding:var(--m); border-left:1px solid var(--rule); }
   .tblock { border-top:1px solid var(--rule); padding:8px 0 12px; cursor:pointer; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
   .tblock small { display:block; font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
