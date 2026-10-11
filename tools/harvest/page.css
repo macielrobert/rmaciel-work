@@ -214,6 +214,7 @@
   /* EDIT: tabs, then one part of the project at a time */
   #edit { flex:1; min-height:0; display:flex; flex-direction:column; }
   #etabs { padding:8px var(--m); border-bottom:1px solid var(--rule); }
+  #textstoggle { float:right; }
   #proj { display:contents; }
   #editempty { padding:var(--m); margin:0; }
   #edit.has #editempty, #edit:not(.has) > :not(#editempty) { display:none; }
@@ -223,6 +224,9 @@
   .epanel.form > :is(label, .field, p) { max-width:32em; margin:0 0 20px; }
   /* Content: the fields, and the project's kept text beside them */
   .epanel[data-tab=content] { display:grid; grid-template-columns:minmax(260px, 1fr) 0 min(var(--w-texts, 300px), 45%); }
+  .epanel[data-tab=content].texts-collapsed { grid-template-columns:minmax(0, 1fr); }
+  .epanel[data-tab=content].texts-collapsed > .seam,
+  .epanel[data-tab=content].texts-collapsed > #texts { display:none; }
   .epanel[data-tab=content] > * { grid-row:1; min-height:0; }
   .epanel[data-tab=content] .fields { overflow:auto; padding:var(--m); }
   .fields > :is(label, .field) { margin:0 0 20px; }
