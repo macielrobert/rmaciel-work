@@ -588,7 +588,10 @@ async function loadOrg() {
   if (!project) { org = null; oshown = []; $('stacks').innerHTML = $('wdetail').innerHTML = ''; if (doc) await loadDoc(); return; }
   loadProj(); loadTexts();
   tell('Grouping copies…'); busy(1);
-  try { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); tell(''); }
+  // an answer for a project no longer selected is dropped: arriving after a
+  // faster one, it drew one project's works under another's name
+  const want = project;
+  try { const o = await api('/api/organize?project=' + encodeURIComponent(want)); if (project !== want) return; org = o; drawOrg(); tell(''); }
   catch (e) { tell('⚠ ' + e.message); }
   finally { busy(-1); }
 }
@@ -1130,7 +1133,15 @@ function partOfOptions(section, keep) {
 async function loadProj() {
   if (view !== 'edit' || !project || (pd && pd.slug === project)) return;
   if (pdDirty && !confirm('Discard the unsaved changes to ' + (pd.data.title || pd.slug) + '?')) return;
-  try { pd = await api('/api/project?project=' + encodeURIComponent(project)); } catch (e) { tell('⚠ ' + e.message); return; }
+  // Checked against the selection when the answer comes, not when it was
+  // asked for. A project's details arriving after ABOUT's had filled the form
+  // with the project while the header said ABOUT, and Save went to the
+  // project (Codex's review of UX-2b, 2026-10-11). loadDoc() checks the same.
+  const want = project;
+  let d;
+  try { d = await api('/api/project?project=' + encodeURIComponent(want)); } catch (e) { if (project === want) tell('⚠ ' + e.message); return; }
+  if (project !== want) return;
+  pd = d;
   fillProj();
 }
 function fillProj() {

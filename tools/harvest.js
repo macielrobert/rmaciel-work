@@ -368,9 +368,9 @@ async function checkAlone(slug, text, uploads, tied) {
   });
 }
 // The copy itself: build.js, index.html, fonts and the singletons linked from
-// the repo, a singleton named in `own` written from its text instead, and
-// `fill` to add what the check is about. No project is in it unless `fill`
-// puts one there.
+// the repo, a singleton named in `own` written from its text instead (null:
+// left out, for `fill` to provide), and `fill` to add what the check is
+// about. No project is in it unless `fill` puts one there.
 async function throwaway(own, fill) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-check-'));   // the system's temp folder: one cut short by a quit is cleared by macOS
   try {
@@ -379,7 +379,7 @@ async function throwaway(own, fill) {
     fs.mkdirSync(path.join(root, 'content', 'projects'), { recursive: true });
     const content = path.join(REPO, 'content');
     for (const n of ['about.mdoc', 'contact.json', 'site.json', 'sections']) {
-      if (n in own) fs.writeFileSync(path.join(root, 'content', n), own[n]);
+      if (n in own) { if (own[n] !== null) fs.writeFileSync(path.join(root, 'content', n), own[n]); }
       else if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
     }
     fill(root);
@@ -482,6 +482,25 @@ function siteDoc(doc) {
   return { d, file, data: JSON.parse(fs.readFileSync(file, 'utf8')) };
 }
 function siteDocData(doc) { const { data, body } = siteDoc(doc); return { doc, data, body }; }
+/* STAND-INS, for checking one singleton on its own: the least content build.js
+   accepts for everything the save does not touch — one section, and the
+   singletons other than the one being saved. Not the real ones: build.js
+   stops at its first failure, in the order sections, ABOUT, CONTACT, site
+   settings, so an error already in one of them hid any new error in a later
+   one — a CONTACT with no valid email saved because ABOUT already failed
+   (Codex's review of UX-2b, 2026-10-11). The stand-ins are built alone as
+   well, first: if build.js comes to want more than they hold, the check
+   says so and refuses, instead of every save passing. */
+const STAND_IN = {
+  'about.mdoc': mdocText({ title: 'ABOUT', details: ['Check'] }, 'Check'),
+  'contact.json': JSON.stringify({ email: 'check@example.com' }),
+  'site.json': JSON.stringify({ site_title: 'Check', copyright: 'Check' }),
+  sections: null,
+};
+const standInSection = (root) => {
+  fs.mkdirSync(path.join(root, 'content', 'sections'));
+  fs.writeFileSync(path.join(root, 'content', 'sections', 'check.json'), JSON.stringify({ title: 'CHECK', order: 1 }));
+};
 async function saveSiteDoc(doc, v, newBody) {
   await catchUp();
   const { d, file, data, body } = siteDoc(doc);
@@ -489,7 +508,12 @@ async function saveSiteDoc(doc, v, newBody) {
   for (const [k, apply] of Object.entries(d.set)) if (k in v) apply(next, v[k]);
   const text = body === undefined ? JSON.stringify(next, null, 2) + '\n' : mdocText(next, newBody === undefined ? body : newBody);
   if (text === old) return { unchanged: true };
-  const [before, after] = await Promise.all([throwaway({ [d.file]: old }, () => {}), throwaway({ [d.file]: text }, () => {})]);
+  // this file as it is and as the save leaves it, each among stand-ins; a
+  // failure it already had does not block a save that leaves it the same, as
+  // for a project — refusing would stop it being fixed a field at a time
+  const alone = (t) => throwaway({ ...STAND_IN, [d.file]: t }, standInSection);
+  const [stale, before, after] = await Promise.all([throwaway(STAND_IN, standInSection), alone(old), alone(text)]);
+  if (stale) throw new Error(`Not saved: Harvest's check for ${doc.toUpperCase()} no longer matches the site's build, so it cannot tell whether this save is safe. Ask Claude to update STAND_IN in harvest.js. (The build said: ${stale})`);
   if (after && after !== before) throw new Error('Not saved — the site would not build: ' + after);
   fs.writeFileSync(file, text);
   unpublished.add(doc);

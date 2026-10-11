@@ -398,6 +398,28 @@ part of this task.
 - **Not checked:** opening the saved files in Keystatic itself — inferred
   from the files being byte-identical in format to what it wrote.
 
+**Review fixes, 2026-10-11 — Claude**, for Codex's two findings on PR #46.
+Branch `ux-2b-review-fixes`.
+- **P1, a slow answer overwrote the form.** A project's details arriving
+  after ABOUT's filled the form with the project while the header said ABOUT,
+  and Save went to the project. `loadProj()` now drops an answer for a
+  project no longer selected, as `loadDoc()` already did; `loadOrg()` drops a
+  stale answer for the works too, which had the same fault between two
+  projects. Checked by holding answers back and releasing them late: project
+  → ABOUT, CONTACT → project, and project → project all keep the selection,
+  its fields and its works.
+- **P2, an existing error hid a new one.** build.js stops at its first
+  failure (sections, ABOUT, CONTACT, site settings), so with ABOUT already
+  broken an invalid CONTACT email saved. A save of ABOUT or CONTACT is now
+  checked with that file among minimal stand-ins for everything else
+  (`STAND_IN` in harvest.js), so only it can fail. The stand-ins are built
+  alone first; if build.js comes to want more than they hold, the save is
+  refused with a message saying so, never passed. Checked: a broken ABOUT
+  or a broken section no longer lets an invalid email through, valid saves
+  still pass, a save that leaves ABOUT's own existing failure unchanged is
+  still allowed (as for a project), and a deliberately broken stand-in
+  refuses. Test edits reverted.
+
 ### Harvest follow-up — Match source artwork and reuse source text as image data
 
 **Requested by Robert, 2026-10-10; backlog, not part of active UX-2b.**
