@@ -22,10 +22,12 @@
   <aside id="projectcol" data-w="projects">
     <h2 class="cap">Projects</h2>
     <div id="projects"></div>
-    <!-- ABOUT, CONTACT and the site's settings are part of the site too; Harvest
-         does not edit them yet, and says where they are edited instead of
-         leaving them out of the picture -->
-    <div class="sitenote"><h2 class="cap">Site</h2><p class="help">About, Contact and the site's settings are edited in Keystatic for now.</p></div>
+    <!-- ABOUT and CONTACT: the site's pages that are not projects (UX-2b).
+         Chosen like a project; each opens a form of its own in Edit. The
+         site's settings are still Keystatic's. -->
+    <div class="sitenote"><h2 class="cap">Site</h2>
+      <div id="sitedocs"><div tabindex="0" data-doc="about">ABOUT</div><div tabindex="0" data-doc="contact">CONTACT</div></div>
+      <p class="help">Site settings are edited in Keystatic.</p></div>
     <div class="sidefoot">
       <div id="newp">
         <input id="newtitle" placeholder="New project title" aria-label="New project title">
@@ -111,6 +113,12 @@
             </div>
           </div>
           <div class="seam" data-right></div><aside id="texts" data-w="texts"></aside>
+        </div>
+        <!-- CONTACT's two fields, Keystatic's own. ABOUT needs no panel of its
+             own: it is Content's title, detail lines and description. -->
+        <div class="epanel form" data-tab="contact">
+          <label>Email address — required<input data-c="email" type="email" autocomplete="off"><span class="help">Where the contact form's SEND delivers.</span></label>
+          <label>Intro copy<textarea data-c="intro"></textarea><span class="help">The contact form has no place for this yet; it is kept for when it does.</span></label>
         </div>
         <div class="epanel form" data-tab="layout">
           <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>

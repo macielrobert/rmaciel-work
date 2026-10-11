@@ -105,6 +105,8 @@
   /* AN ERROR: the line doubled in ink, then a small solid square and a sentence that says what to do */
   .err > input, .err > textarea, input.err, textarea.err { border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); }
   .errmsg { color:var(--ink); font-size:12px; margin-top:6px; }
+  /* under a form field, the message belongs to the field above, not the next one */
+  :is(.fields, .epanel.form) > .errmsg { margin:-14px 0 20px; }
   .errmsg::before { content:''; display:inline-block; width:6px; height:6px; background:var(--ink); margin-right:6px; vertical-align:1px; }
 
   /* APPLICATION HEADER */
@@ -141,19 +143,19 @@
   #projectcol > .cap { padding:var(--m) var(--m) 0; }
   #projects { flex:1; overflow:auto; min-height:0; padding:0 0 var(--m); }
   /* LIST ROW: --text-2 at rest; chosen = ink AND a 2px bar at its left */
-  #projects [data-s] { cursor:pointer; color:var(--text-2); padding:4px var(--m) 4px calc(var(--m) - 2px); border-left:2px solid transparent; display:flex; gap:8px; }
-  #projects [data-s]:hover { color:var(--ink); }
-  #projects [data-s].sel { color:var(--ink); border-left-color:var(--ink); }
-  #projects [data-s]:focus-visible { outline:1px solid var(--ink); outline-offset:-1px; }
+  :is(#projects [data-s], #sitedocs [data-doc]) { cursor:pointer; color:var(--text-2); padding:4px var(--m) 4px calc(var(--m) - 2px); border-left:2px solid transparent; display:flex; gap:8px; }
+  :is(#projects [data-s], #sitedocs [data-doc]):hover { color:var(--ink); }
+  :is(#projects [data-s], #sitedocs [data-doc]).sel { color:var(--ink); border-left-color:var(--ink); }
+  :is(#projects [data-s], #sitedocs [data-doc]):focus-visible { outline:1px solid var(--ink); outline-offset:-1px; }
   #projects [data-s].drop { color:var(--ink); outline:1px solid var(--ink); outline-offset:-1px; }   /* a work dragged from the grid lands here */
   #projects [data-s] b { margin-left:auto; font-weight:400; font-size:12px; }
   #projects [data-s] small { display:block; font-size:12px; color:var(--text-2); }
   #projects .sec { font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--text-2); padding:20px var(--m) 4px; cursor:default; }
   #projects .sec:first-child { padding-top:0; }
   #projects input.rename { margin:0; padding:0 0 1px; }
-  .sitenote { padding:12px var(--m); border-top:1px solid var(--rule); }
-  .sitenote .cap { margin-bottom:4px; }
-  .sitenote p { margin:0; }
+  .sitenote { padding:12px 0; border-top:1px solid var(--rule); }
+  .sitenote .cap { margin-bottom:4px; padding:0 var(--m); }
+  .sitenote p { margin:4px 0 0; padding:0 var(--m); }
   .sidefoot { padding:12px var(--m) var(--m); border-top:1px solid var(--rule); display:grid; gap:12px; }
   #newp { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
   #newp input, #newp select, #news input { margin:0; }
@@ -164,7 +166,7 @@
   /* PROJECT HEADER */
   #work { display:flex; flex-direction:column; min-width:0; }
   #phead { display:flex; gap:12px; align-items:center; padding:12px var(--m); border-bottom:1px solid var(--rule); min-height:57px; }
-  #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; max-width:45%; }   /* a long message gives way, not the name */
   #pstate { color:var(--ink); font-size:12px; white-space:nowrap; }
   #pstate:not(:empty)::before { content:''; display:inline-block; width:6px; height:6px; border:1px solid var(--ink); margin-right:6px; vertical-align:1px; }
   #orgmsg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-2); }
@@ -236,6 +238,12 @@
   #proj { display:contents; }
   #editempty { padding:var(--m); margin:0; }
   #edit.has #editempty, #edit:not(.has) > :not(#editempty) { display:none; }
+  /* ABOUT and CONTACT: one form each, no tabs. ABOUT is Content's fields
+     without the kept text, which is a project's material */
+  #edit[data-doc] #etabs, #edit[data-doc] .epanel { display:none; }
+  #edit[data-doc=about] .epanel[data-tab=content] { display:grid; grid-template-columns:minmax(0, 1fr); }
+  #edit[data-doc=about] .epanel[data-tab=content] > :is(.seam, #texts) { display:none; }
+  #edit[data-doc=contact] .epanel[data-tab=contact] { display:block; }
   #edit .epanel { flex:1; min-height:0; }
   #edit .epanel:not(.on) { display:none; }
   .epanel.form { overflow:auto; padding:var(--m); }

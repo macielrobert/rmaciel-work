@@ -79,11 +79,20 @@ remembers `imgView` (Grid by default) and Edit its tab as `etab`.
    icon before it can go live — Edit › Layout uploads one (a typed character
    shows "Or an image" under it; choosing a file switches to it).
 
+8. ABOUT and CONTACT (SITE, foot of the Projects list, UX-2b): each opens
+   Edit as one form — ABOUT is Content's title, detail lines and description,
+   CONTACT its email and intro — and the header's **Save ABOUT** / **Save
+   CONTACT** writes `content/about.mdoc` / `content/contact.json` through
+   `/api/site`, after build.js passes on a copy holding the singletons and no
+   projects (`throwaway()`). They count toward Publish as `about` and
+   `contact`. CONTACT's intro is carried by build.js but not shown on the site.
+
 ## What "publish the harvest" means for Claude
 
 Harvest only writes files; it never commits. So:
 
-1. `git status` — expect changes under `content/projects/*.mdoc` and new files
+1. `git status` — expect changes under `content/projects/*.mdoc` (and maybe
+   `content/about.mdoc` or `content/contact.json`) and new files
    under `images/<slug>/images/<n>/`.
 2. `git diff content/` and read it. Harvest APPENDS (images, paragraphs, detail
    lines) and may set `share_description` and `nicknames`. Anything else

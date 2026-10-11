@@ -5,6 +5,7 @@ const tilde = (p) => esc(p.replace(S.home, '~'));
 // a picture on a website loads straight from it, at a thumbnail size where the host can make one
 const thumb = (p) => '<img loading="lazy" src="' + (/^https?:/.test(p) ? esc(/squarespace-cdn\.com/.test(p) ? p + '?format=500w' : p) : '/thumb?p=' + encodeURIComponent(p)) + '">';
 let S = null, folder = null, project = null, findings = [], loadedRev = -1;
+let doc = null;   // 'about' or 'contact' when one of the site's own pages is chosen instead of a project (UX-2b)
 let inflight = 0;   // requests sent and not yet answered
 const busy = (d) => { inflight += d; document.body.classList.toggle('busy', inflight > 0); };
 const picked = new Set();   // ticked card ids, kept across redraws
@@ -98,26 +99,49 @@ function drawProjects() {
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d || e.target.closest('.rename')) return;
-  // Asked BEFORE switching. It used to be asked by loadProj, after the list,
-  // header and works had already moved on, so Cancel kept only the panel: one
-  // project's details over another's works, asking again at every click.
-  if (pd && pdDirty && pd.slug !== d.dataset.s) {
-    const was = pd.data.title || pd.slug;
-    if (!confirm(was + ' has unsaved changes. Discard them?\n\nCancel to stay on ' + was + ' — Save project keeps them.')) return;
-    setDirty(false); pd = null;
-  }
+  if (!mayLeave(d.dataset.s)) return;
   save();   // anything typed on the previous project goes before its cards do
-  project = d.dataset.s; tell('');
+  project = d.dataset.s; doc = null; markDocs(); tell('');
   shown = 100; ocur = null; altErr = null;
   $('psrc').value = '';   // sources differ per project; the search text carries over
   drawProjects(); buttons(); nameProject();
   if (view === 'edit') loadOrg(); else loadFindings();
 });
+// Asked BEFORE switching, to a project or to ABOUT or CONTACT. It used to be
+// asked by loadProj, after the list, header and works had already moved on,
+// so Cancel kept only the panel: one project's details over another's works,
+// asking again at every click.
+function mayLeave(next) {
+  if (!pd || !pdDirty || pd.slug === next) return true;
+  const was = pd.doc ? DOC_NAME[pd.doc] : pd.data.title || pd.slug;
+  if (!confirm(was + ' has unsaved changes. Discard them?\n\nCancel to stay on ' + was + ' — Save keeps them.')) return false;
+  setDirty(false); pd = null;
+  return true;
+}
+/* ---- ABOUT AND CONTACT (UX-2b): the site's two pages that are not projects,
+   under SITE at the foot of the Projects column. Either one opens in Edit as
+   a form of its own, saved by the same button, with the same check. Collect
+   does not apply to them: it finds material for projects. */
+const DOC_NAME = { about: 'ABOUT', contact: 'CONTACT' };
+function markDocs() {
+  for (const r of document.querySelectorAll('#sitedocs [data-doc]')) {
+    r.classList.toggle('sel', r.dataset.doc === doc);
+    if (r.dataset.doc === doc) r.setAttribute('aria-current', 'true'); else r.removeAttribute('aria-current');
+  }
+}
+$('sitedocs').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-doc]'); if (!r || !mayLeave('site:' + r.dataset.doc)) return;
+  save();   // anything typed on a card goes first, as when switching project
+  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErr = null; disarm();
+  drawProjects(); markDocs(); buttons(); nameProject();
+  view = 'edit'; loadOrg();
+});
 // the project header: the name, in the same place in both modes
 function nameProject() {
   const pr = S && S.projects.find(p => p.slug === project);
-  $('pname').textContent = pr ? pr.title : 'Pick a project';
-  $('orgwrite').disabled = !pr;
+  $('pname').textContent = doc ? DOC_NAME[doc] : pr ? pr.title : 'Pick a project';
+  $('orgwrite').disabled = !pr && !doc;
+  if (!$('orgwrite').dataset.armed) $('orgwrite').textContent = doc ? 'Save ' + DOC_NAME[doc] : 'Save project';
 }
 // the project header's message line; a failure is drawn as one (STYLE-GUIDE.md, Messages)
 function tell(msg) {
@@ -487,7 +511,8 @@ function look() {
   document.querySelectorAll('#tabs [data-view]').forEach(x => x.classList.toggle('on', x.dataset.view === view));
   document.querySelectorAll('#etabs [data-et]').forEach(x => x.classList.toggle('on', x.dataset.et === etab));
   document.querySelectorAll('#edit .epanel').forEach(x => x.classList.toggle('on', x.dataset.tab === etab));
-  $('edit').classList.toggle('has', !!project);
+  $('edit').classList.toggle('has', !!project || !!doc);
+  if (doc) $('edit').dataset.doc = doc; else delete $('edit').dataset.doc;
   $('textstoggle').hidden = etab !== 'content';
   $('textstoggle').textContent = keptTextOpen ? 'Hide kept text' : 'Show kept text';
   $('textstoggle').setAttribute('aria-expanded', String(keptTextOpen));
@@ -553,14 +578,14 @@ $('images').addEventListener('click', (e) => {
 $('orgq').addEventListener('input', () => { if (org) drawOrg(); });
 // ⌘F: Harvest.app's web view has no find bar, so it goes to the find box of the list in view
 document.addEventListener('keydown', (e) => {
-  if (!(e.metaKey || e.ctrlKey) || e.key !== 'f') return;
+  if (!(e.metaKey || e.ctrlKey) || e.key !== 'f' || (view === 'edit' && doc)) return;
   e.preventDefault();
   if (view === 'edit') showTab('images');
   const box = view === 'edit' ? $('orgq') : $('pq'); box.focus(); box.select();
 });
 async function loadOrg() {
   look(); loadPreview();   // the selected project, and the files as they now are (loadOrg also runs after Save)
-  if (!project) { org = null; oshown = []; $('stacks').innerHTML = $('wdetail').innerHTML = ''; return; }
+  if (!project) { org = null; oshown = []; $('stacks').innerHTML = $('wdetail').innerHTML = ''; if (doc) await loadDoc(); return; }
   loadProj(); loadTexts();
   tell('Grouping copies…'); busy(1);
   try { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); tell(''); }
@@ -825,12 +850,13 @@ async function saveDetails() {
   if (!pd) return false;
   // Only the fields changed here are sent; the server leaves the rest as the
   // file has them — which may be newer than this form (an edit from the phone).
-  const now = formValues(), data = {};
+  // ABOUT and CONTACT go the same way to their own endpoint (/api/site)
+  const now = pd.doc ? docValues() : formValues(), data = {};
   for (const k in now) if (JSON.stringify(now[k]) !== JSON.stringify(pd.shown[k])) data[k] = now[k];
-  const body = $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
+  const body = pd.doc !== 'contact' && $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
   if (!Object.keys(data).length && body === undefined) return false;
-  tell('Saving project details — checking the site still builds…');
-  const r = await api('/api/project', { project: pd.slug, data, body });
+  tell('Saving ' + (pd.doc ? DOC_NAME[pd.doc] : 'project details') + ' — checking the site still builds…');
+  const r = pd.doc ? await api('/api/site', { doc: pd.doc, data, body }) : await api('/api/project', { project: pd.slug, data, body });
   setDirty(false);
   return !r.unchanged;
 }
@@ -843,7 +869,8 @@ $('orgwrite').addEventListener('click', async () => {
   let msg = '';
   busy(1);
   try {
-    if (await saveDetails()) done.push('project details');
+    if (await saveDetails()) done.push(pd.doc ? DOC_NAME[pd.doc] : 'project details');
+    if (doc) { msg = done.length ? 'Saved ' + done[0] + ' on this Mac. Not on the site until you publish.' : 'Nothing new to save.'; return; }
     if (org && org.stacks.length) {
       const d = await api('/api/organize/save', { project, confirm });
       if (d.confirm) {
@@ -864,6 +891,7 @@ $('orgwrite').addEventListener('click', async () => {
     // a missing alt text is a FIELD's error: drawn beside that field, the work selected and open
     const n = +(e.message.match(/^Work (\d+) needs alt text/) || [])[1], t = n && org && org.stacks[n - 1];
     if (t) { altErr = ocur = t.id; opick.clear(); opick.add(t.id); showTab('images'); }
+    if (doc && (docErr = docFieldErr(e.message))) msg = '⚠ Not saved: the site would not build. The field marked below says what it needs.';
   }
   finally {
     // Reload what was written, the panel included: one still showing the
@@ -874,6 +902,7 @@ $('orgwrite').addEventListener('click', async () => {
     await loadOrg();   // first: reloading clears the message line
     tell(msg);
     if (altErr) document.querySelector('#images .err input')?.focus();
+    if (docErr) markDocErr();
     busy(-1);
   }
 });
@@ -966,7 +995,7 @@ function loadPreview() {
   const pr = S.projects.find(p => p.slug === project), shown = pr && !pr.draft;
   // a held-back project is not in the build, and the site would quietly show everything instead
   previewMessage();
-  $('prevframe').src = (prevSrc === 'live' ? S.live : S.preview) + '?v=' + Date.now() + (shown ? '#' + pr.section + '/' + pr.slug : '');
+  $('prevframe').src = (prevSrc === 'live' ? S.live : S.preview) + '?v=' + Date.now() + (doc ? '#' + doc : shown ? '#' + pr.section + '/' + pr.slug : '');
 }
 function previewMessage() {
   const pr = S?.projects.find(p => p.slug === project);
@@ -1105,6 +1134,7 @@ async function loadProj() {
   fillProj();
 }
 function fillProj() {
+  clearDocErr();
   const d = pd.data;
   // Keystatic's defaults, for a field the file does not have yet
   const v = { section: (S.sections[0] || {}).id, order: 10, layout: 'standard', icon_type: 'glyph', ...d, expand: d.expand !== false };
@@ -1125,6 +1155,49 @@ function fillProj() {
 }
 // follows the Section menu: it said #build beside a menu reading ART
 const addr = (section) => { $('paddr').textContent = 'Address #' + section + '/' + pd.slug + ' — permanent, it does not change with the title'; };
+/* ABOUT and CONTACT in the form. ABOUT is Content's title, detail lines and
+   description (Keystatic gives it the same three); CONTACT has its own two
+   fields, kept out of formValues() by their data-c. pd holds which page is
+   loaded, as it does for a project, under a slug no project can have. */
+const DOC_FIELDS = { about: { title: '[data-p=title]', details: '[data-p=details]' }, contact: { email: '[data-c=email]', intro: '[data-c=intro]' } };
+const docEl = (k) => document.querySelector('#proj ' + DOC_FIELDS[pd.doc][k]);
+function docValues() { const out = {}; for (const k in DOC_FIELDS[pd.doc]) out[k] = docEl(k).value; return out; }
+async function loadDoc() {
+  if (pd && pd.slug === 'site:' + doc) return;   // already showing it, edits and all
+  const want = doc;
+  try { const d = await api('/api/site?doc=' + want); if (doc !== want) return; pd = { ...d, slug: 'site:' + want }; }
+  catch (e) { tell('⚠ ' + e.message); return; }
+  clearDocErr();
+  for (const k in DOC_FIELDS[pd.doc]) { const v = pd.data[k]; docEl(k).value = Array.isArray(v) ? v.join('\n') : (v ?? ''); }
+  if (pd.doc === 'about') $('pbody').value = pd.body || '';
+  setDirty(false);
+  pd.shown = docValues(); pd.shownBody = pd.doc === 'about' ? $('pbody').value : undefined;
+}
+/* A FAILED SAVE, said beside the field (STYLE-GUIDE.md, Fields and errors):
+   build.js names the field it refused, and the sentence says what to do. */
+let docErr = null;
+const DOC_ERR = {
+  title: ['[data-p=title]', 'Add a title. ABOUT cannot go on the site without one.'],
+  details: ['[data-p=details]', 'Add at least one detail line.'],
+  summary: ['#pbody', 'Add a description. It is the ABOUT copy, and the site has nowhere else to get it.'],
+  email: ['[data-c=email]', 'Enter an email address, such as name@example.com. It is where SEND delivers.'],
+};
+function docFieldErr(m) {
+  const k = (m.match(/field "(\w+)"|"(\w+)" (?:must be|entry)/) || []).slice(1).find(Boolean);
+  return k || (/valid email/.test(m) ? 'email' : /description is empty/.test(m) ? 'summary' : null);
+}
+function markDocErr() {
+  const [sel, words] = DOC_ERR[docErr] || [], el = sel && document.querySelector('#proj ' + sel);
+  if (!el) return;
+  const box = el.parentElement;
+  box.classList.add('err'); box.insertAdjacentHTML('afterend', '<div class="errmsg">' + esc(words) + '</div>');
+  el.focus();
+}
+function clearDocErr() {
+  docErr = null;
+  for (const b of document.querySelectorAll('#proj .err')) { b.classList.remove('err'); if (b.nextElementSibling?.classList.contains('errmsg')) b.nextElementSibling.remove(); }
+}
+$('proj').addEventListener('input', () => { if (docErr) clearDocErr(); });
 function formValues() {
   const out = { icon_image: marks.icon_image, wordmark: marks.wordmark };
   for (const el of document.querySelectorAll('#proj [data-p]')) out[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
