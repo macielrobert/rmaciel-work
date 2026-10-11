@@ -965,6 +965,10 @@
      when the collection crops — gives the width */
   #nl-window.l-grid.x .car {
     display: flex;
+    /* ONE ROW. A whole-picture collection wraps (see l-grid), and this rule
+       must undo it: left wrapping, the strip broke into rows hidden below its
+       96px and the later pictures could not be scrolled to (Codex, PR #50) */
+    flex-wrap: nowrap;
     gap: 10px;
     height: 100%;
     justify-content: flex-start;

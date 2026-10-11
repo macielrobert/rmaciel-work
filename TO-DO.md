@@ -672,6 +672,15 @@ touched; nothing published.
   column is now what is live. Type sizes are not tokens yet — UX-5 adds them
   when Harvest's preview reads them.
 
+**Review fix, 2026-10-11 — Claude**, for Codex's P2 on PR #50. Branch
+`ux-4-filmstrip-wrap`. Opening a picture in a whole-picture Collection kept
+the grid's `flex-wrap: wrap`, so the strip broke into rows hidden under its
+96px and the later pictures could not be reached. The opened-picture strip
+now sets `nowrap`. Checked with a 30-picture fixture: 1280×800 with WebGL,
+scrollWidth 4072 / scrollHeight 96, last thumb scrolls fully into view;
+375×812 `?nogl`, 3650 / 96; the cropped Collection, 944 / 96; back to the
+grid, wrapping returns.
+
 ### UX-5 — Connect composition to an accurate preview
 
 **Finding:** As written previews saved files, not all unsaved edits. The separate
