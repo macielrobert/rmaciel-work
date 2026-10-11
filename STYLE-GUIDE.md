@@ -6,11 +6,12 @@ for and where it goes. **`tools/specimen.html`** shows every piece at actual
 size, in both themes, today's version next to the proposed one. Open it
 served, not as a file (see the comment at its top).
 
-**Status, 2026-10-10: UX-1 done (third draft).** Robert answered the five
-questions and corrected the zigzag; his decisions are at the end of this
-file. **DECIDED** marks a value he has chosen, and **LIVE** a value that is
-already in the site. **PROPOSED** marks a value that still waits for the task
-that adopts it: UX-2 for Harvest, UX-4 for the window's text.
+**Status, 2026-10-10: UX-1 done (third draft); UX-2 adopted the editor
+values in Harvest.** Robert answered the five questions and corrected the
+zigzag; his decisions are at the end of this file. **DECIDED** marks a value
+he has chosen, and **LIVE** a value that is already in the site or in
+Harvest. **PROPOSED** marks a value that still waits for the task that adopts
+it: UX-4 for the window's text.
 Where this file and the code disagree, the code describes what is live and
 this file describes where it is going.
 
@@ -93,11 +94,11 @@ who cannot see the difference in tone.
 
 | Role | Site | Harvest |
 |---|---|---|
-| Body text | **DECIDED** 12px Book, line height 1.7, tracking .02em (adopted with UX-4). Today: 11px, 1.9, .05em | **PROPOSED** 13px Book, 1.5, .01em (adopted with UX-2). Today: 11px **Light**, 1.7, .05em |
-| Title | **PROPOSED** body size, uppercase as written, tracking .08em, in ink. Today: 11px in grey | Project name 16px, tracking .06em |
+| Body text | **DECIDED** 12px Book, line height 1.7, tracking .02em (adopted with UX-4). Today: 11px, 1.9, .05em | **LIVE** 13px Book, 1.5, .01em. Was 11px **Light**, 1.7, .05em |
+| Title | **PROPOSED** body size, uppercase as written, tracking .08em, in ink. Today: 11px in grey | **LIVE** project name 16px, tracking .06em |
 | Details and facts | **PROPOSED** 11px `--text-2`, line height 1.5 | — |
-| Caption, help and meta text | **PROPOSED** 11px `--text-2` | 12px `--text-2` |
-| Region labels | — | 11px uppercase, tracking .12em, `--text-2` |
+| Caption, help and meta text | **PROPOSED** 11px `--text-2` | **LIVE** 12px `--text-2` |
+| Region labels | — | **LIVE** 11px uppercase, tracking .12em, `--text-2` |
 | Footer labels | 11px uppercase, tracking .15em. Settled. **LIVE**: `--text-2`. The chosen one carries the zigzag (below) | — |
 | Glyph controls (×, ←, the caret) | 13px. Settled | — |
 
@@ -109,8 +110,8 @@ The rules behind the table:
   for emphasis written into the content.
 - **Uppercase is a role, not a voice.** It is used for titles written in
   uppercase, the site's footer labels, and Harvest's region labels. It is
-  **not** used for buttons. Today every Harvest button is an uppercase grey
-  word, so navigation, actions and toggles all look alike.
+  **not** used for buttons. Until UX-2 every Harvest button was an uppercase
+  grey word, so navigation, actions and toggles all looked alike.
 - **Tracking follows size and case.** Uppercase needs .08–.15em. Mixed case
   needs .02em at 12px and .01em at 13px. The .05em everywhere today was compensation for
   11px type.
@@ -138,8 +139,8 @@ Five steps, and nothing in between: **4 · 8 · 12 · 20 · 32**.
 ## Hit areas
 
 - **Harvest:** every control is at least **28px** tall. A word alone is not a
-  button: today Harvest's buttons have no padding, and their hit area is the
-  height of the text.
+  button. **LIVE** since UX-2; before it, Harvest's buttons had no padding and
+  their hit area was the height of the text.
 - **Site:** the hit areas stay as they are. The footer labels' are about 25px,
   which already clears the 24px minimum in WCAG 2.2, and that geometry is
   settled.
@@ -171,11 +172,11 @@ the sibling row and SEND. Only their grey and their focus mark change.
 
 | | Rest | Hover | Keyboard focus | Chosen | Disabled |
 |---|---|---|---|---|---|
-| Primary | filled ink | 80% strength | 1px ink outline, 2px out | — | outline only, `--text-2` text |
-| Secondary | `--edge` outline | ink outline | 1px ink outline, 2px out | — | `--rule` outline, `--text-2` text |
-| Quiet | `--text-2` | ink | 1px ink outline, 2px out | — | `--rule` text |
-| Tab or toggle | `--text-2` | ink | 1px ink outline, 2px out | ink + line under | `--rule` text |
-| List row | `--text-2` | ink | 1px ink outline, inside | ink + bar at left | `--rule` text |
+| Primary | filled ink | 80% strength | 1px ink outline, 2px out | — | dashed `--edge` outline, `--text-2` text |
+| Secondary | `--edge` outline | ink outline | 1px ink outline, 2px out | — | dashed `--rule` outline, `--text-2` text |
+| Quiet | `--text-2` | ink | 1px ink outline, 2px out | — | `--text-2` text, dashed `--rule` underline |
+| Tab or toggle | `--text-2` | ink | 1px ink outline, 2px out | ink + line under | `--text-2` text, dashed `--rule` underline |
+| List row | `--text-2` | ink | 1px ink outline, inside | ink + bar at left | `--text-2` text, dashed `--rule` underline |
 | Field | `--edge` line | ink line | the line doubled, in ink | — | dashed `--rule` line |
 | Footer label (site) | `--text-2` | ink | ink + **bold zigzag**, no outline | ink + zigzag | — |
 
@@ -193,8 +194,13 @@ The rules behind the table:
 - **A chosen item carries a mark as well as a tone**: a line, a bar, a frame
   and a tick, or, in the site's footer only, the zigzag. In Harvest, tone
   alone is never the only signal.
-- **Disabled stays readable.** You should be able to read what a button would
-  do once it becomes available.
+- **Disabled stays readable; DASHED says unavailable.** You should be able to
+  read what a button would do once it becomes available, so its words stay
+  `--text-2` (4.6:1), never the decorative `--rule` (1.68:1 on white), which
+  the first draft of this table used (Codex's UX-1 review). What changes is
+  the control's line: its outline or underline turns dashed, the same mark a
+  disabled field already carried, and hover no longer changes it. Where the
+  reason is not obvious, the control's tooltip or the place it lives says it.
 
 ## The chosen footer label: the zigzag
 
@@ -261,8 +267,8 @@ The rules behind the table:
 above, and every text column starts at the left margin (`AGENTS.md`, Layout).
 UX-4 works inside the window only.
 
-**Harvest:** each kind of control has one home. This is the plan's table, and
-UX-2 builds it:
+**Harvest:** each kind of control has one home. This is the plan's table;
+**LIVE** since UX-2:
 
 | Location | Holds |
 |---|---|
@@ -272,8 +278,11 @@ UX-2 builds it:
 | Selection toolbar | how many are selected; group / separate, move, remove |
 | Details panel | the fields and actions for the one selected thing |
 
-- Selection actions appear when something is selected, **always in the same
-  place**.
+- Selection actions live in a toolbar that is **always there, in the same
+  place**, and wait, readable and dashed, until something is selected.
+- **Save project and Preview are Edit's**: Collect finds and sorts and does
+  not write (Robert, 2026-10-06), so the project header shows them in Edit
+  only. The project's name is in the same place in both modes.
 - A right-click menu repeats actions that are visible somewhere. It is never
   the only way to reach one.
 
@@ -289,10 +298,9 @@ the visitor nothing extra to download.
   sizes (Smaller .85em, Larger 1.27em).
 - **`node tools/check-tokens.js`** fails when a name declared in both files
   has different values, or when a mark size differs. `tools/check-harvest.js`
-  runs it too. Today it covers three shared tokens (`--bg`, `--ink`,
-  `--accent-rgb`) and both mark sizes. Harvest's `--accent` and
-  `--accent-dim` are its own until UX-2 moves it to `--text-2`, `--edge` and
-  `--rule`. From then on the check covers those three as well.
+  runs it too. Since UX-2 it covers six shared tokens (`--bg`, `--ink`,
+  `--accent-rgb`, `--text-2`, `--edge`, `--rule`) and both mark sizes;
+  Harvest's old `--accent` and `--accent-dim` are gone.
 - When values are adopted, the type sizes become tokens as well (body size,
   line height, tracking). Harvest's description preview then reads the same
   numbers the site does, and the check covers them without being changed.
@@ -323,7 +331,5 @@ Copying is cheap, and the check is what keeps the copies honest.
 5. **A keyboard focus outline on the site's controls: yes**, except the
    footer labels, whose focus is the bold zigzag. **Live.**
 
-Harvest takes the editor values with **UX-2**, which rebuilds its shell
-anyway, so nothing gets restyled twice. Until then, Harvest's `page.css` still
-holds the old greys; `tools/check-tokens.js` compares only the names both
-files declare.
+Harvest took the editor values with **UX-2**, which rebuilt its shell
+anyway, so nothing was restyled twice.

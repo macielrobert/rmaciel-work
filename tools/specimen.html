@@ -174,16 +174,18 @@
   .b:hover, .b.is-hover { border-color:var(--ink); }
   .b.primary:hover, .b.primary.is-hover { opacity:.8; }
   .b.quiet:hover, .b.quiet.is-hover { color:var(--ink); border-color:transparent; }
-  /* disabled stays READABLE — you should be able to see what it would do */
-  .b:disabled, .b.primary:disabled { background-color:transparent; color:var(--text-2); border-color:var(--rule); opacity:1; cursor:default; }
-  .b.quiet:disabled { color:var(--rule); border-color:transparent; }
+  /* disabled stays READABLE — you should be able to see what it would do: the
+     words stay --text-2 and the control's line turns DASHED, as a disabled
+     field's does (UX-1 review; Harvest has it since UX-2) */
+  .b:disabled, .b.primary:disabled { background-color:transparent; color:var(--text-2); border-style:dashed; border-color:var(--rule); opacity:1; cursor:default; }
+  .b.primary:disabled { border-color:var(--edge); }
+  .b.quiet:disabled, .tg:disabled, .row.off { color:var(--text-2); border-color:transparent; text-decoration:underline dashed var(--rule); text-underline-offset:4px; cursor:default; }
 
   /* TOGGLES and TABS — a choice between views. Selected = ink AND a line */
   .tg { font:inherit; letter-spacing:inherit; background:none; border:0; color:var(--text-2); min-height:28px;
         padding:0 var(--s2); position:relative; cursor:pointer; transition:color .15s; }
   .tg:hover, .tg.is-hover, .tg.on { color:var(--ink); }
   .tg.on::after { content:''; position:absolute; left:var(--s2); right:var(--s2); bottom:3px; height:1px; background:var(--ink); }
-  .tg:disabled { color:var(--rule); cursor:default; }
 
   /* LIST ROWS — the projects list. Selected = ink AND a bar at the left */
   .rows { margin:0 calc(-1 * var(--s3)); }
@@ -192,7 +194,6 @@
   .row:hover, .row.is-hover, .row.on { color:var(--ink); }
   .row.on::before { content:''; position:absolute; left:0; top:5px; bottom:5px; width:2px; background:var(--ink); }
   .row .n { margin-left:auto; font-size:12px; }
-  .row.off { color:var(--rule); cursor:default; }
 
   /* KEYBOARD FOCUS — one look for every kind of control */
   :is(.b, .tg, .row, .ft a, .tile):focus-visible, .is-focus { outline:1px solid var(--ink); outline-offset:2px; }
@@ -417,7 +418,8 @@
   <!-- ================================================================ STATES -->
   <h2>4 · Every state, side by side</h2>
   <p class="note">Hover changes tone only. Keyboard focus is a thin outline around the control, so the two can never be confused, except where the control already carries a line: a field thickens its line, and a footer label thickens its zigzag. Something selected is darker AND carries a mark: a line under a tab, a bar beside a row, a frame and a tick on a tile, a zigzag under a footer label.
-    Disabled stays readable. Every cell here is also live; hover it or press Tab.</p>
+    Disabled stays readable: the words keep their grey and the line turns dashed.
+    The first column is live (hover it or press Tab); the other columns are DRAWINGS of each state, not proof that a control behaves that way. That proof is in Harvest itself, tested with real keys (TO-DO.md, UX-2).</p>
   <template id="states">
     <div class="scroll"><table class="mx ed">
       <tr><th></th><th>Rest</th><th>Hover</th><th>Keyboard focus</th><th>Selected</th><th>Disabled</th></tr>
@@ -539,8 +541,11 @@
   hits.onclick = () => hits.classList.toggle('on', document.body.classList.toggle('show-hits'));
   // a tick on a tile is its selection; the frame follows it
   document.querySelectorAll('.tile input').forEach(i => i.onchange = () => i.closest('.tile').classList.toggle('on', i.checked));
-  document.querySelectorAll('.rows .row').forEach(r => r.onclick = () => {
-    r.closest('.ed').querySelectorAll('.rows .row').forEach(x => x.classList.toggle('on', x === r)); });
+  document.querySelectorAll('.rows .row').forEach(r => {
+    r.tabIndex = 0;   // reachable and operable from the keys, as Harvest's project rows are since UX-2
+    r.onclick = () => r.closest('.ed').querySelectorAll('.rows .row').forEach(x => x.classList.toggle('on', x === r));
+    r.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); r.click(); } };
+  });
 </script>
 </body>
 </html>

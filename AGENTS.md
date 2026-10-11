@@ -154,7 +154,7 @@ memory: what one learned in a conversation, the other never sees.
     not list publishing as something needed from him.
   - NOISE's alt text is tabled. He rejected drafted alt text on 2026-10-10 —
     it is meant to be a work of its own, not a description. Do not redraft.
-    Harvest's Write to project stops at NOISE until every kept work has alt
+    Harvest's Save project stops at NOISE until every kept work has alt
     text; that is expected, not a bug. (NOISE #35 duplicates #22, unmerged.)
   - The favicon and the 404 page are his to design. Ask when the work reaches
     them.
