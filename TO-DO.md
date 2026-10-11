@@ -191,6 +191,42 @@ side by side in both themes, and the guide explains their roles and placement.
   does the same. It is recorded as a separate task.
 - **Next:** UX-2. Body 12px still waits for UX-4.
 
+**Review, 2026-10-10 — Codex.** Reviewed `STYLE-GUIDE.md`,
+`tools/specimen.html`, and the shared-value checker at main `128d067`.
+UX-1 establishes a usable visual baseline; proceed to the isolated UX-2
+prototype. Robert's fixed grey, footer zigzag/focus treatment, and 12px site
+body decision stand. This accepts the foundation, not a completed Harvest
+workflow or the final site content layouts.
+
+- **Evidence:** served the specimen locally and inspected its rendered
+  comparisons and DOM at a 1280px browser viewport. Fonts reported loaded,
+  document width matched the viewport, and the displayed secondary-text
+  ratios were 4.60 on black / 4.56 on white. `node tools/check-tokens.js`
+  passed (3 shared names and 2 mark sizes). This review did not repeat
+  Claude's mobile or deployed-site regression tests.
+- [ ] **Claude, carry into UX-2: keep disabled labels readable.** The guide
+  says disabled controls stay readable, but its state table and the specimen
+  use `--rule` for disabled quiet buttons, toggles, and list rows. That is
+  the decorative grey (2.29 on black / 1.68 on white). Use `--text-2` for
+  their words and distinguish unavailability through control treatment and
+  an explanation where needed. Align the guide and specimen before copying
+  these styles into Harvest. This is an internal legibility requirement,
+  not a claim that disabled controls fail a contrast conformance rule.
+- [ ] **Claude, carry into UX-2: distinguish state drawings from keyboard
+  proof.** The specimen says every state cell is live, but its footer anchors
+  have no `href` or explicit `tabindex`, several list examples are static,
+  and the clickable project rows have no keyboard activation handler.
+  Pressing Enter on the first project row did not select it. Label static
+  examples honestly or make the representative controls keyboard-operable.
+  Prove focus, activation, selection, and field errors in the isolated UX-2
+  workflow; drawn `.is-focus` examples alone are not that proof. This finding
+  concerns the specimen, not Claude's separately recorded site Tab test.
+- **Scope of the passing checker:** it compares names present in both
+  stylesheets and sets of their values, plus custom-mark sizes. It does not
+  prove theme assignment, missing shared tokens, preview fidelity, or
+  interaction behavior. Extend coverage as UX-2 adopts the new tokens and
+  UX-5 establishes preview parity; retain visual checks in both themes.
+
 ### UX-2 — Reorganize Harvest around the selected project
 
 **Finding:** Collect has five competing columns (Folders, Projects, Pending,
