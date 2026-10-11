@@ -190,7 +190,9 @@ const changedProjects = (porcelain) => porcelain.split('\n').map(l => {
   const m = f.match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/);
   if (m) return m[1] || m[2];
   const sec = f.match(/^content\/sections\/([^/]+)\.json/);
-  return sec ? sec[1] + ' (section)' : null;
+  if (sec) return sec[1] + ' (section)';
+  const doc = f.match(/^content\/(about)\.mdoc$|^content\/(contact)\.json$/);   // ABOUT and CONTACT, by name
+  return doc ? doc[1] || doc[2] : null;
 }).filter(Boolean);
 // CATCH UP — the latest from GitHub immediately before anything is written
 // into the repo (Write, Organize's Save, a new project), not only at launch:
@@ -353,13 +355,7 @@ function tiedTo(slug, leads) {
 // files, so nothing is duplicated. `uploads` stand in for files a save would
 // put in images/<slug>/. Returns the build's message, or null if it built.
 async function checkAlone(slug, text, uploads, tied) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-check-'));   // the system's temp folder: one cut short by a quit is cleared by macOS
-  try {
-    fs.copyFileSync(path.join(REPO, 'build.js'), path.join(root, 'build.js'));
-    for (const n of ['index.html', 'fonts', 'node_modules']) fs.symlinkSync(path.join(REPO, n), path.join(root, n));
-    fs.mkdirSync(path.join(root, 'content', 'projects'), { recursive: true });
-    const content = path.join(REPO, 'content');
-    for (const n of ['about.mdoc', 'contact.json', 'site.json', 'sections']) if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
+  return throwaway({}, (root) => {
     fs.mkdirSync(path.join(root, 'images', slug), { recursive: true });
     for (const k of tied) {
       fs.writeFileSync(path.join(root, 'content', 'projects', k + '.mdoc'), k === slug ? text : fs.readFileSync(path.join(PROJECTS, k + '.mdoc')));
@@ -369,6 +365,24 @@ async function checkAlone(slug, text, uploads, tied) {
       if (fs.existsSync(dir)) for (const n of fs.readdirSync(dir)) if (!replaced.has(n)) fs.symlinkSync(path.join(dir, n), path.join(root, 'images', k, n));
     }
     for (const [from, rel] of uploads) fs.symlinkSync(from, path.join(root, rel));
+  });
+}
+// The copy itself: build.js, index.html, fonts and the singletons linked from
+// the repo, a singleton named in `own` written from its text instead, and
+// `fill` to add what the check is about. No project is in it unless `fill`
+// puts one there.
+async function throwaway(own, fill) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-check-'));   // the system's temp folder: one cut short by a quit is cleared by macOS
+  try {
+    fs.copyFileSync(path.join(REPO, 'build.js'), path.join(root, 'build.js'));
+    for (const n of ['index.html', 'fonts', 'node_modules']) fs.symlinkSync(path.join(REPO, n), path.join(root, n));
+    fs.mkdirSync(path.join(root, 'content', 'projects'), { recursive: true });
+    const content = path.join(REPO, 'content');
+    for (const n of ['about.mdoc', 'contact.json', 'site.json', 'sections']) {
+      if (n in own) fs.writeFileSync(path.join(root, 'content', n), own[n]);
+      else if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
+    }
+    fill(root);
     return await sh(process.execPath, [path.join(root, 'build.js')]).then(() => null, e => String(e.message).trim().split('\n').pop().trim());
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
@@ -444,6 +458,41 @@ async function saveProject(slug, v, newBody) {
     const f = path.join(REPO, String(src).replace(/^\/+/, ''));
     if (f.startsWith(mine) && !used.has(src)) fs.rmSync(f, { force: true });
   }
+  return {};
+}
+
+/* ABOUT AND CONTACT — Keystatic's two singletons, in Harvest since UX-2b.
+   Written exactly as Keystatic writes them (AGENTS.md, "The CMS decides the
+   content filenames"): ABOUT is about.mdoc, JSON frontmatter and the
+   description as its Markdoc body; CONTACT is contact.json, plain JSON. The
+   same rules as a project's save: catch up with GitHub, change only the
+   fields the page sent, and run build.js before and after — here on a copy
+   holding the singletons and NO projects, so a broken project anywhere
+   cannot hide what this save does. build.js is what says a field is
+   required (ABOUT's title, detail lines and description; a real email). */
+const SITE_DOCS = {
+  about: { file: 'about.mdoc', set: { title: (n, x) => { n.title = String(x ?? '').trim(); }, details: (n, x) => { n.details = lines(x); } } },
+  contact: { file: 'contact.json', set: { email: (n, x) => { n.email = String(x ?? '').trim(); }, intro: (n, x) => { n.intro = String(x ?? '').trim(); } } },
+};
+function siteDoc(doc) {
+  if (!Object.hasOwn(SITE_DOCS, String(doc))) throw new Error('No such page.');
+  const d = SITE_DOCS[doc];
+  const file = path.join(REPO, 'content', d.file);
+  if (d.file.endsWith('.mdoc')) return { d, file, ...readMdoc(file) };
+  return { d, file, data: JSON.parse(fs.readFileSync(file, 'utf8')) };
+}
+function siteDocData(doc) { const { data, body } = siteDoc(doc); return { doc, data, body }; }
+async function saveSiteDoc(doc, v, newBody) {
+  await catchUp();
+  const { d, file, data, body } = siteDoc(doc);
+  const old = fs.readFileSync(file, 'utf8'), next = { ...data };
+  for (const [k, apply] of Object.entries(d.set)) if (k in v) apply(next, v[k]);
+  const text = body === undefined ? JSON.stringify(next, null, 2) + '\n' : mdocText(next, newBody === undefined ? body : newBody);
+  if (text === old) return { unchanged: true };
+  const [before, after] = await Promise.all([throwaway({ [d.file]: old }, () => {}), throwaway({ [d.file]: text }, () => {})]);
+  if (after && after !== before) throw new Error('Not saved — the site would not build: ' + after);
+  fs.writeFileSync(file, text);
+  unpublished.add(doc);
   return {};
 }
 
@@ -1828,6 +1877,7 @@ const server = http.createServer(async (req, res) => {
       return json(Object.values(state.findings).filter(f => f.project === slug && (hidden || !f.cleared) && present(f.path)));
     }
     if (p === '/api/project' && req.method === 'GET') return json(projectData(url.searchParams.get('project')));
+    if (p === '/api/site' && req.method === 'GET') return json(siteDocData(url.searchParams.get('doc')));
     // a mark as it is, transparency and all: the site's own icons and wordmarks, and uploads waiting for Save
     if (p === '/raw') {
       const q = url.searchParams.get('p') || '';
@@ -1916,6 +1966,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/pagepicture') return json(await pagePicture(b.id));
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
     if (p === '/api/project') return json(await saveProject(b.project, b.data || {}, b.body));
+    if (p === '/api/site') return json(await saveSiteDoc(b.doc, b.data || {}, b.body));
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
     if (p === '/api/preview') { try { return json({ html: preview(b.body) }); } catch (e) { return json({ html: '', error: 'No preview: ' + e.message.split('\n')[0] }); } }
     if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }

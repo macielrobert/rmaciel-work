@@ -252,7 +252,7 @@ in both modes, making the boundary hard to understand.
       frequent queue housekeeping in a secondary menu, explicitly stating
       whether it hides an item or forgets a decision. Rename existing states
       carefully; do not discard history or change recrawl behavior accidentally.
-- [ ] Edit exposes **Content / Images / Layout**, with Project settings for
+- [x] Edit exposes **Content / Images / Layout**, with Project settings for
       grouping, working titles, and share/search information. Reuse existing
       fields and operations. Account for ABOUT, CONTACT and site settings as
       well, so “main editor” does not mean project editing only.
@@ -347,30 +347,56 @@ column as "edited in Keystatic for now". Bring them into Harvest so the main
 editor covers the whole site's copy, not only projects. Site settings are not
 part of this task.
 
-- [ ] **Where:** ABOUT and CONTACT as rows of their own under SITE in the
+- [x] **Where:** ABOUT and CONTACT as rows of their own under SITE in the
       Projects column, replacing the note, chosen like a project (the bar at
       the left). Choosing one opens Edit with a single form and no Images,
       Layout or Settings tabs; Collect does not apply to them.
-- [ ] **Fields, exactly Keystatic's** (`keystatic.config.tsx`, singletons):
+- [x] **Fields, exactly Keystatic's** (`keystatic.config.tsx`, singletons):
       ABOUT is `content/about.mdoc`: title, detail lines, and the description
       as the file's Markdoc body, with the same formatting toolbar as a
       project's description. CONTACT is `content/contact.json`: email address
       and intro copy. No new fields; Keystatic stays the schema of record.
-- [ ] **Saving:** one Save in the project header, written the way Keystatic
+- [x] **Saving:** one Save in the project header, written the way Keystatic
       writes these files (`.mdoc` with JSON frontmatter for ABOUT, plain JSON
       for CONTACT — `AGENTS.md`, "The CMS decides the content filenames").
       Send only the fields changed, catch up with GitHub first, and run
       build.js before and after as `/api/project` does; a save that breaks the
       build writes nothing. *Unsaved changes* and the ask-before-leaving rule
       apply as they do to a project.
-- [ ] **Publish and Preview:** a changed ABOUT or CONTACT counts toward
+- [x] **Publish and Preview:** a changed ABOUT or CONTACT counts toward
       Publish under its own name; Preview opens the site with ABOUT or the
       contact form showing.
-- [ ] **Done when:** both can be edited, saved, reopened and previewed in
+- [x] **Done when:** both can be edited, saved, reopened and previewed in
       Harvest; the saved files open unchanged in Keystatic; `node build.js`
       passes. Test on isolated copies only. The real copy is Robert's: the
       placeholder email (`hello@studio.xyz`) and empty intro are content for
       him to fill, tracked in `PUNCH-LIST.md`, not something this task fills.
+
+**Record, 2026-10-10 — Claude. UX-2b DONE.** Branch `ux-2b-about-contact`.
+- **What changed:** ABOUT and CONTACT are rows under SITE at the foot of the
+  Projects column, chosen like a project. Either opens Edit as one form with
+  no tabs, and the header's button names it (Save ABOUT, Save CONTACT). ABOUT
+  is Content's title, detail lines and description, without the kept text;
+  CONTACT is email address and intro copy. The intro's help line says the
+  contact form has no place for it yet — build.js carries it but the site
+  does not show it. Choosing one switches to Edit; Collect shows its "pick a
+  project" state. Server: `GET/POST /api/site`, written as Keystatic writes
+  the files; the build check runs on a copy with every singleton and no
+  projects (`throwaway()`, which `checkAlone()` now shares). Publish names
+  them `about` and `contact`; Preview opens `#about` or `#contact`. A refused
+  save marks the field build.js named, with a sentence saying what to do.
+- **Checks, on an isolated copy:** an empty title and an invalid email are
+  refused with the field marked and nothing written; a description edit and
+  a CONTACT save write only the changed lines (diffs read, the rest
+  byte-for-byte as Keystatic left it — an unchanged save reports nothing to
+  save); reopening shows the saved values; leaving with unsaved changes asks
+  first and Cancel stays, to a page or to a project; Preview points at
+  `#about` / `#contact`; Return on the ABOUT row opens it with the focus
+  ring drawn; a project opened afterwards has its own fields and tabs back.
+  A project save still runs its build check, and still refuses a failing
+  one. `node build.js` passed with the test edits in; they were reverted.
+- **Not checked:** opening the saved files in Keystatic itself — inferred
+  from the files being byte-identical in format to what it wrote.
 
 ### Harvest follow-up — Match source artwork and reuse source text as image data
 
