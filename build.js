@@ -491,6 +491,8 @@ function buildProject(p, label) {
 
   if (p.layout && p.layout !== 'standard') out.layout = p.layout;
   if (p.expand !== undefined && p.expand !== null) out.expand = !!p.expand;
+  // a Collection's pictures whole (the default, so absent) or cropped square
+  if (p.crop) out.crop = true;
 
   /* CARRIED, NOT YET CONSUMED. The CMS collects a per-project share
      description; the share/search metadata that will use it is still open work

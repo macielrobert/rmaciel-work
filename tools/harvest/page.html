@@ -132,8 +132,9 @@
           <label>Intro copy<textarea data-c="intro"></textarea><span class="help">The contact form has no place for this yet; it is kept for when it does.</span></label>
         </div>
         <div class="epanel form" data-tab="layout">
-          <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
+          <label>Layout<select data-p="layout"><option value="standard">Project</option><option value="grid">Collection</option><option value="text">Text</option></select><span class="help">Project: the first picture large, the rest in a strip. Collection: every picture in a grid. Text: words only.</span></label>
           <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
+          <label class="chk"><input type="checkbox" data-p="crop">Crop a collection's pictures to squares <span class="help">off: every picture whole, at its own shape</span></label>
           <div class="field">Grid icon — required to go on the site
             <select data-p="icon_type" aria-label="Kind of grid icon"><option value="glyph">Typed character</option><option value="image">Image (PNG or SVG)</option></select>
             <input data-p="icon_glyph" placeholder="One character" aria-label="Icon character">

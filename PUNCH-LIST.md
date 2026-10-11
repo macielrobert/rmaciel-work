@@ -98,9 +98,14 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
 - [ ] **Combinatorial layout test with the real copy** — a one-line summary and
       an over-long title, in every layout, both orientations. This is the class
       of bug that placeholder copy hides completely.
-- [ ] Once no project relies on them, delete the ~120 lines of placeholder
+      **UX-4, 2026-10-11:** run on an isolated copy — an over-long title (it
+      ran under the ×; fixed), long copy, sparse projects, in Project,
+      Collection and Text, landscape and portrait. Repeat with the real copy
+      once it is in.
+- [x] Once no project relies on them, delete the ~120 lines of placeholder
       generators in `index.html` (`placeholderImages`, `placeholderWordmark`,
-      `makeTestPNG`, the `SVG_*` shapes)
+      `makeTestPNG`, the `SVG_*` shapes) — **done in UX-4**: a project with no pictures now
+      opens as Text, with nothing standing in
 - [ ] **Delete `big-deal-project`** — a test entry written while proving the
       editor. It is on the live site.
 - [ ] **Check formatted copy through the character churn.** `spanify()` walks
