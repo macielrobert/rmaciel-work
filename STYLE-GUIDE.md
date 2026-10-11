@@ -157,7 +157,7 @@ selection.
 | **Primary** | filled ink, background-colour text | the one action a region exists for: **Save project**, **Publish**. At most one per region |
 | **Secondary** | 1px `--edge` outline, ink text | every other action: Preview, Move to…, Turn left |
 | **Quiet** | `--text-2` text, no outline | frequent or minor actions that should not compete: Clear selection, Remove, Stop, Show details |
-| **Tab or toggle** | `--text-2`; chosen = ink **plus a 1px line under it** | a choice between views: Collect / Edit, Grid / List, S M L |
+| **Tab or toggle** | `--text-2`; chosen = ink **plus the zigzag under it** (below) | a choice between views: Collect / Edit, Grid / List, S M L |
 | **List row** | `--text-2`; chosen = ink **plus a 2px bar at its left** | the projects list, the folder tree |
 | **Tile** | chosen = ticked box **plus a 1px ink frame** | works in the grid |
 
@@ -175,7 +175,7 @@ the sibling row and SEND. Only their grey and their focus mark change.
 | Primary | filled ink | 80% strength | 1px ink outline, 2px out | — | dashed `--edge` outline, `--text-2` text |
 | Secondary | `--edge` outline | ink outline | 1px ink outline, 2px out | — | dashed `--rule` outline, `--text-2` text |
 | Quiet | `--text-2` | ink | 1px ink outline, 2px out | — | `--text-2` text, dashed `--rule` underline |
-| Tab or toggle | `--text-2` | ink | 1px ink outline, 2px out | ink + line under | `--text-2` text, dashed `--rule` underline |
+| Tab or toggle (Harvest) | `--text-2` | ink | ink + **bold zigzag**, no outline | ink + zigzag | `--text-2` text, dashed `--rule` underline |
 | List row | `--text-2` | ink | 1px ink outline, inside | ink + bar at left | `--text-2` text, dashed `--rule` underline |
 | Field | `--edge` line | ink line | the line doubled, in ink | — | dashed `--rule` line |
 | Footer label (site) | `--text-2` | ink | ink + **bold zigzag**, no outline | ink + zigzag | — |
@@ -190,10 +190,10 @@ The rules behind the table:
   ring was the grey that measured 2.78:1 on white.
 - **A control that already carries a line thickens that line for focus**
   instead of adding an outline, which would double the mark. A field doubles
-  its underline, and a footer label draws its zigzag in bold.
+  its underline, and a footer label or a Harvest tab draws its zigzag in bold.
 - **A chosen item carries a mark as well as a tone**: a line, a bar, a frame
-  and a tick, or, in the site's footer only, the zigzag. In Harvest, tone
-  alone is never the only signal.
+  and a tick, or, under the site's footer labels and Harvest's tabs, the
+  zigzag. In Harvest, tone alone is never the only signal.
 - **Disabled stays readable; DASHED says unavailable.** You should be able to
   read what a button would do once it becomes available, so its words stay
   `--text-2` (4.6:1), never the decorative `--rule` (1.68:1 on white), which
@@ -202,13 +202,19 @@ The rules behind the table:
   disabled field already carried, and hover no longer changes it. Where the
   reason is not obvious, the control's tooltip or the place it lives says it.
 
-## The chosen footer label: the zigzag
+## The chosen footer label and Harvest tab: the zigzag
 
 **LIVE, 2026-10-10.** Robert drew it; the third draft has his corrections.
 
 - **Where:** under the chosen label in the site's footer: ALL, the section
-  labels, and ABOUT or CONTACT while open. **Nowhere else**: not on the
-  site's other controls, and not in Harvest, whose tabs keep a straight line.
+  labels, and ABOUT or CONTACT while open; and under the chosen tab in
+  Harvest (Collect / Edit, Content / Images / Layout / Settings, Pending /
+  Kept / Rejected, Grid / List, S M L, Preview's sources), which had a
+  straight line until Robert asked for the matching zigzag (2026-10-10).
+  **Nowhere else**: not on the site's other controls. In Harvest it keeps
+  the same 3px and 6px tooth at 13px as at the footer's 11px — whole pixels,
+  so the stroke stays sharp — and the same images, copied into `page.css`
+  under the same names for `check-tokens.js` to compare.
   Where the sections are in the wheel (on phones once there are more than
   three), the wheel's lit centre slot marks the chosen section and the
   zigzag stays with ABOUT and CONTACT.
@@ -325,7 +331,8 @@ Copying is cheap, and the check is what keeps the copies honest.
 3. **The chosen footer label: a zigzag**, not a straight line, with 90°
    vertices. Corrected after the second draft: half the x-height (3px),
    bold for keyboard focus in place of an outline, and in the footer only.
-   **Live.**
+   **Live.** Extended to Harvest's tabs the same day, at his request, with
+   the same bold focus.
 4. **The site's body text: 12px.** It is adopted with **UX-4**, because the
    body size moves the window's layout and UX-4 rebuilds that anyway.
 5. **A keyboard focus outline on the site's controls: yes**, except the
