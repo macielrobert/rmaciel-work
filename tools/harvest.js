@@ -197,9 +197,15 @@ function writeMdoc(file, data, body) {
      4. Pushed as a branch, harvest/<time>; a pull request opened and merged.
      5. Not "published" until it is. Netlify reports nothing to GitHub for a
         production deploy, so the live page is fetched until it is byte for
-        byte the page step 3 built — identical when checked, 2026-10-11. Ten
+        byte the page step 3 built — identical when checked, 2026-10-11 — and
+        so is every picture this publish adds or replaces: a picture replaced
+        at the same address leaves the page identical, and the page alone
+        called the OLD deploy live (Codex's review of UX-3, 2026-10-11). Ten
         minutes without a match is reported as not confirmed, with the deploy
         preview's verdict when that failed (it is built from the same commit).
+        A publish that changes nothing a visitor is served (a held-back
+        project, working titles) matches at once: what visitors see is what
+        was sent.
    Until the merge, a failure undoes the commit, so the changes still show as
    waiting; a merge GitHub refuses leaves the pull request open, and says so.
    Which projects are waiting is read from git at start and after a publish,
@@ -343,6 +349,9 @@ async function publishSteps() {
     let html;
     try { html = await buildCommit(); }
     catch (e) { throw new Error('Nothing was published: the site would not build — ' + lastLine(e) + ' Everything is still saved on this Mac; fix that, save, and publish again.'); }
+    // what visitors are served once it is live, by address: the page, and every picture added or replaced
+    const expect = { '': digest(html) };
+    for (const f of (await git('diff', '--name-only', '--no-renames', '--diff-filter=AM', 'origin/main', 'HEAD', '--', 'images')).split('\n').filter(Boolean)) expect[f] = digest(fs.readFileSync(path.join(REPO, f)));
     set('sending');
     const head = 'harvest/' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     try { await git('push', '-q', 'origin', 'HEAD:refs/heads/' + head); }
@@ -362,7 +371,7 @@ async function publishSteps() {
     }
     await git('push', '-q', 'origin', '--delete', head).catch(() => {});
     await git('pull', '-q', '--ff-only').catch(e => console.warn('after publishing, main did not catch up: ' + lastLine(e)));
-    set('deploying', { pr, url, merged: Date.now(), expect: digest(html) });
+    set('deploying', { pr, url, merged: Date.now(), expect });
     watchDeploy();
     return { message: `Pull request #${pr} merged. Netlify is building the site now — about a minute. The line beside Publish says when visitors can see it.` };
   } catch (e) {
@@ -384,6 +393,15 @@ async function buildCommit() {
     await git('worktree', 'prune').catch(() => {});
   }
 }
+// Every address in `expect` as the live site serves it now. The page first:
+// until a deploy lands it is the one that differs, so most checks stop there.
+async function liveMatches(expect) {
+  for (const [rel, want] of Object.entries(expect)) {
+    const r = await fetch(LIVE + encodeURI(rel) + '?harvest=' + Date.now(), { headers: UA, redirect: 'follow' });
+    if (!r.ok || digest(Buffer.from(await r.arrayBuffer())) !== want) return false;
+  }
+  return true;
+}
 // LIVE YET? Checked at once, then every 15 s, for ten minutes from the merge.
 // Also run at start, so a publish Harvest was closed during is still followed.
 let watching = false;
@@ -393,7 +411,7 @@ async function watchDeploy() {
   try {
     const p = () => state.publish;
     while (p()?.stage === 'deploying') {
-      try { if (digest(await fetchText(LIVE + '?harvest=' + Date.now())) === p().expect) { state.publish = { ...p(), stage: 'live', live: Date.now() }; persist(); return; } }
+      try { if (await liveMatches(p().expect)) { state.publish = { ...p(), stage: 'live', live: Date.now() }; persist(); return; } }
       catch (e) { console.warn('could not read the live site: ' + e.message); }
       if (Date.now() - p().merged > DEPLOY_WAIT) break;
       await new Promise(r => setTimeout(r, 15000));

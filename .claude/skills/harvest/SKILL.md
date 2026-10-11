@@ -69,7 +69,8 @@ remembers `imgView` (Grid by default) and Edit its tab as `etab`.
    onto GitHub's main, runs build.js on exactly that commit (a worktree in the
    system temp folder), pushes it as `harvest/<time>`, opens a pull request
    with `gh` and merges it (`main` refuses a direct push), and fetches the
-   live page until it matches the page it built, for ten minutes. It refuses
+   live page — and every picture it adds or replaces — until they match what
+   it built, for ten minutes. It refuses
    on a branch other than main, or with a commit ahead of GitHub that is not
    "Harvest:" — those would ride along. Before the merge a failure undoes the
    commit; a refused merge leaves the pull request open and says so.
@@ -317,7 +318,9 @@ Unsaved fields (UX-3, 2026-10-11) are KEPT, not asked about: the form is
 sent to `/api/draft` after a 400 ms pause (and on `pagehide`) as `{ base, now }`,
 and a project or page opened again puts back only the fields the draft
 changed, so a field edited on the phone since keeps its newer value. Switching
-project, mode, or quitting loses nothing, and nothing asks. Save project's own
+project, mode, or quitting loses nothing, and nothing asks. The form is let go
+only once Harvest holds the draft (`draftStored`): if it cannot be stored, the
+switch does not happen and the status line says why. Save project's own
 saves send `draft: true`, which drops it once written; **Discard unsaved
 fields** drops it after a confirm(). A right-click Rename or Hold back saves one
 field and leaves the draft be. An upload a draft names is not swept. Until

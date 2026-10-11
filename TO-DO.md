@@ -563,6 +563,25 @@ describe it. No content touched; nothing published.
   content goes; the review names it all); reverting the works to the file
   (Discard covers typed fields only).
 
+**Review fixes, 2026-10-11 — Claude**, for Codex's two findings on PR #48.
+Branch `ux-3-review-fixes`.
+- **P1, a draft that could not be stored was lost on switching.** Leaving a
+  project let go of the form at once, and a refused draft request was only
+  said in the status line. The form is now let go only once Harvest holds the
+  draft; if it cannot be stored, Harvest stays on that project, edits in the
+  form, and says so. A pending or failed draft is sent again before leaving,
+  and an answer for an older draft cannot mark a newer one stored. Checked
+  in the browser with the draft request made to fail: clicking another
+  project, and the right-click Project settings, both stayed with the edit
+  intact; with storage back, the switch went through and the edit returned.
+- **P2, a picture replaced at the same address was called live too soon.**
+  The page alone stays byte-identical, so the OLD deploy matched. The live
+  check now also compares every picture the publish adds or replaces. Checked
+  on the rig: an SVG icon changed in place, page identical to the old deploy
+  (compared), no deploy — still *deploying* after 20 s; the new build served
+  — *Published* within 15 s.
+- **In passing:** "Created X as a draft" now says "held back", like the rest.
+
 ### UX-4 — Refine the site's content layouts
 
 **Finding:** Standard puts the image left and text right, then expanded viewing
