@@ -687,26 +687,97 @@ grid, wrapping returns.
 description preview uses 13px type against the site's 11px and loads fewer font
 styles. The editor can therefore show a different composition from the result.
 
-- [ ] Show formatted description editing directly, keeping the current Markdoc
+- [x] Show formatted description editing directly, keeping the current Markdoc
       vocabulary and Keystatic compatibility. Select an editor approach on its
       merits; editor dependencies must not reach the public site. Preserve all
       supported marks, lists, links, quotes, and dividers through save/reopen.
-- [ ] Use the actual site rendering for page preview and distinguish **Editing
+- [x] Use the actual site rendering for page preview and distinguish **Editing
       preview**, **Saved preview**, and **Live**. An editing preview must include
       pending edits without silently saving them into the project or publishing.
       Until it exists, label the saved preview accurately.
-- [ ] Provide a large preview mode plus optional side-by-side viewing, desktop
+- [x] Provide a large preview mode plus optional side-by-side viewing, desktop
       and phone sizes, and layout choices with useful visual examples. Changing
       the editor's pane width must not masquerade as a chosen device size.
-- [ ] Make selecting content and seeing its result a short round trip. Match
+- [x] Make selecting content and seeing its result a short round trip. Match
       fonts, formatting, image order, crop behavior, and layout with the site;
       remove competing approximate previews or identify their limited purpose.
-- [ ] Preserve the preview's separate origin and prevent editing previews from
+- [x] Preserve the preview's separate origin and prevent editing previews from
       overwriting `dist/` used by another process. Check responsiveness during
       edits and project switches; do not rebuild expensively per keystroke.
 
 **Done when:** save/reopen produces the composition shown in the editing preview,
 and the interface never confuses pending edits, saved files, and the live site.
+
+**Record, 2026-10-11 — Claude. UX-5 DONE, pending Robert's look.** Branch
+`ux-5-editing-preview`. Scope: Harvest (`tools/`), one line of `build.js`
+(it lends its description renderer to the new check when required, and runs
+as before when run), the docs. The site's `index.html` is untouched; no
+content touched; nothing published.
+- **Description, formatted.** Edit › Content shows the description as the
+  site sets it — PP Neue Montreal 12px / 1.7 / .02em at the 31em measure,
+  the site's rules for every mark, list, quote, divider and link — and the
+  toolbar formats it (pressed buttons carry the zigzag). Engine: ProseMirror,
+  chosen because Keystatic is built on it (already installed, no new package;
+  the two editors agree on what a description is) and because a hand-rolled
+  contenteditable writes different markup per browser and breaks undo.
+  Written with Markdoc's own `format()`, as Keystatic does, plus escaping
+  (format() prints `*` and `{%` as typed). Served to the page from
+  node_modules as browser modules — no bundler; nothing reaches the site.
+  **Markdoc text** is one click away, and a description the editor cannot
+  hold (inline code, a block-level tag) opens there with a note: nothing is
+  dropped. An untouched description is never rewritten.
+- **Three previews.** **Editing preview** = the site with the chosen
+  project's (or ABOUT's) unsaved fields and its works as Images has them —
+  order, removals, captions, turns, pictures not yet copied in (stand-ins);
+  a held-back project is shown and labelled. **Saved preview** = the files on
+  this Mac. **Live**. Both local ones build in a throwaway copy, so looking
+  saves nothing, publishes nothing, and no longer rebuilds `dist/` in place.
+  Each label says what it is in the message line.
+- **Sizes.** Desktop 1280×800 and Phone 390×844, drawn at that size and
+  scaled to fit (the line says the scale), so a narrow pane never passes for
+  a phone. **Beside** (the pane) or **Large** (over the work, Projects kept).
+- **Round trip.** The Editing preview rebuilds ~0.7 s after typing pauses —
+  never per keystroke; a build is ~0.1 s. Picking a work in Images opens that
+  picture in the preview without a build, and it stays open through rebuilds.
+- **Layout** is three drawn choices (Project / Collection / Text), arrow keys
+  included; the menu stays the stored value.
+- **Removed:** the unused description-preview endpoint (`/api/preview`) and
+  its copy of build.js's tags, the competing approximate preview.
+- **Checks.** `check-harvest` (now also: the editor modules and every
+  imported package served, and `check-description`), `check-tokens` (now
+  also the body type and the mark sizes in Harvest's editor),
+  `node tools/check-description.mjs`: every description in content/ (40
+  files, ABOUT included; 5 have copy today) and fixtures (every mark, nested list, quote, divider, both line breaks,
+  Markdown punctuation typed as words, whitespace at a mark's edge) render
+  identically through build.js's own renderer and read back unchanged; the
+  check was seen to fail with escaping disabled. In the in-app browser on a
+  scratch Harvest from the worktree (scratch home, stopped by PID): typed,
+  bolded, listed, numbered, quoted, linked, divided — the Markdoc in the
+  file is right each time; Return in a list, Return out of an empty item,
+  Shift-Return, a line starting with "-" escaped. **Save → the saved build
+  is byte-for-byte the Editing preview's build** (DAILY SHAPES: description
+  and layout edits); reopened, the editor shows the same Markdoc, not marked
+  unsaved. BUS STOP: a turned HEIC moved first, a new JPEG, one work
+  removed, a caption — the Editing preview showed that order and those
+  shapes, and after Save the saved build had the same five pictures in the
+  same order with the same shapes and caption (one ratio 0.714 vs 0.715: the
+  1500px stand-in's rounding). Saved preview byte-identical to `node
+  build.js`. 54 characters typed: no rebuild while typing, one after. Four
+  project switches in a row land on the last. ABOUT's draft reached only the
+  Editing preview; the file was untouched. Desktop and Phone, Beside and
+  Large, light and dark. Test writes in the worktree reverted; no `dist/`
+  created; Robert's Harvest (and his working copy) not touched.
+- **For Robert to judge:** the default pane is 420px wide, where Desktop is
+  drawn at about a third — Large is the way to read it; the layout
+  drawings; Phone at 390×844 (iPhone size; Safari's bars take some of it).
+- **Known limits.** In the editor two typed spaces show as two (ProseMirror
+  needs `pre-wrap`); the site shows one. No button nests a list (a nested
+  list from Keystatic opens and saves fine). Live is the deployed site, so
+  in the Phone size it is a phone's width, not its touch. A loose list
+  (blank lines between items, hand-typed) is written back tight — it looks
+  the same on the site. Not yet tried in Harvest.app's WebKit itself, only
+  the in-app browser: import maps and modules need Safari 16.4+, which macOS
+  26 has.
 
 ### UX-6 — Sequence and acceptance journey
 

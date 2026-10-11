@@ -2,6 +2,14 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Harvest</title>
 <link rel="stylesheet" href="/page.css">
+<!-- the description editor's packages, served by harvest.js from node_modules
+     (VENDOR there lists the same names; check-harvest.js fetches each) -->
+<script type="importmap">{ "imports": {
+  "prosemirror-model": "/vendor/prosemirror-model", "prosemirror-state": "/vendor/prosemirror-state",
+  "prosemirror-view": "/vendor/prosemirror-view", "prosemirror-transform": "/vendor/prosemirror-transform",
+  "prosemirror-commands": "/vendor/prosemirror-commands", "prosemirror-history": "/vendor/prosemirror-history",
+  "prosemirror-keymap": "/vendor/prosemirror-keymap", "orderedmap": "/vendor/orderedmap",
+  "rope-sequence": "/vendor/rope-sequence", "w3c-keyname": "/vendor/w3c-keyname", "@markdoc/markdoc": "/vendor/@markdoc/markdoc" } }</script>
 <!-- THE SHELL (UX-2, 2026-10-10). Each kind of control has one home
      (STYLE-GUIDE.md, Placement):
        application header  Collect / Edit, background activity, Publish and how the last one went
@@ -118,9 +126,16 @@
           <div class="fields">
             <label>Title<input data-p="title"></label>
             <label>Detail lines <span class="help">one per line</span><textarea data-p="details"></textarea></label>
+            <!-- THE DESCRIPTION (UX-5): formatted, in the site's own type (#pdesc,
+                 editor.mjs), with the Markdoc it is saved as one click away
+                 (#pbody, which stays the value page.js reads and saves) -->
             <div class="field">Description
-              <div id="mdbar"><button class="btn quiet" data-md="bold"><b>B</b></button><button class="btn quiet" data-md="italic"><i>I</i></button><button class="btn quiet" data-md="underline"><u>U</u></button><button class="btn quiet" data-md="strike"><s>S</s></button><button class="btn quiet" data-md="light">Lighter</button><button class="btn quiet" data-md="small">Smaller</button><button class="btn quiet" data-md="large">Larger</button><button class="btn quiet" data-md="link">Link</button><button class="btn quiet" data-md="list">• List</button><button class="btn quiet" data-md="numbered">1. List</button><button class="btn quiet" data-md="quote">Quote</button><button class="btn quiet" data-md="divider">Divider</button></div>
-              <textarea id="pbody" placeholder="Select words, then a formatting button above." aria-label="Description"></textarea>
+              <div id="mdbar" role="toolbar" aria-label="Formatting"><button class="btn quiet" data-md="bold" title="Bold (⌘B)"><b>B</b></button><button class="btn quiet" data-md="italic" title="Italic (⌘I)"><i>I</i></button><button class="btn quiet" data-md="underline" title="Underline (⌘U)"><u>U</u></button><button class="btn quiet" data-md="strike" title="Strikethrough"><s>S</s></button><button class="btn quiet" data-md="light">Lighter</button><button class="btn quiet" data-md="small">Smaller</button><button class="btn quiet" data-md="large">Larger</button><button class="btn quiet" data-md="link" title="Link (⌘K)">Link</button><button class="btn quiet" data-md="list">• List</button><button class="btn quiet" data-md="numbered">1. List</button><button class="btn quiet" data-md="quote">Quote</button><button class="btn quiet" data-md="divider">Divider</button><span class="push"></span><button class="btn quiet" id="descmode" aria-pressed="false" title="The description as the Markdoc it is saved in. Keystatic reads the same.">Markdoc text</button></div>
+              <div id="mdlink" hidden><input id="mdlinkurl" type="url" aria-label="Link address" placeholder="https://"><button class="btn" id="mdlinkgo">Link</button><button class="btn quiet" id="mdunlink">Remove link</button><button class="btn quiet" id="mdlinkno">Cancel</button></div>
+              <p class="help" id="descnote" hidden></p>
+              <div id="pdesc" hidden></div>
+              <textarea id="pbody" placeholder="Select words, then a formatting button above." aria-label="Description as Markdoc text"></textarea>
+              <span class="help">Shift-Return starts a new line in the same paragraph.</span>
             </div>
           </div>
           <div class="seam" data-right></div><aside id="texts" data-w="texts"></aside>
@@ -132,7 +147,16 @@
           <label>Intro copy<textarea data-c="intro"></textarea><span class="help">The contact form has no place for this yet; it is kept for when it does.</span></label>
         </div>
         <div class="epanel form" data-tab="layout">
-          <label>Layout<select data-p="layout"><option value="standard">Project</option><option value="grid">Collection</option><option value="text">Text</option></select><span class="help">Project: the first picture large, the rest in a strip. Collection: every picture in a grid. Text: words only.</span></label>
+          <!-- the three layouts as drawings (UX-5); the menu is still the
+               value formValues() reads, hidden, and the drawings set it -->
+          <div class="field">Layout
+            <select data-p="layout" hidden aria-hidden="true" tabindex="-1"><option value="standard">Project</option><option value="grid">Collection</option><option value="text">Text</option></select>
+            <div id="layouts" role="radiogroup" aria-label="Layout">
+              <button class="layout" role="radio" data-layout="standard"><svg viewBox="0 0 120 72" aria-hidden="true"><rect x="8" y="10" width="48" height="36"/><path d="M66 12h40M66 20h28M66 30h44M66 36h44M66 42h30"/><rect x="8" y="54" width="12" height="10"/><rect x="24" y="54" width="12" height="10"/><rect x="40" y="54" width="12" height="10"/><rect x="56" y="54" width="12" height="10"/></svg><b>Project</b><span>The first picture large, the facts and words beside it, the rest in a strip under them.</span></button>
+              <button class="layout" role="radio" data-layout="grid"><svg viewBox="0 0 120 72" aria-hidden="true"><path d="M8 12h40M8 19h70"/><rect x="8" y="28" width="22" height="16"/><rect x="34" y="28" width="12" height="16"/><rect x="50" y="28" width="26" height="16"/><rect x="80" y="28" width="16" height="16"/><rect x="8" y="48" width="16" height="16"/><rect x="28" y="48" width="26" height="16"/><rect x="58" y="48" width="12" height="16"/></svg><b>Collection</b><span>A short introduction, then every picture in a grid — whole, or cropped square (below).</span></button>
+              <button class="layout" role="radio" data-layout="text"><svg viewBox="0 0 120 72" aria-hidden="true"><path d="M8 12h40M8 24h66M8 30h70M8 36h62M8 42h70M8 48h40"/></svg><b>Text</b><span>Words only, in one reading column. What a project with no pictures shows anyway.</span></button>
+            </div>
+          </div>
           <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
           <label class="chk"><input type="checkbox" data-p="crop">Crop a collection's pictures to squares <span class="help">off: every picture whole, at its own shape</span></label>
           <div class="field">Grid icon — required to go on the site
@@ -177,12 +201,23 @@
     </div>
   </section>
   <!-- PREVIEW: the site, in a frame that cannot leave it (see loadPreview in page.js) -->
+  <!-- PREVIEW (UX-5): which version (Editing preview / Saved preview / Live),
+       which screen (Desktop / Phone, drawn at that size and scaled to fit, so
+       the pane's width is never mistaken for a device's), and how big (Beside
+       the work, or Large over it). See loadPreview in page.js. -->
   <div class="seam" data-right></div><aside id="preview" data-w="preview">
-    <div class="prevhead"><span id="prevsrc"><button class="btn tab" data-src="written" title="Built from the files on this Mac each time it loads: what Publish would put live">Last saved</button><button class="btn tab" data-src="live" title="What visitors see now">Live</button></span> <button class="btn quiet" id="prevreload">Reload</button> <span class="help" id="prevmsg"></span></div>
-    <iframe id="prevframe" title="Site preview"></iframe>
+    <div class="prevhead">
+      <span id="prevsrc" role="group" aria-label="Which version"><button class="btn tab" data-src="edit" title="The site with this project's unsaved edits in place. Nothing is saved or published by looking.">Editing preview</button><button class="btn tab" data-src="saved" title="The site as saved on this Mac: what Publish would put live">Saved preview</button><button class="btn tab" data-src="live" title="What visitors see now">Live</button></span>
+      <span id="prevdev" role="group" aria-label="Screen"><button class="btn tab" data-dev="desktop" title="A laptop window, 1280 × 800">Desktop</button><button class="btn tab" data-dev="phone" title="A phone held upright, 390 × 844">Phone</button></span>
+      <span id="prevsize" role="group" aria-label="Preview size"><button class="btn tab" data-size="beside" title="Beside the work, to edit and look at once">Beside</button><button class="btn tab" data-size="large" title="Over the work, as large as the window allows">Large</button></span>
+      <button class="btn quiet" id="prevreload">Reload</button>
+      <span class="help" id="prevmsg"></span>
+    </div>
+    <div id="prevstage"><div id="prevscreen"><iframe id="prevframe" title="Site preview"></iframe></div></div>
   </aside>
 </main>
 <!-- the right-click menu, filled by openMenu() in page.js -->
 <div id="menu" hidden></div>
 <script src="/page.js"></script>
+<script type="module" src="/editor.mjs"></script>
 </html>

@@ -509,6 +509,8 @@ function newSection(title) {
    (<field>.<ext>). Uploading alone changes nothing on the site. */
 const UPLOADS = path.join(STORE, 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
+const PREVIEWS = path.join(STORE, 'preview');   // the Editing preview's stand-ins for pictures not saved yet (standIn)
+fs.mkdirSync(PREVIEWS, { recursive: true });
 const MOVED = path.join(STORE, 'moved');   // site pictures moved to another project, until that project's Save (organizeOp)
 fs.mkdirSync(MOVED, { recursive: true });
 // Harvest's own temporary copies, swept at every start. A moved picture is
@@ -520,6 +522,7 @@ function sweep() {
   for (const n of fs.readdirSync(MOVED)) if (!live.has(path.join(MOVED, n))) fs.rmSync(path.join(MOVED, n), { force: true });
   const drafted = JSON.stringify(state.drafts || {});   // an upload an unsaved draft still names is not abandoned
   for (const n of fs.readdirSync(UPLOADS)) { const f = path.join(UPLOADS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5 && !drafted.includes(f)) fs.rmSync(f, { force: true }); }
+  for (const n of fs.readdirSync(PREVIEWS)) { const f = path.join(PREVIEWS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5) fs.rmSync(f, { force: true }); }   // made again when wanted
 }
 const dropDraft = (k) => { if (state.drafts?.[k]) { delete state.drafts[k]; persist(); } };
 const MARK_EXT = new Set(['.png', '.svg']);   // alpha is the shape: build.js refuses anything else for an icon
@@ -569,8 +572,9 @@ async function checkAlone(slug, text, uploads, tied) {
 // The copy itself: build.js, index.html, fonts and the singletons linked from
 // the repo, a singleton named in `own` written from its text instead (null:
 // left out, for `fill` to provide), and `fill` to add what the check is
-// about. No project is in it unless `fill` puts one there.
-async function throwaway(own, fill) {
+// about. No project is in it unless `fill` puts one there. `after` reads what
+// the build made, before the copy goes (the Preview pane's page).
+async function throwaway(own, fill, after) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-check-'));   // the system's temp folder: one cut short by a quit is cleared by macOS
   try {
     fs.copyFileSync(path.join(REPO, 'build.js'), path.join(root, 'build.js'));
@@ -582,12 +586,14 @@ async function throwaway(own, fill) {
       else if (fs.existsSync(path.join(content, n))) fs.symlinkSync(path.join(content, n), path.join(root, 'content', n));
     }
     fill(root);
-    return await sh(process.execPath, [path.join(root, 'build.js')]).then(() => null, e => String(e.message).trim().split('\n').pop().trim());
+    return await sh(process.execPath, [path.join(root, 'build.js')]).then(() => { after?.(root); return null; }, e => String(e.message).trim().split('\n').pop().trim());
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
-async function saveProject(slug, v, newBody) {
-  await catchUp();
+// What a save of these fields would make of the project's file, written
+// nowhere: Save writes it, the Editing preview builds it (UX-5). Throws what
+// a field refuses, in the words Save shows.
+function projectEdit(slug, v, newBody) {
   const file = projectFile(slug);
   const old = fs.readFileSync(file, 'utf8');
   const { data, body } = readMdoc(file);
@@ -627,7 +633,12 @@ async function saveProject(slug, v, newBody) {
     // old file goes, because build.js ships everything under images/
     if (data[k] && data[k] !== next[k]) gone.push(data[k]);
   }
-  const text = mdocText(next, newBody === undefined ? body : newBody);
+  const nextBody = newBody === undefined ? body : newBody;
+  return { file, old, data, next, body: nextBody, text: mdocText(next, nextBody), uploads, gone };
+}
+async function saveProject(slug, v, newBody) {
+  await catchUp();
+  const { file, old, data, next, body, text, uploads, gone } = projectEdit(slug, v, newBody);
   if (text === old && !uploads.length) return { unchanged: true };
 
   const tied = tiedTo(slug, [data.part_of, next.part_of]);
@@ -644,7 +655,7 @@ async function saveProject(slug, v, newBody) {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.copyFileSync(from, to);
     }
-    writeMdoc(file, next, newBody === undefined ? body : newBody);
+    writeMdoc(file, next, body);
   } catch (e) {
     for (const [f, bytes] of backups) if (bytes) fs.writeFileSync(f, bytes); else fs.rmSync(f, { force: true });
     fs.writeFileSync(file, old);
@@ -701,12 +712,16 @@ const standInSection = (root) => {
   fs.mkdirSync(path.join(root, 'content', 'sections'));
   fs.writeFileSync(path.join(root, 'content', 'sections', 'check.json'), JSON.stringify({ title: 'CHECK', order: 1 }));
 };
-async function saveSiteDoc(doc, v, newBody) {
-  await catchUp();
+// as projectEdit, for ABOUT or CONTACT
+function siteDocEdit(doc, v, newBody) {
   const { d, file, data, body } = siteDoc(doc);
   const old = fs.readFileSync(file, 'utf8'), next = { ...data };
   for (const [k, apply] of Object.entries(d.set)) if (k in v) apply(next, v[k]);
-  const text = body === undefined ? JSON.stringify(next, null, 2) + '\n' : mdocText(next, newBody === undefined ? body : newBody);
+  return { d, file, old, text: body === undefined ? JSON.stringify(next, null, 2) + '\n' : mdocText(next, newBody === undefined ? body : newBody) };
+}
+async function saveSiteDoc(doc, v, newBody) {
+  await catchUp();
+  const { d, file, old, text } = siteDocEdit(doc, v, newBody);
   if (text === old) return { unchanged: true };
   // this file as it is and as the save leaves it, each among stand-ins; a
   // failure it already had does not block a save that leaves it the same, as
@@ -726,20 +741,6 @@ function upload(name, b64) {
   const out = path.join(UPLOADS, id(name, Date.now()) + e);
   fs.writeFileSync(out, Buffer.from(String(b64 || ''), 'base64'));
   return out;
-}
-
-/* PREVIEW of a description, with the site's own parser (the repo's
-   @markdoc/markdoc, installed for build.js). The tags below MIRROR
-   markdocTags() in build.js — they only shape this preview; what reaches the
-   site is decided by build.js, which Save runs. Change one, change both. */
-let Markdoc = null;
-function preview(src) {
-  Markdoc ||= require(path.join(REPO, 'node_modules', '@markdoc', 'markdoc'));
-  const M = Markdoc;
-  const wrap = (el, cls) => ({ render: el, attributes: {}, transform: (node, config) => new M.Tag(el, cls ? { class: cls } : {}, node.transformChildren(config)) });
-  const tags = { light: wrap('span', 'w-l'), small: wrap('span', 't-s'), large: wrap('span', 't-l'), underline: wrap('u', null) };
-  const nodes = { softbreak: { transform: () => new M.Tag('br') } };
-  return M.renderers.html(M.transform(M.parse(String(src || '')), { tags, nodes }));
 }
 
 // Kept, not re-read: the page asks for this on every poll, and parsing every
@@ -2123,6 +2124,8 @@ const server = http.createServer(async (req, res) => {
   try {
     const p = url.pathname;
     if (PAGE_FILES[p]) { res.setHeader('cache-control', 'no-store'); return send(200, PAGE_FILES[p][1], fs.readFileSync(path.join(PAGE_DIR, PAGE_FILES[p][0]))); }
+    const pkg = p.startsWith('/vendor/') && decodeURIComponent(p.slice(8));
+    if (pkg && Object.hasOwn(VENDOR, pkg)) return send(200, JS, fs.readFileSync(path.join(REPO, 'node_modules', VENDOR[pkg])));
     // the site's typeface, read from the repo so the two can never drift
     const font = p.match(/^\/fonts\/([\w-]+\.woff2)$/);
     if (font) return send(200, 'font/woff2', fs.readFileSync(path.join(REPO, 'fonts', font[1])));
@@ -2256,7 +2259,6 @@ const server = http.createServer(async (req, res) => {
       return json({ ok: true });
     }
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
-    if (p === '/api/preview') { try { return json({ html: preview(b.body) }); } catch (e) { return json({ html: '', error: 'No preview: ' + e.message.split('\n')[0] }); } }
     if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
     if (p === '/api/newsection') { await catchUp(); return json({ slug: newSection(b.title) }); }
     if (p === '/api/crawlsite') {
@@ -2356,32 +2358,132 @@ if (state.publish?.stage === 'deploying') watchDeploy();
 else if (['checking', 'sending', 'merging'].includes(state.publish?.stage)) state.publish = { ...state.publish, stage: 'failed', message: 'Harvest was closed while publishing. What was saved is still on this Mac' + (state.publish.pr ? `, and pull request #${state.publish.pr} may be open on GitHub` : '') + ' — review and publish again.' };
 
 /* ---------------------------------------------------------- preview */
-/* THE SITE ITSELF, for Organize's Preview pane: dist/ as build.js makes it,
-   rebuilt on every load of the page (the build takes ~0.1 s), so it shows the
-   files as Write to project left them, before Publish. On a port of its own,
-   not a route on this server: from Harvest's address the site's script would
-   pass the Origin check every /api/ POST relies on. Not printed:
-   HarvestApp.swift takes the first address this process prints as Harvest's. */
-const DIST = path.join(REPO, 'dist');
-let building = Promise.resolve();
-// one build at a time: Publish and a preview load both empty dist/ first
-const buildSite = () => (building = building.catch(() => {}).then(() => sh(process.execPath, [path.join(REPO, 'build.js')])));
+/* THE SITE ITSELF, for Edit's Preview pane, three ways (UX-5):
+     Saved preview    the files on this Mac, as Publish would send them
+     Editing preview  the same, with the chosen project's or page's UNSAVED
+                      edits in place: its fields as the draft holds them, and
+                      its works as Images has them — order, removals, alt,
+                      captions, turns, pictures not yet copied in. A held-back
+                      project is shown, so it can be looked at before it goes.
+     Live             the site visitors get (LIVE), loaded by the page itself
+   Both local ones are build.js run on a throwaway copy of the site
+   (throwaway() above), so neither writes a project, publishes anything, or
+   touches dist/ — which belongs to whoever runs build.js in the repo; the
+   preview used to rebuild it in place, emptying it under them. The page is
+   the build's index.html, kept in memory; its fonts and pictures are served
+   from the repo, as the build would have copied them, and a picture not yet
+   saved from a stand-in (standIn below). A build takes ~0.2 s and runs when
+   the pane loads: after a pause in typing, never per keystroke (page.js).
+   On a port of its own, not a route on this server: from Harvest's address
+   the site's script would pass the Origin check every /api/ POST relies on.
+   Not printed: HarvestApp.swift takes the first address this process prints
+   as Harvest's. */
 const SITE_TYPES = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+const PREVIEW_DIR = 'harvest-preview';   // where a build puts what is not saved yet: images/<slug>/harvest-preview/
+const standIns = new Map();              // its address -> the file it stands for, from the last editing build
+
+// A picture not saved yet, as the site could show it: the file itself when
+// build.js reads it as it is (JPEG, PNG, WebP, GIF, not turned); otherwise a
+// 1500px JPEG made by sips — a HEIC or TIFF, a picture on a website, a work
+// turned in Images. What Save copies in may be larger (MAX_SIDE); the shape
+// and the place are the same.
+async function standIn(m, deg) {
+  const from = m.kind === 'web' ? await download(sized(m.path, 1500), path.join(STORE, 'web', id(m.path, 1500) + '.download')) : m.kind === 'site' ? m.file : m.path;
+  if (!deg && m.kind === 'file' && KEEP_EXT.has(ext(from))) return from;
+  const out = path.join(PREVIEWS, id(from, fs.statSync(from).mtimeMs, deg) + '.jpg');
+  if (!fs.existsSync(out)) await sh('sips', ['-Z', '1500', ...(deg ? ['-r', String(deg)] : []), '-s', 'format', 'jpeg', from, '--out', out]);
+  return out;
+}
+// The works as Images has them, as the project's `images` and the stand-ins
+// they need — null when the project was never opened there.
+async function previewWorks(slug) {
+  if (!state.organize?.[slug]) return null;
+  const ms = await members(slug), byKey = new Map(ms.map(m => [m.key, m])), files = [];
+  const keep = state.organize[slug].stacks.filter(t => !t.removed && byKey.has(t.keeper));
+  const images = await Promise.all(keep.map(async (t, i) => {
+    const m = byKey.get(t.keeper);
+    let src = m.src;
+    if (m.kind !== 'site' || t.rotate) {
+      const f = await standIn(m, t.rotate || 0);
+      src = `/images/${slug}/${PREVIEW_DIR}/${i}${ext(f)}`;
+      files.push([src, f]);
+    }
+    // build.js wants alt text and Save asks for it; a preview does not stop for it
+    const rec = { src, alt: String(t.alt || '').trim() || 'Alt text to come' };
+    if (String(t.caption || '').trim()) rec.caption = t.caption.trim();
+    return rec;
+  }));
+  return { images, files };
+}
+// The site's page for `key` — a project's slug or site:about / site:contact,
+// with its unsaved edits — or as saved when key is null: { html } or { error }.
+async function previewBuild(key) {
+  const own = {}, files = [];
+  let slug = null, text = null;
+  if (key) {
+    // the fields the draft changed, as Save would send them (page.js, saveDetails)
+    const dr = state.drafts?.[key], changed = {};
+    if (dr) for (const k in dr.now) if (JSON.stringify(dr.now[k]) !== JSON.stringify(dr.base?.[k])) changed[k] = dr.now[k];
+    const { body, ...fields } = changed;
+    if (key.startsWith('site:')) {
+      const doc = key.slice(5);
+      own[siteDoc(doc).d.file] = siteDocEdit(doc, fields, body).text;
+    } else {
+      const e = projectEdit(key, fields, body), next = { ...e.next, draft: false };
+      slug = key;
+      for (const [from, rel] of e.uploads) {   // an icon or wordmark chosen, not saved
+        const src = `/images/${slug}/${PREVIEW_DIR}/${path.basename(rel)}`;
+        for (const k of ['icon_image', 'wordmark']) if (next[k] === '/' + rel) next[k] = src;
+        files.push([src, from]);
+      }
+      const w = await previewWorks(slug);
+      if (w) { next.images = w.images; files.push(...w.files); }
+      text = mdocText(next, e.body);
+    }
+  }
+  let html = null;
+  const error = await throwaway(own, (root) => {
+    for (const f of fs.readdirSync(PROJECTS).filter(f => f.endsWith('.mdoc'))) {
+      const to = path.join(root, 'content', 'projects', f);
+      // copied, not linked: build.js lists the projects folder and takes real files only
+      if (f === slug + '.mdoc') fs.writeFileSync(to, text); else fs.copyFileSync(path.join(PROJECTS, f), to);
+    }
+    // each folder linked, so build.js measures the pictures without copying
+    // them — and the edited project's a folder of its own, so a stand-in is
+    // never written into the repo through a link
+    const IMG = path.join(REPO, 'images');
+    fs.mkdirSync(path.join(root, 'images'));
+    for (const n of fs.existsSync(IMG) ? fs.readdirSync(IMG) : []) if (n !== slug) fs.symlinkSync(path.join(IMG, n), path.join(root, 'images', n));
+    if (!slug) return;
+    const mine = path.join(root, 'images', slug), dir = path.join(IMG, slug);
+    fs.mkdirSync(path.join(mine, PREVIEW_DIR), { recursive: true });
+    for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) fs.symlinkSync(path.join(dir, n), path.join(mine, n));
+    for (const [src, from] of files) fs.symlinkSync(from, path.join(root, src));
+  }, (root) => { html = fs.readFileSync(path.join(root, 'dist', 'index.html'), 'utf8'); });
+  for (const [src, from] of files) standIns.set(src, from);
+  return error ? { error } : { html };
+}
 let PREVIEW = '';
 const previewServer = http.createServer(async (req, res) => {
   try {
-    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const u = new URL(req.url, 'http://x'), rel = decodeURIComponent(u.pathname);
     if (rel === '/' || rel === '/index.html') {
-      try { await buildSite(); }
-      catch (e) {
+      const key = u.searchParams.get('edit');
+      let r;
+      try { r = await previewBuild(key && /^(site:)?[a-z0-9-]+$/.test(key) ? key : null); } catch (e) { r = { error: e.message }; }
+      if (r.error) {
         // what build.js said, so the pane explains itself instead of going blank
-        const why = String(e.message).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-        res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
-        return res.end('<pre style="font:12px/1.6 -apple-system,sans-serif;padding:16px;white-space:pre-wrap">The site would not build, so there is nothing to preview. Save project says why too.\n\n' + why + '</pre>');
+        const why = String(r.error).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+        res.writeHead(500, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        return res.end('<pre style="font:13px/1.6 -apple-system,sans-serif;padding:16px;white-space:pre-wrap">' + (key ? 'With the unsaved edits the site would not build, so there is nothing to preview. Save project would refuse them for the same reason:' : 'The site would not build, so there is nothing to preview. Save project says why too.') + '\n\n' + why + '</pre>');
       }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(r.html);
     }
-    const abs = path.join(DIST, rel === '/' ? 'index.html' : rel);
-    if (!abs.startsWith(DIST + path.sep) || !fs.statSync(abs, { throwIfNoEntry: false })?.isFile()) { res.writeHead(404); return res.end('not found'); }
+    // what build.js would have copied: fonts/ and images/, never outside them
+    const top = rel.split('/')[1], abs = standIns.get(rel) || path.join(REPO, rel);
+    if (!standIns.has(rel) && (!['fonts', 'images'].includes(top) || !abs.startsWith(path.join(REPO, top) + path.sep))) { res.writeHead(404); return res.end('not found'); }
+    if (!fs.statSync(abs, { throwIfNoEntry: false })?.isFile()) { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, { 'content-type': SITE_TYPES[ext(abs)] || 'application/octet-stream', 'cache-control': 'no-store' });
     fs.createReadStream(abs).pipe(res);
   } catch (e) { console.warn('preview: ' + e.message); res.writeHead(400); res.end(); }
@@ -2405,4 +2507,19 @@ server.listen(0, '127.0.0.1', () => {
    until 2026-10-04; split so the page's script can be syntax-checked on its
    own and edited without escaping in mind. Same bytes, no build step. */
 const PAGE_DIR = path.join(__dirname, 'harvest');
-const PAGE_FILES = { '/': ['page.html', 'text/html; charset=utf-8'], '/page.css': ['page.css', 'text/css; charset=utf-8'], '/page.js': ['page.js', 'text/javascript; charset=utf-8'] };
+const JS = 'text/javascript; charset=utf-8';
+const PAGE_FILES = { '/': ['page.html', 'text/html; charset=utf-8'], '/page.css': ['page.css', 'text/css; charset=utf-8'], '/page.js': ['page.js', JS],
+  '/editor.mjs': ['editor.mjs', JS], '/markdoc-pm.mjs': ['markdoc-pm.mjs', JS] };
+/* THE DESCRIPTION EDITOR'S PACKAGES (UX-5), served from the repo's
+   node_modules as the browser modules they already ship — no bundler, no
+   build step, nothing added to package.json: Keystatic installs ProseMirror,
+   build.js installs Markdoc. page.html's import map names these, one for
+   one; tools/check-harvest.js fetches every name it lists. Only these: the
+   route is not a way to read node_modules. */
+const VENDOR = {
+  'prosemirror-model': 'prosemirror-model/dist/index.js', 'prosemirror-state': 'prosemirror-state/dist/index.js',
+  'prosemirror-view': 'prosemirror-view/dist/index.js', 'prosemirror-transform': 'prosemirror-transform/dist/index.js',
+  'prosemirror-commands': 'prosemirror-commands/dist/index.js', 'prosemirror-history': 'prosemirror-history/dist/index.js',
+  'prosemirror-keymap': 'prosemirror-keymap/dist/index.js', orderedmap: 'orderedmap/dist/index.js',
+  'rope-sequence': 'rope-sequence/dist/index.js', 'w3c-keyname': 'w3c-keyname/index.js', '@markdoc/markdoc': '@markdoc/markdoc/dist/index.mjs',
+};

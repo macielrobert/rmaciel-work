@@ -118,9 +118,11 @@ The rules behind the table:
   size: 372px at 12px. Re-counted when the body went to 12px: 33em held 71
   characters on an average full line, so it came down to 31em, which holds
   66. Never re-tune it by arithmetic.
-- **Descriptions are previewed in the site's own numbers.** Harvest's
-  description preview is set at 13px against the site's 11px today. UX-5 fixes
-  that by reading the same tokens (below).
+- **Descriptions are edited in the site's own numbers** (UX-5). Harvest's
+  description editor sets its words at the site's 12px / 1.7 / .02em, at the
+  same 31em measure, with the site's rules for the marks, lists, quotes and
+  dividers, so a line breaks there where it breaks on the site.
+  `tools/check-tokens.js` compares the body type and the two mark sizes.
 
 ---
 
