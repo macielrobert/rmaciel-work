@@ -163,7 +163,12 @@
   #newp input, #newp select, #news input { margin:0; }
   #newp select { width:auto; }
   #newp #newgo { grid-column:1 / -1; }
-  #news { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
+  /* The two buttons that repeat what was typed — Create "…" in BUILD, Add
+     section "…" — wrap, as the tree's do. On one line a long title ran out
+     of the button and across the column's edge. */
+  #newgo, #newsecgo { white-space:normal; overflow-wrap:anywhere; text-align:left; padding-top:4px; padding-bottom:4px; }
+  /* under its field, as Create project is: beside it, a long name typed made the button take the row and the field 0px wide */
+  #news { display:grid; gap:8px; }
 
   /* PROJECT HEADER */
   #work { display:flex; flex-direction:column; min-width:0; }
