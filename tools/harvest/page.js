@@ -101,20 +101,31 @@ function drawProjects() {
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d || e.target.closest('.rename')) return;
-  leaveForm(d.dataset.s);
+  chooseProject(d.dataset.s);
+});
+// false when it stayed: the fields there hold edits Harvest could not keep
+async function chooseProject(slug) {
+  if (!await leaveForm(slug)) return false;
   save();   // anything typed on the previous project goes before its cards do
-  project = d.dataset.s; doc = null; markDocs(); tell('');
+  project = slug; doc = null; markDocs(); tell('');
   shown = 100; ocur = null; altErrs.clear();
   $('psrc').value = '';   // sources differ per project; the search text carries over
   drawProjects(); buttons(); nameProject();
   if (view === 'edit') loadOrg(); else loadFindings();
-});
+  return true;
+}
 // Leaving a project, or ABOUT or CONTACT: its unsaved fields go to Harvest as
 // a draft first, and come back with it (UX-3). This asked "Discard them?" at
 // every switch until then — and before that asked too late, after the list,
-// header and works had already moved on.
-function leaveForm(next) {
-  if (pd && pd.slug !== next) { flushDraft(); pd = null; setDirty(false); }
+// header and works had already moved on. The form is let go only once
+// Harvest has the draft: if it cannot be stored, it stays where it is, edits
+// and all (Codex's review of UX-3, 2026-10-11 — it used to be let go at once,
+// and a refused draft went with it).
+async function leaveForm(next) {
+  if (!pd || pd.slug === next) return true;
+  if (!await flushDraft()) return false;
+  pd = null; setDirty(false);
+  return true;
 }
 /* ---- ABOUT AND CONTACT (UX-2b): the site's two pages that are not projects,
    under SITE at the foot of the Projects column. Either one opens in Edit as
@@ -127,9 +138,9 @@ function markDocs() {
     if (r.dataset.doc === doc) r.setAttribute('aria-current', 'true'); else r.removeAttribute('aria-current');
   }
 }
-$('sitedocs').addEventListener('click', (e) => {
+$('sitedocs').addEventListener('click', async (e) => {
   const r = e.target.closest('[data-doc]'); if (!r) return;
-  leaveForm('site:' + r.dataset.doc);
+  if (!await leaveForm('site:' + r.dataset.doc)) return;
   save();   // anything typed on a card goes first, as when switching project
   doc = r.dataset.doc; project = null; tell(''); ocur = null; altErrs.clear(); disarm();
   drawProjects(); markDocs(); buttons(); nameProject();
@@ -567,11 +578,11 @@ $('textstoggle').addEventListener('click', () => {
 });
 $('etabs').addEventListener('click', (e) => { const b = e.target.closest('[data-et]'); if (b) showTab(b.dataset.et); });
 // a project and a part of it, in Edit: the right-click menu's way in
-function goEdit(slug, tab) {
-  if (project !== slug) document.querySelector('#projects [data-s="' + slug + '"]')?.click();
-  if (project !== slug) return;   // stayed: unsaved changes on the other one
+async function goEdit(slug, tab) {
+  if (project !== slug && !await chooseProject(slug)) return false;   // stayed: the edits there could not be kept
   showTab(tab);
   if (view !== 'edit') document.querySelector('[data-view=edit]').click();
+  return true;
 }
 const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
 const opick = new Set();   // selected works, kept across redraws and between List and Grid
@@ -1047,12 +1058,12 @@ async function createProject() {
     const d = await api('/api/newproject', { title, section: $('newsection').value });
     $('newtitle').value = ''; newLabel();
     await poll();
-    document.querySelector('[data-s="' + d.slug + '"]')?.click();
+    await chooseProject(d.slug);
     // scroll the Projects column only: scrollIntoView also moved the whole window
     const el = document.querySelector('[data-s="' + d.slug + '"]'), col = el && el.closest('section');
     if (col) col.scrollTop = el.offsetTop - col.offsetTop - col.clientHeight / 2;
     // the panel uploads an icon; Keystatic is not needed for it
-    say('Created ' + title + ' as a draft' + (project === d.slug ? ' — it is selected at the left' : '') + '. Give it a grid icon in Edit › Layout before it can go live.');
+    say('Created ' + title + ', held back' + (project === d.slug ? ' — it is selected at the left' : '') + '. Give it a grid icon in Edit › Layout before it can go live.');
   } catch (err) { oops(err); newLabel(); }
   finally { busy(-1); }
 }
@@ -1237,8 +1248,11 @@ let pd = null, pdDirty = false;
 // with the button far from the fields, edits looked unsaveable (Robert,
 // 2026-10-10). The header is beside every part of Edit now, so the second
 // Write the panel had for that is gone.
+// draftStored: Harvest holds what the form holds. Every edit makes it false
+// and moves the count on, so an answer for an older draft cannot set it back.
+let draftStored = true;
 function setDirty(v) {
-  pdDirty = v;
+  pdDirty = v; draftStored = !v; flushDraft.seq = (flushDraft.seq || 0) + 1;
   clearTimeout(flushDraft.t); flushDraft.t = null;
   if (v && pd) flushDraft.t = setTimeout(flushDraft, 400);
   drawState();
@@ -1252,15 +1266,20 @@ function setDirty(v) {
 const formNow = () => pd.doc ? { ...docValues(), ...(pd.doc === 'about' ? { body: $('pbody').value } : {}) } : { ...formValues(), body: $('pbody').value };
 const formBase = () => ({ ...pd.shown, ...(pd.shownBody !== undefined ? { body: pd.shownBody } : {}) });
 const draftBody = () => { const now = formNow(), base = formBase(); return { key: pd.slug, base, now: JSON.stringify(now) === JSON.stringify(base) ? null : now }; };
+// Sends the draft now if Harvest does not hold it yet — a pause not over, or
+// an earlier send that failed — and answers whether Harvest holds it.
 function flushDraft() {
-  if (!flushDraft.t || !pd) return;
   clearTimeout(flushDraft.t); flushDraft.t = null;
-  const b = draftBody();
+  if (!pd || draftStored) return Promise.resolve(true);
+  const b = draftBody(), seq = flushDraft.seq;
   if (!b.now) { pdDirty = false; drawState(); }   // typed back to what was saved
-  saving = saving.then(() => api('/api/draft', b)).catch(e => say('⚠ ' + e.message));
+  const sent = saving.then(() => api('/api/draft', b)).then(() => { if (seq === flushDraft.seq) draftStored = true; return true; },
+    (e) => { say('⚠ Harvest could not keep the unsaved edits to the fields (' + e.message + '). They are still in the form: Save project, or try again.'); return false; });
+  saving = sent;
+  return sent;
 }
-// a reload or a quit within the pause: sent anyway
-addEventListener('pagehide', () => { if (flushDraft.t && pd) navigator.sendBeacon('/api/draft', JSON.stringify(draftBody())); });
+// a reload or a quit before Harvest has the draft: sent anyway
+addEventListener('pagehide', () => { if (!draftStored && pd) navigator.sendBeacon('/api/draft', JSON.stringify(draftBody())); });
 function restoreDraft(dr) {
   const changed = (k) => JSON.stringify(dr.now[k]) !== JSON.stringify(dr.base?.[k]);
   for (const k in dr.now) {
@@ -1541,7 +1560,7 @@ function projectMenu(slug) {
     p.draft ? { label: 'Stop holding back', run: () => setProject(slug, { draft: false }, p.title + ' will go on the site') }
             : { label: 'Hold back (do not publish)', run: () => setProject(slug, { draft: true }, p.title + ' is held back') },
     '-',
-    { label: 'Add working title…', run: () => { goEdit(slug, 'settings'); document.querySelector('#proj [data-p=nicknames]').focus(); } },
+    { label: 'Add working title…', run: async () => { if (await goEdit(slug, 'settings')) document.querySelector('#proj [data-p=nicknames]').focus(); } },
     { label: 'Open in Edit', run: () => goEdit(slug, etab) },
     { label: 'Project settings', run: () => goEdit(slug, 'settings') },
     '-',
