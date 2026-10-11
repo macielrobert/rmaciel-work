@@ -36,6 +36,7 @@ const N = schema.nodes, M = schema.marks;
 const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch {} };
 let wantText = remember('descText') === '1';   // chosen, not forced: kept across projects
 let shown = null;                              // the Markdoc the editor was loaded with
+let warned = false;                            // the note says an edit would not save as shown
 
 const MARK_OF = { bold: M.strong, italic: M.em, underline: M.underline, strike: M.strike, light: M.light, small: M.small, large: M.large };
 
@@ -106,17 +107,31 @@ const listEnter = (state, dispatch) => {
 };
 const lineBreak = (state, dispatch) => { if (dispatch) dispatch(state.tr.replaceSelectionWith(N.hard_break.create()).scrollIntoView()); return true; };
 
-const COMMANDS = {
+// a formatting command's edit says so, for the guard in dispatchTransaction
+const formatting = (cmd) => (state, dispatch, v) => cmd(state, dispatch && ((tr) => dispatch(tr.setMeta('format', true))), v);
+const COMMANDS = Object.fromEntries(Object.entries({
   ...Object.fromEntries(Object.entries(MARK_OF).map(([k, m]) => [k, toggleMark(m)])),
   list: toggleList(N.bullet_list), numbered: toggleList(N.ordered_list), quote: toggleQuote, divider,
-};
+}).map(([k, c]) => [k, formatting(c)]));
 
 // ---- the view
 const view = new EditorView(host, {
   state: EditorState.create({ schema }),
   attributes: { 'aria-label': 'Description', 'aria-multiline': 'true', role: 'textbox', spellcheck: 'true' },
+  /* EVERY EDIT IS CHECKED, not only the description as it opens (Codex's
+     review of PR #52): the document is written and read back, and if it
+     would not come back as shown, a formatting button's edit is refused and
+     anything else (typing, pasting) is kept with a warning. markdoc-pm.mjs
+     handles every case tools/check-description.mjs knows; this is for one
+     it does not. */
   dispatchTransaction(tr) {
-    view.updateState(view.state.apply(tr));
+    const next = view.state.apply(tr);
+    if (tr.docChanged && !roundTrips(next.doc)) {
+      warned = true;
+      if (tr.getMeta('format')) { tellNote('Not applied: Markdoc cannot keep that formatting there as it would show here. Try it on whole words.'); return; }
+      tellNote('⚠ Part of the description would not save as it shows here. Undo (⌘Z), or look at it in Markdoc text before saving.');
+    } else if (tr.docChanged && warned) { warned = false; tellNote(''); }
+    view.updateState(next);
     if (tr.docChanged) { area.value = toMarkdoc(view.state.doc); area.dispatchEvent(new Event('input', { bubbles: true })); }
     paint();
   },
@@ -166,7 +181,7 @@ function openLink() {
 }
 function closeLink() { linkRow.hidden = true; view.focus(); }
 function setLink(href) {
-  const from = +linkRow.dataset.from, to = +linkRow.dataset.to, tr = view.state.tr.removeMark(from, to, M.link);
+  const from = +linkRow.dataset.from, to = +linkRow.dataset.to, tr = view.state.tr.removeMark(from, to, M.link).setMeta('format', true);
   if (href) tr.addMark(from, to, M.link.create({ href }));
   view.dispatch(tr); closeLink();
 }
@@ -188,7 +203,7 @@ const api = window.desc = {
   get active() { return !host.hidden; },
   load(src) {
     shown = String(src ?? '');
-    tellNote('');
+    tellNote(''); warned = false;
     if (wantText) { showMode(true); return; }
     let doc;
     try {

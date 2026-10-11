@@ -362,7 +362,12 @@ Link opens a field under the toolbar (the app has no prompt()). The packages
 are served from node_modules at `/vendor/<name>` (`VENDOR` in harvest.js, the
 import map in page.html — no bundler). `node tools/check-description.mjs`
 round-trips every description in content/ and fixtures through build.js's own
-renderer; check-harvest runs it.
+renderer, and 9,319 editor-made mark edges (punctuation, letters, other
+marks, line breaks either side); check-harvest runs it. Where a `*` or `~~`
+would sit between a letter and punctuation, the letter is written as a
+character reference (`&#101;`), and italic touching bold is written `_`
+(review of PR #52). Every edit is read back: a formatting button that would
+not save as shown is refused, typing that would gets a warning note.
 
 ## The Preview pane (built 2026-10-10, three versions since UX-5)
 
@@ -378,7 +383,8 @@ alt, caption, turns; a held-back project is shown and the pane says so);
 `throwaway()` copy, page kept in memory, fonts and pictures served from the
 repo — **dist/ is never touched** (it used to be rebuilt in place). A
 picture not saved yet is a stand-in under `images/<slug>/harvest-preview/`
-(`standIn()`: the file itself if JPEG/PNG/WebP/GIF and unturned, else a
+(`standIn()`: the file itself if JPEG/PNG/WebP/GIF and unturned — a
+website's as Save downloads it, `webCopy()` —, else a
 1500px sips JPEG in `.../Harvest/preview/`, swept after a day). Project
 files are COPIED into the throwaway: build.js skips symlinks in
 content/projects. A build is ~0.1 s; the Editing preview is rebuilt 700 ms

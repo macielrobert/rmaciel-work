@@ -1947,21 +1947,27 @@ async function saveOrganize(slug, confirmed) {
 
 /* ------------------------------------------------------------- writing */
 
+// A picture on a website, fetched full size and named by what the bytes ARE,
+// not what the address says: a website can serve a GIF under any name, and a
+// GIF called .jpg would be copied as-is and then rejected by build.js.
+// Anything not JPEG/PNG/WebP/GIF is named .img and converted by the caller; a
+// GIF stays a GIF, animation and all. Save and the Editing preview both take
+// it from here, so the preview shows the bytes Save will copy in.
+async function webCopy(src) {
+  const DL = path.join(STORE, 'downloads');
+  fs.mkdirSync(DL, { recursive: true });
+  const raw = await download(sized(src, 2500), path.join(DL, id(src) + '.download'));
+  const head = fs.readFileSync(raw).subarray(0, 12);
+  const kind = head.toString('latin1', 0, 4) === 'GIF8' ? '.gif' : head[0] === 0x89 ? '.png'
+    : head.toString('latin1', 8, 12) === 'WEBP' ? '.webp' : head[0] === 0xff && head[1] === 0xd8 ? '.jpg' : '.img';
+  const out = raw.replace(/\.download$/, kind);
+  fs.copyFileSync(raw, out);
+  return out;
+}
 async function importImage(src, slug, n, w, h) {
   // From a website: fetch the full-size picture first, then treat it as a file.
   if (isRemote(src)) {
-    const DL = path.join(STORE, 'downloads');
-    fs.mkdirSync(DL, { recursive: true });
-    // Named by what the bytes ARE, not what the address says: a website can
-    // serve a GIF under any name, and a GIF called .jpg would be copied as-is
-    // and then rejected by build.js. Anything not JPEG/PNG/WebP/GIF is
-    // converted below; a GIF stays a GIF, animation and all.
-    const raw = await download(sized(src, 2500), path.join(DL, id(src) + '.download'));
-    const head = fs.readFileSync(raw).subarray(0, 12);
-    const kind = head.toString('latin1', 0, 4) === 'GIF8' ? '.gif' : head[0] === 0x89 ? '.png'
-      : head.toString('latin1', 8, 12) === 'WEBP' ? '.webp' : head[0] === 0xff && head[1] === 0xd8 ? '.jpg' : '.img';
-    src = raw.replace(/\.download$/, kind);
-    fs.copyFileSync(raw, src);
+    src = await webCopy(src);
     w = h = null;   // measured below, from the file actually downloaded
   }
   // Size unknown (sips gave no answer at crawl time): ask again now rather than
@@ -2383,13 +2389,14 @@ const PREVIEW_DIR = 'harvest-preview';   // where a build puts what is not saved
 const standIns = new Map();              // its address -> the file it stands for, from the last editing build
 
 // A picture not saved yet, as the site could show it: the file itself when
-// build.js reads it as it is (JPEG, PNG, WebP, GIF, not turned); otherwise a
-// 1500px JPEG made by sips — a HEIC or TIFF, a picture on a website, a work
-// turned in Images. What Save copies in may be larger (MAX_SIDE); the shape
-// and the place are the same.
+// build.js reads it as it is (JPEG, PNG, WebP, GIF, not turned) — from a
+// website too, as Save downloads it (webCopy), so an animated GIF stays
+// animated (Codex's review of PR #52: it became a JPEG); otherwise a 1500px
+// JPEG made by sips — a HEIC or TIFF, a work turned in Images. What Save
+// copies in may be larger (MAX_SIDE); the shape and the place are the same.
 async function standIn(m, deg) {
-  const from = m.kind === 'web' ? await download(sized(m.path, 1500), path.join(STORE, 'web', id(m.path, 1500) + '.download')) : m.kind === 'site' ? m.file : m.path;
-  if (!deg && m.kind === 'file' && KEEP_EXT.has(ext(from))) return from;
+  const from = m.kind === 'web' ? await webCopy(m.path) : m.kind === 'site' ? m.file : m.path;
+  if (!deg && m.kind !== 'site' && KEEP_EXT.has(ext(from))) return from;
   const out = path.join(PREVIEWS, id(from, fs.statSync(from).mtimeMs, deg) + '.jpg');
   if (!fs.existsSync(out)) await sh('sips', ['-Z', '1500', ...(deg ? ['-r', String(deg)] : []), '-s', 'format', 'jpeg', from, '--out', out]);
   return out;
