@@ -332,6 +332,46 @@ controls. No state, endpoint or recrawl behaviour changed.
   publishing review, are UX-3's. At 1024 wide with Preview open the selection
   toolbar wraps to two lines.
 
+**Follow-up, 2026-10-10 — Claude.** Robert asked for the site footer's
+zigzag in Harvest: the chosen tab now carries it in place of the straight
+underline (Collect / Edit, the Edit tabs, Pending / Kept / Rejected, Grid /
+List, S M L, Preview's sources), bold under keyboard focus with no outline,
+as in the footer. The two images are copied from `index.html` under the same
+names, so `check-tokens.js` now compares 8 shared values. `STYLE-GUIDE.md`
+and the specimen say the same.
+
+### UX-2b — Edit ABOUT and CONTACT in Harvest
+
+**Requested by Robert, 2026-10-10.** UX-2 left them listed in the Projects
+column as "edited in Keystatic for now". Bring them into Harvest so the main
+editor covers the whole site's copy, not only projects. Site settings are not
+part of this task.
+
+- [ ] **Where:** ABOUT and CONTACT as rows of their own under SITE in the
+      Projects column, replacing the note, chosen like a project (the bar at
+      the left). Choosing one opens Edit with a single form and no Images,
+      Layout or Settings tabs; Collect does not apply to them.
+- [ ] **Fields, exactly Keystatic's** (`keystatic.config.tsx`, singletons):
+      ABOUT is `content/about.mdoc`: title, detail lines, and the description
+      as the file's Markdoc body, with the same formatting toolbar as a
+      project's description. CONTACT is `content/contact.json`: email address
+      and intro copy. No new fields; Keystatic stays the schema of record.
+- [ ] **Saving:** one Save in the project header, written the way Keystatic
+      writes these files (`.mdoc` with JSON frontmatter for ABOUT, plain JSON
+      for CONTACT — `AGENTS.md`, "The CMS decides the content filenames").
+      Send only the fields changed, catch up with GitHub first, and run
+      build.js before and after as `/api/project` does; a save that breaks the
+      build writes nothing. *Unsaved changes* and the ask-before-leaving rule
+      apply as they do to a project.
+- [ ] **Publish and Preview:** a changed ABOUT or CONTACT counts toward
+      Publish under its own name; Preview opens the site with ABOUT or the
+      contact form showing.
+- [ ] **Done when:** both can be edited, saved, reopened and previewed in
+      Harvest; the saved files open unchanged in Keystatic; `node build.js`
+      passes. Test on isolated copies only. The real copy is Robert's: the
+      placeholder email (`hello@studio.xyz`) and empty intro are content for
+      him to fill, tracked in `PUNCH-LIST.md`, not something this task fills.
+
 ### UX-3 — Make saving and publishing states unambiguous
 
 **Finding:** review decisions persist, image edits live in Harvest's state,

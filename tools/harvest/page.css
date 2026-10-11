@@ -52,10 +52,28 @@
   .btn.quiet { color:var(--text-2); border-color:transparent; padding:0 6px; }
   .btn.quiet:hover, .btn.quiet.on { color:var(--ink); }
   .btn.quiet[disabled] { border-color:transparent; text-decoration:underline dashed var(--rule); text-underline-offset:4px; }
-  .btn.tab { color:var(--text-2); border:0; padding:0 6px; }
+  .btn.tab { color:var(--text-2); border:0; padding:0 6px; position:relative; }
   .btn.tab:hover { color:var(--ink); }
-  /* chosen: ink AND a line under it, so tone is never the only signal */
-  .btn.tab.on { color:var(--ink); text-decoration:underline 1px; text-underline-offset:6px; }
+  /* THE ZIGZAG — the site footer's mark for the chosen label, here for the
+     chosen tab (Robert, 2026-10-10: "our matching zig zag underline"). It was
+     a straight underline; tone is still never the only signal. The same two
+     images as index.html, under the same names, so check-tokens.js catches a
+     copy that drifts: a 1px zigzag with 90° vertices and a tooth every 6px,
+     a MASK over currentColor so it follows the tab's ink in either theme.
+     KEYBOARD FOCUS is the same zigzag in bold and no outline, as in the
+     footer: thin is the chosen tab, bold is where the keyboard is. It runs
+     from under the first letter to under the last, and sits in the bottom of
+     the 28px box the tab already has, so nothing moves. */
+  :root {
+    --zigzag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-3 1.5L0 4.5L3 1.5L6 4.5L9 1.5' fill='none' stroke='black'/%3E%3C/svg%3E");
+    --zigzag-bold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-3 1.5L0 4.5L3 1.5L6 4.5L9 1.5' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
+  }
+  .btn.tab.on { color:var(--ink); }
+  .btn.tab.on::after, .btn.tab:focus-visible::after {
+    content:''; position:absolute; left:6px; right:calc(6px + .01em); bottom:1px; height:6px; background:currentColor;
+    -webkit-mask:var(--zigzag) 0 0 / 6px 6px repeat-x; mask:var(--zigzag) 0 0 / 6px 6px repeat-x; }
+  .btn.tab:focus-visible { color:var(--ink); outline:none; }
+  .btn.tab:focus-visible::after { -webkit-mask-image:var(--zigzag-bold); mask-image:var(--zigzag-bold); }
   /* a button that opens a menu carries the same drawn chevron as a select */
   .btn.opens { padding-right:22px; background:linear-gradient(45deg, transparent 50%, currentColor 50%) right 11px center / 5px 5px no-repeat,
                                                 linear-gradient(-45deg, transparent 50%, currentColor 50%) right 6px center / 5px 5px no-repeat; }
