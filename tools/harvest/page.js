@@ -479,6 +479,8 @@ $('qmore').addEventListener('click', (e) => {
 let view = 'collect', org = null;
 const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
 let etab = remember('etab') || 'images';
+// Source material is optional while writing; keep the user's choice across projects.
+let keptTextOpen = remember('keptTextOpen') === '1';
 // the mode, the Edit tab and the panels that follow them, drawn from the variables
 function look() {
   document.querySelector('main').classList.toggle('edit', view === 'edit');
@@ -486,6 +488,10 @@ function look() {
   document.querySelectorAll('#etabs [data-et]').forEach(x => x.classList.toggle('on', x.dataset.et === etab));
   document.querySelectorAll('#edit .epanel').forEach(x => x.classList.toggle('on', x.dataset.tab === etab));
   $('edit').classList.toggle('has', !!project);
+  $('textstoggle').hidden = etab !== 'content';
+  $('textstoggle').textContent = keptTextOpen ? 'Hide kept text' : 'Show kept text';
+  $('textstoggle').setAttribute('aria-expanded', String(keptTextOpen));
+  document.querySelector('.epanel[data-tab=content]').classList.toggle('texts-collapsed', !keptTextOpen);
 }
 $('tabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-view]'); if (!b || b.dataset.view === view) return;
@@ -493,6 +499,11 @@ $('tabs').addEventListener('click', (e) => {
   if (view === 'edit') loadOrg(); else { disarm(); loadPreview(); if (project) loadFindings(); }
 });
 const showTab = (t) => { remember('etab', etab = t); look(); };
+$('textstoggle').addEventListener('click', () => {
+  keptTextOpen = !keptTextOpen;
+  remember('keptTextOpen', keptTextOpen ? '1' : '0');
+  look();
+});
 $('etabs').addEventListener('click', (e) => { const b = e.target.closest('[data-et]'); if (b) showTab(b.dataset.et); });
 // a project and a part of it, in Edit: the right-click menu's way in
 function goEdit(slug, tab) {
