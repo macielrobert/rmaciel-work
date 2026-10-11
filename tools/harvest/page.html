@@ -107,7 +107,7 @@
             <label>Detail lines <span class="help">one per line</span><textarea data-p="details"></textarea></label>
             <div class="field">Description
               <div id="mdbar"><button class="btn quiet" data-md="bold"><b>B</b></button><button class="btn quiet" data-md="italic"><i>I</i></button><button class="btn quiet" data-md="underline"><u>U</u></button><button class="btn quiet" data-md="strike"><s>S</s></button><button class="btn quiet" data-md="light">Lighter</button><button class="btn quiet" data-md="small">Smaller</button><button class="btn quiet" data-md="large">Larger</button><button class="btn quiet" data-md="link">Link</button><button class="btn quiet" data-md="list">• List</button><button class="btn quiet" data-md="numbered">1. List</button><button class="btn quiet" data-md="quote">Quote</button><button class="btn quiet" data-md="divider">Divider</button></div>
-              <div class="pdesc"><textarea id="pbody" placeholder="Select words, then a button above. The preview beside it is how the site will set it." aria-label="Description"></textarea><div id="ppreview"></div></div>
+              <textarea id="pbody" placeholder="Select words, then a formatting button above." aria-label="Description"></textarea>
             </div>
           </div>
           <div class="seam" data-right></div><aside id="texts" data-w="texts"></aside>
@@ -158,7 +158,7 @@
   </section>
   <!-- PREVIEW: the site, in a frame that cannot leave it (see loadPreview in page.js) -->
   <div class="seam" data-right></div><aside id="preview" data-w="preview">
-    <div class="prevhead"><span id="prevsrc"><button class="btn tab" data-src="written" title="Built from the files on this Mac each time it loads: what Publish would put live">As saved</button><button class="btn tab" data-src="live" title="What visitors see now">Live</button></span> <button class="btn quiet" id="prevreload">Reload</button> <span class="help" id="prevmsg"></span></div>
+    <div class="prevhead"><span id="prevsrc"><button class="btn tab" data-src="written" title="Built from the files on this Mac each time it loads: what Publish would put live">Last saved</button><button class="btn tab" data-src="live" title="What visitors see now">Live</button></span> <button class="btn quiet" id="prevreload">Reload</button> <span class="help" id="prevmsg"></span></div>
     <iframe id="prevframe" title="Site preview"></iframe>
   </aside>
 </main>
