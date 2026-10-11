@@ -248,8 +248,10 @@ The rules behind the table:
 - **An error** doubles the line in ink. Under the field goes a small solid
   square and a sentence in ink that says what to do, not what went wrong: "Add
   an icon. A project can't go on the site without one." It appears beside the
-  field it belongs to. The summary at the point of saving, which links to each
-  error, is UX-3's.
+  field it belongs to. **The summary at the point of saving** (LIVE, UX-3)
+  says in the project header what did not happen and links to each item that
+  stopped it — "Nothing was saved: 3 works need alt text — Work 1, Work 2,
+  Work 3" — and a field build.js refused opens on its tab, marked.
 
 ## Empty places, work in progress, messages
 

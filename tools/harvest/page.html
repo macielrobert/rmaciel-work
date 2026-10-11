@@ -4,8 +4,8 @@
 <link rel="stylesheet" href="/page.css">
 <!-- THE SHELL (UX-2, 2026-10-10). Each kind of control has one home
      (STYLE-GUIDE.md, Placement):
-       application header  Collect / Edit, background activity, Publish
-       project header      the project's name, its saved state, Save project, Preview
+       application header  Collect / Edit, background activity, Publish and how the last one went
+       project header      the project's name, where its edits are (UX-3), Save project, Preview
        workspace toolbar   find, filters, Grid / List, thumbnail size
        selection toolbar   how many are selected and what can be done to them
        details panel       the fields of the one work being looked at
@@ -16,8 +16,18 @@
   <nav id="tabs" aria-label="Mode"><button class="btn tab on" data-view="collect" title="Find material and decide what belongs in the project">Collect</button><button class="btn tab" data-view="edit" title="Arrange what was kept: text, images, layout and settings">Edit</button></nav>
   <span id="status" role="status"></span>
   <button class="btn quiet" id="stop" hidden>Stop</button>
-  <button class="btn primary" id="publish" disabled>Publish</button>
+  <!-- how the last publish went, followed to the live site; opens the review -->
+  <button class="btn quiet" id="pubstate" hidden></button>
+  <button class="btn primary" id="publish">Publish…</button>
 </header>
+<!-- THE PUBLISHING REVIEW (UX-3): what goes, what changed in each, what stays
+     behind because it is not saved, and how the last publish went. Filled by
+     drawReview() in page.js. -->
+<dialog id="pubdlg" aria-labelledby="pubhead">
+  <h2 id="pubhead">Publish to the site</h2>
+  <div id="pubbody"></div>
+  <div class="dlgacts"><button class="btn primary" id="pubgo">Publish</button><button class="btn" id="pubcancel">Cancel</button></div>
+</dialog>
 <main>
   <aside id="projectcol" data-w="projects">
     <h2 class="cap">Projects</h2>
@@ -48,10 +58,11 @@
     <div id="phead">
       <h2 id="pname">Pick a project</h2>
       <span id="pstate"></span>
+      <button class="btn quiet" id="pdiscard" hidden title="The fields go back to what was last saved">Discard unsaved fields</button>
       <span id="orgmsg" role="status"></span>
       <span class="push"></span>
       <button class="btn tab" id="prevtoggle" title="The site itself, beside your work: as saved on this Mac, or live">Preview</button>
-      <button class="btn primary" id="orgwrite" disabled title="Project details, the works in this order, and the kept text, saved into the project file on this Mac. Not on the site until Publish.">Save project</button>
+      <button class="btn primary" id="orgwrite" disabled title="Project details, the works in this order, and the kept text, saved into the project file on this Mac. Checked first; not on the site until Publish.">Save project</button>
     </div>
 
     <!-- COLLECT: which material belongs in this project? Sources at the left,

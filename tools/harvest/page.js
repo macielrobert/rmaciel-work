@@ -83,7 +83,8 @@ const sectionLabel = (id) => ((S.sections.find(sec => sec.id === id) || {}).labe
 // just added is there to put a project in.
 function drawProjects() {
   if ($('projects').querySelector('.rename')) return;   // not under a rename being typed; it redraws when that ends
-  const row = (p) => '<div tabindex="0" data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"' + (p.slug === project ? ' aria-current="true"' : '') + '><span>' + esc(p.title) + (p.draft ? ' · draft' : '') + (p.nicknames.length ? '<small>aka ' + p.nicknames.map(esc).join(', ') + '</small>' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
+  // "held back", never "draft": a draft is also what unsaved fields are kept as (UX-3)
+  const row = (p) => '<div tabindex="0" data-s="' + esc(p.slug) + '" class="' + (p.slug === project ? 'sel' : '') + '"' + (p.slug === project ? ' aria-current="true"' : '') + '><span>' + esc(p.title) + (p.draft ? ' · held back' : '') + (p.nicknames.length ? '<small>aka ' + p.nicknames.map(esc).join(', ') + '</small>' : '') + (rowState(p.slug) ? '<small>' + rowState(p.slug) + '</small>' : '') + '</span><b>' + (p.pending || '') + '</b></div>';
   const known = new Set(S.sections.map(sec => sec.id));
   let h = '';
   for (const sec of S.sections) {
@@ -95,28 +96,25 @@ function drawProjects() {
   if (lost.length) h += '<div class="sec cap">No section</div>' + lost.map(row).join('');
   const had = document.activeElement?.closest?.('#projects [data-s]')?.dataset.s;   // a keyboard user stays on the row they were on
   $('projects').innerHTML = h;
+  for (const r of document.querySelectorAll('#sitedocs [data-doc]')) r.innerHTML = '<span>' + r.dataset.doc.toUpperCase() + (rowState(r.dataset.doc) ? '<small>' + rowState(r.dataset.doc) + '</small>' : '') + '</span>';
   if (had) $('projects').querySelector('[data-s="' + CSS.escape(had) + '"]')?.focus();
 }
 $('projects').addEventListener('click', (e) => {
   const d = e.target.closest('[data-s]'); if (!d || e.target.closest('.rename')) return;
-  if (!mayLeave(d.dataset.s)) return;
+  leaveForm(d.dataset.s);
   save();   // anything typed on the previous project goes before its cards do
   project = d.dataset.s; doc = null; markDocs(); tell('');
-  shown = 100; ocur = null; altErr = null;
+  shown = 100; ocur = null; altErrs.clear();
   $('psrc').value = '';   // sources differ per project; the search text carries over
   drawProjects(); buttons(); nameProject();
   if (view === 'edit') loadOrg(); else loadFindings();
 });
-// Asked BEFORE switching, to a project or to ABOUT or CONTACT. It used to be
-// asked by loadProj, after the list, header and works had already moved on,
-// so Cancel kept only the panel: one project's details over another's works,
-// asking again at every click.
-function mayLeave(next) {
-  if (!pd || !pdDirty || pd.slug === next) return true;
-  const was = pd.doc ? DOC_NAME[pd.doc] : pd.data.title || pd.slug;
-  if (!confirm(was + ' has unsaved changes. Discard them?\n\nCancel to stay on ' + was + ' — Save keeps them.')) return false;
-  setDirty(false); pd = null;
-  return true;
+// Leaving a project, or ABOUT or CONTACT: its unsaved fields go to Harvest as
+// a draft first, and come back with it (UX-3). This asked "Discard them?" at
+// every switch until then — and before that asked too late, after the list,
+// header and works had already moved on.
+function leaveForm(next) {
+  if (pd && pd.slug !== next) { flushDraft(); pd = null; setDirty(false); }
 }
 /* ---- ABOUT AND CONTACT (UX-2b): the site's two pages that are not projects,
    under SITE at the foot of the Projects column. Either one opens in Edit as
@@ -130,9 +128,10 @@ function markDocs() {
   }
 }
 $('sitedocs').addEventListener('click', (e) => {
-  const r = e.target.closest('[data-doc]'); if (!r || !mayLeave('site:' + r.dataset.doc)) return;
+  const r = e.target.closest('[data-doc]'); if (!r) return;
+  leaveForm('site:' + r.dataset.doc);
   save();   // anything typed on a card goes first, as when switching project
-  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErr = null; disarm();
+  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErrs.clear(); disarm();
   drawProjects(); markDocs(); buttons(); nameProject();
   view = 'edit'; loadOrg();
 });
@@ -142,11 +141,45 @@ function nameProject() {
   $('pname').textContent = doc ? DOC_NAME[doc] : pr ? pr.title : 'Pick a project';
   $('orgwrite').disabled = !pr && !doc;
   if (!$('orgwrite').dataset.armed) $('orgwrite').textContent = doc ? 'Save ' + DOC_NAME[doc] : 'Save project';
+  drawState();
 }
-// the project header's message line; a failure is drawn as one (STYLE-GUIDE.md, Messages)
-function tell(msg) {
+// the project header's message line; a failure is drawn as one (STYLE-GUIDE.md,
+// Messages). `html`, when given, is the same message with links in it.
+function tell(msg, html) {
   const fail = /^⚠|stopped:/.test(msg);
-  $('orgmsg').textContent = msg; $('orgmsg').classList.toggle('fail', fail);
+  if (html) $('orgmsg').innerHTML = html; else $('orgmsg').textContent = msg;
+  $('orgmsg').classList.toggle('fail', fail);
+}
+/* WHERE THE EDITS ARE (UX-3) — in the project header, in both modes, for the
+   project or page chosen: what is NOT SAVED (and which parts), SAVED on this
+   Mac and not published, PUBLISHING, or PUBLISHED; and apart from all of
+   those, HELD BACK, which is whether the site shows it at all. The server
+   says what Harvest holds (S.unsaved), what git holds (S.unpublished) and
+   how the last publish went (S.publish); the form says what is being typed. */
+const STAGE = { checking: 'Publishing…', sending: 'Publishing…', merging: 'Publishing…', submitted: 'Sent to GitHub, not merged', deploying: 'Merged; Netlify is building it', unconfirmed: 'Merged, not confirmed live' };
+const stageOf = (key) => { const p = S.publish; return p && (p.keys || []).includes(key) ? p.stage : null; };
+const sending = (st) => ['checking', 'sending', 'merging', 'submitted'].includes(st);
+// the short form, under a name in the Projects column
+function rowState(key) {
+  const st = stageOf(key);
+  return [S.unsaved[key] && 'not saved', sending(st) ? (st === 'submitted' ? 'not merged' : 'publishing') : S.unpublished.includes(key) ? 'not published' : st === 'deploying' ? 'publishing' : ''].filter(Boolean).join(' · ');
+}
+function drawState() {
+  const key = doc || project, pr = S && S.projects.find(p => p.slug === project);
+  if (!S || !key) { $('pstate').textContent = ''; $('pdiscard').hidden = true; return; }
+  const all = S.unsaved[key] || [], u = all.filter(w => w !== 'edited fields');
+  const fields = pd && pd.slug === (doc ? 'site:' + doc : project) ? pdDirty : all.includes('edited fields');   // the form knows first
+  if (fields) u.unshift('edited fields');
+  const st = stageOf(key), parts = [];
+  if (u.length) parts.push('Not saved: ' + u.join(', '));
+  if (sending(st)) parts.push(STAGE[st]);
+  else if (S.unpublished.includes(key)) parts.push('Saved on this Mac, not published');
+  else if (STAGE[st]) parts.push(STAGE[st]);
+  else if (!u.length && !pr?.draft) parts.push('Published');
+  if (pr?.draft) parts.push('Held back: the site does not show it');
+  $('pstate').textContent = parts.join(' · ');
+  $('pstate').classList.toggle('waiting', u.length > 0);
+  $('pdiscard').hidden = !fields;
 }
 
 /* ---- status */
@@ -186,15 +219,18 @@ function show(state) {
   // redrawn only when it changed: the state arrives whenever ANYTHING did
   const sj0 = JSON.stringify(S.sections);
   if (sj0 !== drawSections.last) { drawSections.last = sj0; drawSections(); drawProjects.last = null; }
-  const pj = JSON.stringify(S.projects);
-  if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); nameProject(); }
+  const pj = JSON.stringify([S.projects, S.unsaved, S.unpublished, S.publish]);
+  if (pj !== drawProjects.last) { drawProjects.last = pj; drawProjects(); nameProject(); if ($('pubdlg').open && rvw) drawReview(); }
   const sj = JSON.stringify(S.site);
   if (sj !== drawPages.last) { drawPages.last = sj; drawPages(); }
   buttons();
+  // always open: the review also says how the last publish went
   const n = S.unpublished.length;
-  $('publish').disabled = !n;
-  $('publish').textContent = n ? 'Publish ' + n : 'Publish';
-  $('publish').title = n ? 'Waiting to go live: ' + S.unpublished.join(', ') : 'Nothing waiting to go live';
+  $('publish').textContent = n ? 'Publish ' + n + '…' : 'Publish…';
+  $('publish').title = n ? 'Saved on this Mac, waiting to go live: ' + S.unpublished.join(', ') : 'Nothing saved is waiting to go live';
+  $('pubstate').textContent = pubLine(S.publish);
+  $('pubstate').hidden = !$('pubstate').textContent;
+  $('pubstate').classList.toggle('fail', /^⚠/.test($('pubstate').textContent));
   // Cards are fetched again only when the server's revision has moved, and
   // never while a field is being typed in or one of this page's own changes
   // is still on its way. During a crawl the new cards wait behind a button
@@ -541,7 +577,7 @@ const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
 const opick = new Set();   // selected works, kept across redraws and between List and Grid
 let ocur = null;           // the work in the details panel: the one clicked last
 let oshown = [];           // the works drawn now, after the find box and Show removed
-let altErr = null;         // a work Save stopped at for its alt text, until it has some
+const altErrs = new Set(); // works Save project stopped for, for their alt text, until each has some
 // Grid by default: the details panel is what makes it the overview. A new key
 // rather than the old one, so a List remembered from before the panel
 // existed does not hide it.
@@ -560,7 +596,7 @@ function orgPicks() {
   $('orgremove').textContent = n && ticked.every(t => t.removed) ? 'Restore' : 'Remove';
   $('orgmove').disabled = $('ounpick').disabled = !n;
 }
-const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
+const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '') + (altErrs.has(t.id) ? ' · needs alt text' : '');
 function orgLook() {
   document.querySelectorAll('#orgviews [data-ov]').forEach(b => b.classList.toggle('on', b.dataset.ov === orgView));
   document.querySelectorAll('#orgsizes [data-cell]').forEach(b => b.classList.toggle('on', b.dataset.cell === orgCell));
@@ -600,7 +636,7 @@ const keeper = (t) => t.members.find(m => m.key === t.keeper) || t.members[0];
 function stackHTML(t, panel) {
   const k = keeper(t);
   const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
-  const err = altErr === t.id && !String(t.alt || '').trim();
+  const err = altErrs.has(t.id) && !String(t.alt || '').trim();
   return '<div class="stack' + (t.removed ? ' removed' : '') + '" data-id="' + t.id + '">' +
     '<div><div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
     '<div class="turns"><button class="btn quiet" data-op="rotate" data-dir="-1">↺ Turn left</button><button class="btn quiet" data-op="rotate" data-dir="1">↻ Turn right</button>' + (t.rotate ? '<span class="help">turned ' + t.rotate + '° — applied on Save</span>' : '') + '</div>' +
@@ -637,7 +673,7 @@ function drawOrg() {
   if (orgView === 'grid' && oshown.length) {
     $('stacks').innerHTML = oshown.map(t => {
       const k = keeper(t);
-      return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + (t.id === ocur ? ' cur' : '') + '" tabindex="0" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to select, ⌘-click to add to the selection, drag to reorder">' +
+      return '<div class="tile' + (t.removed ? ' removed' : '') + (altErrs.has(t.id) ? ' err' : '') + (opick.has(t.id) ? ' on' : '') + (t.id === ocur ? ' cur' : '') + '" tabindex="0" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to select, ⌘-click to add to the selection, drag to reorder">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick" tabindex="-1" aria-label="Select work ' + t.n + '"' + (opick.has(t.id) ? ' checked' : '') + '>' +
         '<div class="under"><small>' + tileLabel(t) + '</small>' +
@@ -781,7 +817,11 @@ $('images').addEventListener('input', (e) => {
   const stack = e.target.closest('.stack').dataset.id, value = e.target.value;
   const t = org.stacks.find(x => x.id === stack); t[f] = value;
   // the error goes as soon as there is something to save
-  if (f === 'alt' && stack === altErr && value.trim()) { altErr = null; e.target.parentElement.classList.remove('err'); e.target.parentElement.nextElementSibling?.classList.contains('errmsg') && e.target.parentElement.nextElementSibling.remove(); }
+  if (f === 'alt' && altErrs.has(stack) && value.trim()) {
+    altErrs.delete(stack); e.target.parentElement.classList.remove('err'); e.target.parentElement.nextElementSibling?.classList.contains('errmsg') && e.target.parentElement.nextElementSibling.remove();
+    const tile = document.querySelector('#stacks .tile[data-id="' + stack + '"]');
+    if (tile) { tile.classList.remove('err'); tile.querySelector('small').textContent = tileLabel(t); }
+  }
   clearTimeout(e.target._t); e.target._t = setTimeout(() => orgOp({ op: 'field', stack, field: f, value }, false), 400);
 });
 $('orgmerge').addEventListener('click', async () => {
@@ -848,7 +888,10 @@ async function moveWorks(ids, to) {
      3. Kept text placed nowhere else: description paragraphs, detail
         lines, share description, as each card says.
    Each is all-or-nothing on its own; a failure stops the rest, and the line
-   says what was written before it. */
+   says what was written before it — it is not one all-or-nothing save.
+   BEFORE ANY OF THEM (UX-3): what would stop the works is asked first —
+   every work without alt text, a turned GIF, pictures coming off the site —
+   so that none of it arrives after the fields were already written. */
 async function saveDetails() {
   if (!pd) return false;
   // Only the fields changed here are sent; the server leaves the rest as the
@@ -859,7 +902,7 @@ async function saveDetails() {
   const body = pd.doc !== 'contact' && $('pbody').value !== pd.shownBody ? $('pbody').value : undefined;
   if (!Object.keys(data).length && body === undefined) return false;
   tell('Saving ' + (pd.doc ? DOC_NAME[pd.doc] : 'project details') + ' — checking the site still builds…');
-  const r = pd.doc ? await api('/api/site', { doc: pd.doc, data, body }) : await api('/api/project', { project: pd.slug, data, body });
+  const r = pd.doc ? await api('/api/site', { doc: pd.doc, data, body, draft: true }) : await api('/api/project', { project: pd.slug, data, body, draft: true });
   setDirty(false);
   return !r.unchanged;
 }
@@ -867,12 +910,33 @@ const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 $('orgwrite').addEventListener('click', async () => {
   // fields still waiting on their pause are sent first: a work's, and a card edited in Collect
   for (const el of document.querySelectorAll('#images [data-f]')) if (el._t) { clearTimeout(el._t); el._t = null; await orgOp({ op: 'field', stack: el.closest('.stack').dataset.id, field: el.dataset.f, value: el.value }, false); }
-  await save();
+  flushDraft(); await save();
   const b = $('orgwrite'), confirm = b.dataset.armed === project, done = [];
-  let msg = '';
+  let msg = '', html = '', step = 'check';
   busy(1);
   try {
+    if (!doc && org && org.stacks.length) {
+      const c = await api('/api/organize/check', { project });
+      altErrs.clear(); c.missing.forEach(m => altErrs.add(m.id));
+      if (c.missing.length) {
+        // the summary links to each work; the first is opened with its field marked
+        ocur = c.missing[0].id; opick.clear(); opick.add(ocur); showTab('images');
+        msg = '⚠ Nothing was saved: ' + plural(c.missing.length, 'work needs', 'works need') + ' alt text — what is in the picture, in words.';
+        html = esc(msg) + ' ' + c.missing.map(m => '<button class="btn quiet" data-work="' + m.id + '">Work ' + m.n + '</button>').join(' ');
+        return;
+      }
+      if (c.problem) throw new Error(c.problem);
+      if (c.drop && !confirm) {
+        b.dataset.armed = project;
+        b.textContent = 'Takes ' + plural(c.drop, 'picture', 'pictures') + ' off the site — click again';
+        clearTimeout(orgWrite.t); orgWrite.t = setTimeout(() => { delete b.dataset.armed; b.textContent = 'Save project'; }, 8000);
+        msg = 'Nothing saved yet: this save takes ' + plural(c.drop, 'picture', 'pictures') + ' off the site. Click Save project again to go ahead.';
+        return;
+      }
+    }
+    step = 'details';
     if (await saveDetails()) done.push(pd.doc ? DOC_NAME[pd.doc] : 'project details');
+    step = 'works';
     if (doc) { msg = done.length ? 'Saved ' + done[0] + ' on this Mac. Not on the site until you publish.' : 'Nothing new to save.'; return; }
     if (org && org.stacks.length) {
       const d = await api('/api/organize/save', { project, confirm });
@@ -890,32 +954,88 @@ $('orgwrite').addEventListener('click', async () => {
     delete b.dataset.armed; b.textContent = 'Save project';
     msg = done.length ? 'Saved ' + done.join(', ') + ' on this Mac. Not on the site until you publish.' : 'Nothing new to save.';
   } catch (e) {
-    msg = (done.length ? 'Saved ' + done.join(', ') + ', then stopped: ' : '') + '⚠ ' + e.message;
+    // what did not happen, what did: "Saved X on this Mac, then stopped", or nothing at all
+    msg = '⚠ ' + (done.length ? 'Saved ' + done.join(', ') + ' on this Mac, then stopped: ' : 'Nothing was saved: ') + e.message.replace(/^Not saved(:| —) /, '');
     // a missing alt text is a FIELD's error: drawn beside that field, the work selected and open
     const n = +(e.message.match(/^Work (\d+) needs alt text/) || [])[1], t = n && org && org.stacks[n - 1];
-    if (t) { altErr = ocur = t.id; opick.clear(); opick.add(t.id); showTab('images'); }
-    if (doc && (docErr = docFieldErr(e.message))) msg = '⚠ Not saved: the site would not build. The field marked below says what it needs.';
+    if (t) { altErrs.add(ocur = t.id); opick.clear(); opick.add(t.id); showTab('images'); }
+    if (step === 'details' && (ferr = fieldErrOf(e.message))) msg = '⚠ Nothing was saved: the site would not build. The field marked below says what it needs.';
   }
   finally {
     // Reload what was written, the panel included: one still showing the
     // description from before step 3 would write it back over the new text.
-    // Not a panel whose own save failed — its edits are still only on screen.
+    // Not a panel whose own save failed — its edits stay, kept as a draft.
     await poll();
     if (!pdDirty) pd = null;
     await loadOrg();   // first: reloading clears the message line
-    tell(msg);
-    if (altErr) document.querySelector('#images .err input')?.focus();
-    if (docErr) markDocErr();
+    tell(msg, html);
+    if (altErrs.size) document.querySelector('#images label.err input')?.focus();   // label: a marked tile holds a checkbox
+    if (ferr) markFieldErr();
     busy(-1);
   }
 });
 const orgWrite = {};
+// the save summary's links: each one opens that work with its alt text field
+$('orgmsg').addEventListener('click', (e) => {
+  const w = e.target.closest('[data-work]'); if (!w || !org) return;
+  ocur = w.dataset.work; opick.clear(); opick.add(ocur); showTab('images'); drawOrg();
+  document.querySelector('#images .stack[data-id="' + ocur + '"] [data-f=alt]')?.focus();
+});
 
-/* ---- publish, new project */
-$('publish').addEventListener('click', async () => {
-  $('publish').disabled = true; say('Publishing…'); busy(1);
-  try { await save(); say((await api('/api/publish', {})).message); } catch (e) { oops(e); } finally { busy(-1); }
-  poll();
+/* ---- PUBLISH: a review first (UX-3). It names every project and page that
+   would go, with what changed in each, and apart from them the edits that
+   stay behind because they are not saved. Publish sends FILES: a pull
+   request on GitHub, merged at once, which Netlify then builds. The line
+   beside the button follows it through to the live site (harvest.js, PUBLISH). */
+let rvw = null;
+const when = (ms) => { const d = new Date(ms); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' }); };
+// the short form, beside Publish
+function pubLine(p) {
+  if (!p) return '';
+  return { checking: 'Publishing: checking the site builds…', sending: 'Publishing: sending to GitHub…', merging: 'Publishing: merging pull request #' + p.pr + '…',
+    submitted: '⚠ Pull request #' + p.pr + ' not merged', deploying: 'Netlify is building #' + p.pr + ' — about a minute',
+    live: 'Published ' + when(p.live), unconfirmed: '⚠ #' + p.pr + ' merged, not confirmed live', failed: '⚠ The last publish did not happen' }[p.stage] || '';
+}
+// the long form, in the review
+function pubSay(p) {
+  if (!p) return '';
+  if (p.stage === 'failed' || p.stage === 'submitted') return p.message;
+  if (p.stage === 'deploying') return 'Pull request #' + p.pr + ' was merged at ' + when(p.merged) + '. Netlify is building the site; visitors see it in about a minute, and this says so when they do.';
+  if (p.stage === 'live') return 'Published ' + when(p.live) + ': the live site now shows pull request #' + p.pr + ' (' + p.names.join(', ') + ').';
+  if (p.stage === 'unconfirmed') return 'Pull request #' + p.pr + ' was merged at ' + when(p.merged) + ', but ten minutes later the live site still did not show it. ' + p.message + ' Nothing here was lost. Ask Claude to look at the deploy.';
+  return pubLine(p);
+}
+async function openReview() {
+  flushDraft(); await save();   // anything typed goes first, so the review counts it
+  try { rvw = await api('/api/publish/review'); } catch (e) { return oops(e); }
+  drawReview();
+  if (!$('pubdlg').open) $('pubdlg').showModal();
+}
+function drawReview() {
+  const p = S.publish, going = p && ['checking', 'sending', 'merging'].includes(p.stage);
+  const li = (name, words) => '<li><b>' + esc(name) + '</b> — ' + esc(words) + '</li>';
+  let h = p ? '<div class="pubnow' + (/failed|submitted|unconfirmed/.test(p.stage) ? ' fail' : '') + '">' + esc(pubSay(p)) + (p.url ? ' <button class="btn quiet" data-url="' + esc(p.url) + '">Open pull request #' + p.pr + '</button>' : '') + '</div>' : '';
+  h += rvw.items.length ? '<h3 class="cap">Goes to the site</h3><p class="help">Saved on this Mac.</p><ul>' + rvw.items.map(i => li(i.name, i.changes.join(', ') + (i.held ? ' — held back: it goes to GitHub, and the site does not show it' : ''))).join('') + '</ul>'
+    : '<p>Nothing saved is waiting to be published.</p>';
+  if (rvw.later.length) h += '<h3 class="cap">Stays behind</h3><p class="help">Not saved yet. Save project puts them in the project file; publish after that.</p><ul>' +
+    rvw.later.map(l => li(l.name, l.what.join(', ') + (l.also ? ' — newer than what goes now' : ''))).join('') + '</ul>';
+  h += '<p class="help how">Publish sends what is saved to GitHub as a pull request and merges it. Netlify then rebuilds the site, which takes about a minute; the line beside Publish says when visitors can see it.</p>';
+  $('pubbody').innerHTML = h;
+  $('pubgo').disabled = !rvw.items.length || going;
+  $('pubgo').textContent = going ? 'Publishing…' : rvw.items.length ? 'Publish ' + rvw.items.length : 'Publish';
+  $('pubcancel').textContent = going || !rvw.items.length ? 'Close' : 'Cancel';
+}
+$('publish').addEventListener('click', openReview);
+$('pubstate').addEventListener('click', openReview);
+$('pubcancel').addEventListener('click', () => $('pubdlg').close());
+$('pubbody').addEventListener('click', (e) => { const u = e.target.closest('[data-url]'); if (u) opener({ path: u.dataset.url }); });
+$('pubgo').addEventListener('click', async () => {
+  $('pubgo').disabled = true; busy(1);
+  try { say((await api('/api/publish', {})).message); } catch (e) { oops(e); }
+  finally { busy(-1); }
+  await poll();
+  try { rvw = await api('/api/publish/review'); } catch {}
+  if ($('pubdlg').open) drawReview();
 });
 // A button, not only Return: with nothing to press, the form looked inert.
 // Return still works. The button names the title, and lights once there is one.
@@ -1117,7 +1237,58 @@ let pd = null, pdDirty = false;
 // with the button far from the fields, edits looked unsaveable (Robert,
 // 2026-10-10). The header is beside every part of Edit now, so the second
 // Write the panel had for that is gone.
-function setDirty(v) { pdDirty = v; $('pstate').textContent = v ? 'Unsaved changes' : ''; }
+function setDirty(v) {
+  pdDirty = v;
+  clearTimeout(flushDraft.t); flushDraft.t = null;
+  if (v && pd) flushDraft.t = setTimeout(flushDraft, 400);
+  drawState();
+}
+/* UNSAVED FIELDS ARE KEPT (UX-3): sent to Harvest as they are typed, after a
+   pause, as a DRAFT of the form — what it showed when loaded (base) and what
+   it holds now. Switching project or mode, or quitting, keeps them; opening
+   the project again puts them back. Save project writes the file and drops the
+   draft; Discard drops it. Only the fields the draft changed are put back, so
+   a field edited elsewhere since (the phone) shows its newer value. */
+const formNow = () => pd.doc ? { ...docValues(), ...(pd.doc === 'about' ? { body: $('pbody').value } : {}) } : { ...formValues(), body: $('pbody').value };
+const formBase = () => ({ ...pd.shown, ...(pd.shownBody !== undefined ? { body: pd.shownBody } : {}) });
+const draftBody = () => { const now = formNow(), base = formBase(); return { key: pd.slug, base, now: JSON.stringify(now) === JSON.stringify(base) ? null : now }; };
+function flushDraft() {
+  if (!flushDraft.t || !pd) return;
+  clearTimeout(flushDraft.t); flushDraft.t = null;
+  const b = draftBody();
+  if (!b.now) { pdDirty = false; drawState(); }   // typed back to what was saved
+  saving = saving.then(() => api('/api/draft', b)).catch(e => say('⚠ ' + e.message));
+}
+// a reload or a quit within the pause: sent anyway
+addEventListener('pagehide', () => { if (flushDraft.t && pd) navigator.sendBeacon('/api/draft', JSON.stringify(draftBody())); });
+function restoreDraft(dr) {
+  const changed = (k) => JSON.stringify(dr.now[k]) !== JSON.stringify(dr.base?.[k]);
+  for (const k in dr.now) {
+    if (!changed(k) || k === 'part_of') continue;
+    const v = dr.now[k];
+    if (k === 'body') { $('pbody').value = v; continue; }
+    if (k === 'icon_image' || k === 'wordmark') { marks[k] = v; continue; }
+    const el = pd.doc ? docEl(k) : document.querySelector('#proj [data-p=' + k + ']');
+    if (el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
+  }
+  if (!pd.doc) {
+    const sec = document.querySelector('#proj [data-p=section]').value;
+    partOfOptions(sec, changed('part_of') ? dr.now.part_of : pd.data.part_of || '');
+    drawMarks(); addr(sec);
+  }
+  setDirty(true);
+}
+$('pdiscard').addEventListener('click', async () => {
+  const key = doc ? 'site:' + doc : project, name = doc ? DOC_NAME[doc] : S.projects.find(p => p.slug === project)?.title;
+  if (!confirm('Discard the unsaved edits to ' + name + '\'s fields?\n\nThe fields go back to what was last saved.')) return;
+  clearTimeout(flushDraft.t); flushDraft.t = null;
+  saving = saving.then(() => api('/api/draft', { key, now: null })).catch(oops);
+  await saving;
+  if (pd && pd.slug === key) { pd = null; setDirty(false); }
+  await poll();
+  if (view === 'edit') await loadOrg();
+  tell('Discarded the unsaved edits to the fields. They show what was last saved.');
+});
 const marks = {};   // icon_image / wordmark: a site path, '' for none, or { upload, name } waiting for Save
 // `keep` is said by the caller: the file's value when a project is loaded,
 // the menu's own when only the section changed. Reading it off the menu on
@@ -1132,7 +1303,6 @@ function partOfOptions(section, keep) {
 }
 async function loadProj() {
   if (view !== 'edit' || !project || (pd && pd.slug === project)) return;
-  if (pdDirty && !confirm('Discard the unsaved changes to ' + (pd.data.title || pd.slug) + '?')) return;
   // Checked against the selection when the answer comes, not when it was
   // asked for. A project's details arriving after ABOUT's had filled the form
   // with the project while the header said ABOUT, and Save went to the
@@ -1143,9 +1313,10 @@ async function loadProj() {
   if (project !== want) return;
   pd = d;
   fillProj();
+  if (d.draft) restoreDraft(d.draft);
 }
 function fillProj() {
-  clearDocErr();
+  clearFieldErr();
   const d = pd.data;
   // Keystatic's defaults, for a field the file does not have yet
   const v = { section: (S.sections[0] || {}).id, order: 10, layout: 'standard', icon_type: 'glyph', ...d, expand: d.expand !== false };
@@ -1178,37 +1349,48 @@ async function loadDoc() {
   const want = doc;
   try { const d = await api('/api/site?doc=' + want); if (doc !== want) return; pd = { ...d, slug: 'site:' + want }; }
   catch (e) { tell('⚠ ' + e.message); return; }
-  clearDocErr();
+  clearFieldErr();
   for (const k in DOC_FIELDS[pd.doc]) { const v = pd.data[k]; docEl(k).value = Array.isArray(v) ? v.join('\n') : (v ?? ''); }
   if (pd.doc === 'about') $('pbody').value = pd.body || '';
   setDirty(false);
   pd.shown = docValues(); pd.shownBody = pd.doc === 'about' ? $('pbody').value : undefined;
+  if (pd.draft) restoreDraft(pd.draft);
 }
 /* A FAILED SAVE, said beside the field (STYLE-GUIDE.md, Fields and errors):
-   build.js names the field it refused, and the sentence says what to do. */
-let docErr = null;
-const DOC_ERR = {
-  title: ['[data-p=title]', 'Add a title. ABOUT cannot go on the site without one.'],
+   build.js names the field it refused, and the sentence says what to do.
+   ABOUT and CONTACT since UX-2b; a project's fields since UX-3, opening the
+   tab the field is on. */
+let ferr = null;
+const FIELD_ERR = {
+  title: ['[data-p=title]', 'Add a title. It cannot go on the site without one.'],
   details: ['[data-p=details]', 'Add at least one detail line.'],
   summary: ['#pbody', 'Add a description. It is the ABOUT copy, and the site has nowhere else to get it.'],
   email: ['[data-c=email]', 'Enter an email address, such as name@example.com. It is where SEND delivers.'],
+  icon_glyph: ['[data-p=icon_glyph]', 'Type one character for the grid icon. A project cannot go on the site without one.'],
+  icon_image: ['[data-p=icon_type]', 'Choose a PNG or SVG for the grid icon, or switch to a typed character.'],
+  order: ['[data-p=order]', 'Enter a number. Low numbers come first in the grid.'],
+  section: ['[data-p=section]', 'Pick a section.'],
+  part_of: ['[data-p=part_of]', 'Pick a project in the same section that is not itself a sub-project, or none.'],
 };
-function docFieldErr(m) {
+function fieldErrOf(m) {
   const k = (m.match(/field "(\w+)"|"(\w+)" (?:must be|entry)/) || []).slice(1).find(Boolean);
-  return k || (/valid email/.test(m) ? 'email' : /description is empty/.test(m) ? 'summary' : null);
+  return k || (/valid email/.test(m) ? 'email' : /description is empty/.test(m) ? 'summary' : /"Sub-project of"/.test(m) ? 'part_of'
+    : /icon ".*" must be/.test(m) ? 'icon_image' : /unknown section|Pick a section/.test(m) ? 'section' : /needs a title/.test(m) ? 'title' : /Position in grid/.test(m) ? 'order' : null);
 }
-function markDocErr() {
-  const [sel, words] = DOC_ERR[docErr] || [], el = sel && document.querySelector('#proj ' + sel);
+function markFieldErr() {
+  const [sel, words] = FIELD_ERR[ferr] || [], el = sel && document.querySelector('#proj ' + sel);
   if (!el) return;
+  const tab = !doc && el.closest('.epanel')?.dataset.tab;
+  if (tab) showTab(tab);
   const box = el.parentElement;
   box.classList.add('err'); box.insertAdjacentHTML('afterend', '<div class="errmsg">' + esc(words) + '</div>');
   el.focus();
 }
-function clearDocErr() {
-  docErr = null;
+function clearFieldErr() {
+  ferr = null;
   for (const b of document.querySelectorAll('#proj .err')) { b.classList.remove('err'); if (b.nextElementSibling?.classList.contains('errmsg')) b.nextElementSibling.remove(); }
 }
-$('proj').addEventListener('input', () => { if (docErr) clearDocErr(); });
+$('proj').addEventListener('input', () => { if (ferr) clearFieldErr(); });
 function formValues() {
   const out = { icon_image: marks.icon_image, wordmark: marks.wordmark };
   for (const el of document.querySelectorAll('#proj [data-p]')) out[el.dataset.p] = el.type === 'checkbox' ? el.checked : el.value;
@@ -1339,7 +1521,7 @@ function projectPicks(go, except) {
   for (const p of S.projects) {
     if (p.slug === except) continue;
     if (p.section !== last) { out.push({ head: p.section }); last = p.section; }
-    out.push({ label: p.title + (p.draft ? ' · draft' : ''), run: () => go(p) });
+    out.push({ label: p.title + (p.draft ? ' · held back' : ''), run: () => go(p) });
   }
   return out;
 }
