@@ -372,6 +372,53 @@ part of this task.
       placeholder email (`hello@studio.xyz`) and empty intro are content for
       him to fill, tracked in `PUNCH-LIST.md`, not something this task fills.
 
+### Harvest follow-up — Match source artwork and reuse source text as image data
+
+**Requested by Robert, 2026-10-10; backlog, not part of active UX-2b.**
+DAILY SHAPES has generic JPEG names such as `IMG_0002.jpg`, while the
+corresponding Illustrator filenames hold the intended title/date/time
+(for example `Design 10-12-2016 23.01 PM.ai`). The screenshot shows a local
+`2016/500px` JPEG at 500 × 281 and sibling `4k` and `ai` folders. Their
+correspondence and higher-resolution contents have not yet been verified.
+
+- [ ] **Preview and match source artwork to existing works.** Investigate
+      thumbnail/render support for Illustrator sources, including files with
+      and without PDF-compatible content. Show a source preview beside the
+      JPEG and its full filename; allow manual linking, and offer visual-match
+      candidates where reliable. Require review for uncertain matches; never
+      infer correspondence from directory order or generic JPEG numbering.
+      Keep a link to the source without adding a second published work.
+- [ ] **Use the matched Illustrator filename as the work title.** Offer a
+      reviewed action to use the filename without `.ai`, preserving its date
+      and time as written. Do not substitute filesystem modification dates
+      for creation dates or silently normalize ambiguous dates. Preserve
+      existing authored titles and captions unless Robert chooses replacement.
+      Verify where title belongs in the existing image schema and caption
+      presentation; any new field must round-trip through Keystatic, Harvest,
+      build and site. A title is not an alt-text substitute.
+- [ ] **Check image quality separately from metadata.** Distinguish the
+      source asset's pixel dimensions from its displayed thumbnail. Compare
+      matching `4k` exports and original artwork against 500px copies; make
+      it possible to choose a better rendition while retaining the work's
+      title, caption, order and source link. Do not assume the folder name
+      proves resolution or silently replace a chosen image. Flag insufficient
+      resolution for the intended enlarged view; upscaling adds no detail.
+- [ ] **Place selected kept text into image data.** Extend the existing
+      passage-to-caption/alt workflow so a selected excerpt, rather than the
+      whole passage, can supply a chosen work's title or caption/description
+      and other supported metadata. Include PDF and other extracted text;
+      retain the document/page reference where available. Show the destination
+      work and field, allow editing before application, and make append versus
+      replace explicit. Source text remains available; unrelated text and
+      existing metadata must not be overwritten accidentally. Preserve the
+      standing NOISE alt-text hold.
+- [ ] **Prove on isolated DAILY SHAPES examples:** correctly match a dated
+      Illustrator file to a generically named JPEG; show a clear fallback for
+      unpreviewable/ambiguous sources; review filename-to-title; compare a
+      higher-resolution copy; place only a selected PDF excerpt into the
+      chosen image field; verify save/reopen preserves text, order and links.
+      No real-content changes or publication as part of this planning task.
+
 ### UX-3 — Make saving and publishing states unambiguous
 
 **Finding:** review decisions persist, image edits live in Harvest's state,
