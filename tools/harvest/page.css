@@ -15,7 +15,7 @@
   @font-face { font-family:'PP Neue Montreal'; src:url('/fonts/PPNeueMontreal-Italic.woff2') format('woff2'); font-weight:400; font-style:italic; }
   :root { --bg:#000; --ink:#fff; --accent-rgb:143,143,153;
           --text-2:rgb(117,117,126); --edge:rgb(var(--accent-rgb)); --rule:rgba(var(--accent-rgb), 0.5);
-          --m:20px; }
+          --m:20px; --measure:31em; }
   @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
   * { box-sizing:border-box }
   /* hidden means hidden: the display:block given to every input below would otherwise win over it */
@@ -69,7 +69,9 @@
     --zigzag-bold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-3 1.5L0 4.5L3 1.5L6 4.5L9 1.5' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
   }
   .btn.tab.on { color:var(--ink); }
-  .btn.tab.on::after, .btn.tab:focus-visible::after {
+  /* a pressed toolbar toggle (Bold where the cursor is bold) is chosen too */
+  #mdbar .btn[aria-pressed=true] { color:var(--ink); position:relative; }
+  .btn.tab.on::after, .btn.tab:focus-visible::after, #mdbar .btn[aria-pressed=true]::after {
     content:''; position:absolute; left:6px; right:calc(6px + .01em); bottom:1px; height:6px; background:currentColor;
     -webkit-mask:var(--zigzag) 0 0 / 6px 6px repeat-x; mask:var(--zigzag) 0 0 / 6px 6px repeat-x; }
   .btn.tab:focus-visible { color:var(--ink); outline:none; }
@@ -264,7 +266,52 @@
   #proj textarea[data-p] { min-height:72px; }
   #mdbar { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0 4px; }
   #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:13px; }
+  #mdlink { display:flex; gap:8px; align-items:center; margin:4px 0 8px; max-width:32em; }
+  #mdlink input { margin:0; flex:1; }
+  #descnote { margin:4px 0; max-width:32em; }
   #pbody { min-height:240px; font-size:13px; }
+  /* THE DESCRIPTION, SET AS THE SITE SETS IT (UX-5): the window's body type,
+     and its rules for the marks, lists, quotes, divider and links, copied
+     from index.html (#nl-window, #nl-window-text .body). The width is the
+     site's reading measure, so a line breaks here where it breaks there.
+     tools/check-tokens.js compares the body's size, line height and tracking
+     and the two mark sizes with the site's. One difference, ProseMirror's:
+     white-space is pre-wrap, so two spaces typed show as two here; the site
+     shows one. */
+  #pdesc .ProseMirror { font-size:12px; line-height:1.7; letter-spacing:.02em;
+    max-width:var(--measure); min-height:240px; color:var(--ink); outline:none; position:relative;
+    white-space:pre-wrap; word-wrap:break-word; padding:4px 0 9px; margin-top:4px; border-bottom:1px solid var(--edge); }
+  #pdesc .ProseMirror:hover { border-bottom-color:var(--ink); }
+  #pdesc .ProseMirror:focus { border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); }
+  .err > #pdesc .ProseMirror { border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); }
+  #pdesc strong { font-weight:700; }
+  #pdesc em { font-style:italic; }
+  #pdesc u, #pdesc a { text-decoration:underline; text-underline-offset:0.18em; text-decoration-thickness:1px; }
+  #pdesc a { color:inherit; }
+  #pdesc s { text-decoration:line-through; }
+  #pdesc .w-l { font-weight:300; }
+  #pdesc .t-s { font-size:0.85em; }
+  #pdesc .t-l { font-size:1.27em; }
+  #pdesc p { margin:0 0 1em; }
+  #pdesc p:last-child, #pdesc li > p { margin-bottom:0; }
+  #pdesc ul, #pdesc ol { margin:0 0 1em; padding-left:1.4em; }
+  #pdesc li { margin:0 0 0.25em; }
+  #pdesc blockquote { margin:0 0 1em; padding-left:1em; border-left:1px solid var(--rule); }
+  #pdesc hr { border:0; height:1px; margin:1.6em 0; background:var(--rule); }
+  #pdesc .ProseMirror-selectednode { outline:1px solid var(--ink); outline-offset:2px; }
+  /* LAYOUT, as drawings: chosen = ink and the zigzag under its name */
+  .epanel.form > .field:has(#layouts) { max-width:none; }
+  #layouts { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .layout { font:inherit; letter-spacing:inherit; color:var(--text-2); background:none; border:1px solid var(--rule); border-radius:0;
+            width:184px; padding:12px; text-align:left; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+  .layout svg { width:120px; height:72px; fill:none; stroke:currentColor; stroke-width:1; margin-bottom:4px; }
+  .layout b { font-weight:400; font-size:13px; color:var(--ink); position:relative; align-self:flex-start; padding-bottom:6px; }
+  .layout span { font-size:12px; }
+  .layout:hover { border-color:var(--edge); }
+  .layout[aria-checked=true] { border-color:var(--ink); color:var(--ink); }
+  .layout[aria-checked=true] b::after { content:''; position:absolute; left:0; right:0; bottom:-2px; height:6px; background:currentColor;
+    -webkit-mask:var(--zigzag) 0 0 / 6px 6px repeat-x; mask:var(--zigzag) 0 0 / 6px 6px repeat-x; }
+  .layout:focus-visible { outline:1px solid var(--ink); outline-offset:2px; }
   #texts { overflow:auto; padding:var(--m); border-left:1px solid var(--rule); }
   .tblock { border-top:1px solid var(--rule); padding:8px 0 12px; cursor:pointer; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
   .tblock small { display:block; font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -340,7 +387,14 @@
   /* PREVIEW */
   #preview { display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--rule); }
   .prevhead { padding:8px var(--m); display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--rule); min-height:45px; }
-  #prevframe { flex:1; width:100%; border:0; }
+  /* the screen at its own size, scaled to the space (fitPreview in page.js) */
+  #prevstage { flex:1; min-height:0; overflow:hidden; padding:12px; display:flex; justify-content:center; align-items:flex-start; }
+  #prevscreen { flex:none; overflow:hidden; outline:1px solid var(--rule); }
+  #prevframe { display:block; border:0; transform-origin:0 0; background:#000; }
+  /* LARGE: the preview takes the work's place; the Projects list stays, so
+     another project can be looked at without leaving it */
+  main.prev.large > :is(#work, #work + .seam) { display:none; }
+  main.prev.large > #preview { grid-column:3 / 6; border-left:0; }
 
   /* RIGHT-CLICK MENU — the site's type, not the Mac's: a panel of the same
      buttons as everywhere else. Fixed, so a scrolled column does not carry it

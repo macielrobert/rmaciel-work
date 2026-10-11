@@ -17,7 +17,10 @@
      • the page's script asking for an element id the page does not have
        ($('x') is null, and the first click on it throws);
      • a server that starts but cannot serve the page, its state or the
-       event stream the page listens to. */
+       event stream the page listens to;
+     • a package the description editor imports that the server cannot
+       serve, and a description the editor would change by saving it
+       (tools/check-description.mjs). */
 
 'use strict';
 const fs = require('fs');
@@ -29,7 +32,7 @@ const TOOLS = __dirname, PAGE = path.join(TOOLS, 'harvest');
 const fails = [];
 const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (!ok) fails.push(what); };
 
-for (const f of [path.join(TOOLS, 'harvest.js'), path.join(PAGE, 'page.js')]) {
+for (const f of [path.join(TOOLS, 'harvest.js'), path.join(PAGE, 'page.js'), path.join(PAGE, 'editor.mjs'), path.join(PAGE, 'markdoc-pm.mjs')]) {
   let ok = true;
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); }
   catch (e) { ok = false; console.log(String(e.stderr)); }
@@ -48,7 +51,13 @@ try { execFileSync(process.execPath, [path.join(TOOLS, 'check-tokens.js')], { st
 catch (e) { same = false; console.log(String(e.stdout)); }
 check(same, 'design values match the site');
 
+let round = true;
+try { execFileSync(process.execPath, [path.join(TOOLS, 'check-description.mjs')], { stdio: 'pipe' }); }
+catch (e) { round = false; console.log(String(e.stdout) + String(e.stderr)); }
+check(round, 'the description editor saves what it shows');
+
 const html = fs.readFileSync(path.join(PAGE, 'page.html'), 'utf8');
+const imports = Object.values(JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports);
 const js = fs.readFileSync(path.join(PAGE, 'page.js'), 'utf8');
 const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
 const missing = [...new Set([...js.matchAll(/\$\('([\w-]+)'\)/g)].map(m => m[1]))].filter(i => !ids.has(i));
@@ -68,7 +77,7 @@ const wait = setInterval(async () => {
   if (!m) return;
   clearInterval(wait); clearTimeout(giveUp);
   check(true, 'server started');
-  for (const p of ['/', '/page.css', '/page.js', '/api/state']) {
+  for (const p of ['/', '/page.css', '/page.js', '/editor.mjs', '/markdoc-pm.mjs', '/api/state', ...imports]) {
     let ok = false;
     try { const r = await fetch(m[1] + p); ok = r.ok && (await r.text()).length > 0; } catch {}
     check(ok, 'serves ' + p);

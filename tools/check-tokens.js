@@ -51,19 +51,34 @@ for (const [name, vals] of harvest) {
 
 // the custom marks' sizes, wherever a copy of them lives
 const markSize = (src, cls) => (bare(src).match(new RegExp('\\.' + cls + '\\s*\\{[^}]*font-size:\\s*([\\d.]+em)')) || [])[1];
-const ks = read('keystatic.config.tsx');
+const ks = read('keystatic.config.tsx'), pagecss = read('tools/harvest/page.css');
 for (const cls of ['t-s', 't-l']) {
   const want = markSize(html, cls);
   const label = cls === 't-s' ? 'Smaller' : 'Larger';
   const copies = {
     // Keystatic writes the size as a style object beside the mark's class
     'keystatic.config.tsx': (ks.match(new RegExp("className:\\s*'" + cls + "',\\s*style:\\s*\\{\\s*fontSize:\\s*'([\\d.]+em)'")) || [])[1],
+    // Harvest's description editor sets the marks as the site does (UX-5)
+    'tools/harvest/page.css': markSize(pagecss, cls),
   };
   for (const [file, got] of Object.entries(copies))
     if (norm(got || '') !== norm(want || '')) fails.push(`.${cls} (${label}): index.html has ${want}, ${file} has ${got || 'nothing'}`);
 }
 
+// THE BODY TYPE, which is not a custom property on the site: the window's
+// size, line height and tracking, and the copy Harvest's description editor
+// sets its words in (UX-5), so a line breaks in the editor where it breaks
+// on the site
+const decl = (src, sel, prop) => {
+  const rule = (bare(src).match(new RegExp(sel.replace(/[.#]/g, '\\$&') + '\\s*\\{([^}]*)\\}')) || [])[1] || '';
+  return (rule.match(new RegExp('(?:^|[;\\s])' + prop + '\\s*:\\s*([^;]+)')) || [])[1];
+};
+for (const prop of ['font-size', 'line-height', 'letter-spacing']) {
+  const want = decl(html, '#nl-window', prop), got = decl(pagecss, '#pdesc .ProseMirror', prop);
+  if (!want || norm(got || '') !== norm(want)) fails.push(`body ${prop}: index.html #nl-window has ${want || 'nothing'}, page.css #pdesc has ${got || 'nothing'}`);
+}
+
 if (!shared) fails.push('no custom property is shared — has page.css stopped copying the site\'s values?');
 console.log(fails.length ? 'FAIL design values differ:\n  ' + fails.join('\n  ')
-                         : `ok   design values match (${shared} shared names, 2 mark sizes)`);
+                         : `ok   design values match (${shared} shared names, 2 mark sizes, the body type)`);
 process.exit(fails.length ? 1 : 0);

@@ -303,8 +303,7 @@ expand, crop, grid icon, wordmark) and **Settings** (section, order, hold back,
 part_of, client, working titles, share description): every field Keystatic edits except `images`
 (title, section, order, draft, part_of, client, details, layout, expand, crop,
 icon_type/glyph/image, wordmark, share_description, nicknames, and the
-description body as Markdoc with toolbar buttons + a live preview rendered by
-the repo's @markdoc/markdoc with tags mirroring build.js). Save
+description body — edited formatted since UX-5, below). Save
 (`POST /api/project`) catches up with GitHub, then runs the real `build.js`
 on a throwaway copy of the site holding only this project and the projects
 tied to it by part_of (`checkAlone`), before and after; a save that adds a
@@ -344,21 +343,54 @@ the server compares the state snapshot twice a second and writes only when it
 changed. `poll()` in page.js is now a one-shot refresh after the page's own
 actions.
 
-## The Preview pane (built 2026-10-10)
+## The description editor (UX-5, 2026-10-11)
+
+Edit › Content's description is **ProseMirror** (the engine Keystatic is built
+on, installed with it), in the site's own type: 12px / 1.7 / .02em at the
+31em measure, the site's rules for marks, lists, quotes, dividers and links
+(`#pdesc` in page.css; `check-tokens.js` compares the body type and mark
+sizes). `tools/harvest/markdoc-pm.mjs` converts Markdoc ↔ document and writes
+with Markdoc's own `format()`, as Keystatic does, plus escaping and moving
+edge whitespace out of bold/italic/strike. `editor.mjs` is the view and the
+toolbar. **`#pbody` (the textarea) stays the value**: every edit writes the
+Markdoc into it and fires `input`; `setBody()` in page.js is how a new value
+reaches both. An untouched description is never rewritten. **Markdoc text**
+(toolbar, right) shows the textarea; a description the editor cannot hold
+(inline code, a block-level tag, nested same marks…) opens there with a note.
+Shift-Return is a line break, Return in an empty list item leaves the list,
+Link opens a field under the toolbar (the app has no prompt()). The packages
+are served from node_modules at `/vendor/<name>` (`VENDOR` in harvest.js, the
+import map in page.html — no bundler). `node tools/check-description.mjs`
+round-trips every description in content/ and fixtures through build.js's own
+renderer; check-harvest runs it.
+
+## The Preview pane (built 2026-10-10, three versions since UX-5)
 
 Edit › **Preview** (project header): the site itself in a pane at the right
 of the window, Edit only, drag-resizable up to 75 % of it (`data-right`
-seam). **As saved** (was As written) is `dist/` served by a second server inside harvest.js on its own
-port (`PREVIEW` in `/api/state`), rebuilt by build.js on every load of `/`
-(~0.1 s; `buildSite()` queues it with Publish's build, both empty dist/). Own
-port because from Harvest's origin the site's script would pass the Origin
-check on `/api/` POSTs — verified 403 from the preview port. **Live** is `LIVE`.
-`loadPreview()` reloads it with `?v=<time>#section/slug` on every `loadOrg()`
-(project switch, after Save); a held-back project is not in the build, so the
-pane says so. The boundary is HarvestApp.swift: a clicked link inside a frame
-may only stay on the frame's host; anything else (and any `target=_blank`)
-opens in the default browser. In a plain browser (Harvest.command) there is
-no boundary. Testing in the in-app browser: changing the tab's viewport size
+seam), or **Large** over the work area (the Projects list stays). Versions:
+**Editing preview** (`?edit=<slug>` or `site:about`) = the saved files with
+that project's draft fields (`projectEdit()`/`siteDocEdit()`, what Save would
+write) and its works as Images has them (`previewWorks()`: order, removals,
+alt, caption, turns; a held-back project is shown and the pane says so);
+**Saved preview** = the files as saved (byte-identical to `node build.js`);
+**Live** = `LIVE`. Both local versions are `previewBuild()`: build.js on a
+`throwaway()` copy, page kept in memory, fonts and pictures served from the
+repo — **dist/ is never touched** (it used to be rebuilt in place). A
+picture not saved yet is a stand-in under `images/<slug>/harvest-preview/`
+(`standIn()`: the file itself if JPEG/PNG/WebP/GIF and unturned, else a
+1500px sips JPEG in `.../Harvest/preview/`, swept after a day). Project
+files are COPIED into the throwaway: build.js skips symlinks in
+content/projects. A build is ~0.1 s; the Editing preview is rebuilt 700 ms
+after Harvest stores a draft (`previewSoon`), never per keystroke; picking a
+work changes only the hash (`#section/slug/n`), and the site follows.
+**Desktop** 1280×800 / **Phone** 390×844 are drawn at that size and scaled to
+fit (`fitPreview`); the message line says the scale. Own port because from
+Harvest's origin the site's script would pass the Origin check on `/api/`
+POSTs. The boundary is HarvestApp.swift: a clicked link inside a frame may
+only stay on the frame's host; anything else (and any `target=_blank`) opens
+in the default browser. In a plain browser (Harvest.command) there is no
+boundary. Testing in the in-app browser: changing the tab's viewport size
 made the cross-origin frame screenshot black; a fresh tab rendered it.
 
 ## Finder's right-click menu (built 2026-10-04)

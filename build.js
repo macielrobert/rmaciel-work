@@ -904,4 +904,7 @@ function main() {
   );
 }
 
-main();
+// run as a script (Netlify, Harvest); required, it lends the description
+// renderer to tools/check-description.mjs, which tests Harvest's editor against it
+if (require.main === module) main();
+else module.exports = { renderMarkdoc };

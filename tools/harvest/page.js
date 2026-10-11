@@ -701,6 +701,7 @@ function drawOrg() {
 // THE DETAILS PANEL: the work clicked last, with everything List shows for it.
 // Not redrawn under typing: a redraw would take the caret out of the field.
 function drawDetail() {
+  previewWork();
   const t = orgView === 'grid' && org && ocur && org.stacks.find(x => x.id === ocur);
   const a = document.activeElement;
   if (t && a && a.dataset.f && $('wdetail').contains(a) && $('wdetail').firstElementChild?.dataset.id === t.id) return;
@@ -718,7 +719,7 @@ function markPicks() {
 }
 async function orgOp(body, redraw = true) {
   busy(1);
-  try { await api('/api/organize', { project, ...body }); if (redraw) { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); } }
+  try { await api('/api/organize', { project, ...body }); previewSoon(); if (redraw) { org = await api('/api/organize?project=' + encodeURIComponent(project)); drawOrg(); } }
   catch (e) { tell('⚠ ' + e.message); }
   finally { busy(-1); }
 }
@@ -1113,31 +1114,93 @@ $('newsecgo').addEventListener('click', createSection);
    both of which Save's text step skips. It stays in the column, dimmed, so it
    can be placed again. Text read out of a picture (a work's right-click ›
    Extract text) arrives here already `organize`, waiting to be placed. */
-/* ---- PREVIEW: the site itself, beside Edit. "Last saved" is built from the
-   files on this Mac each time it loads (harvest.js, on a port of its own),
-   so it shows what Save project changed before Publish; "Live" is what
-   visitors get now. It opens on the selected project. A fresh load every time
-   (the ?v=), not a change of the part after #: the build has to run again to
-   pick up a Save. The boundary — a link out of the site opens in the default
-   browser, not in the pane — is HarvestApp.swift's; a plain browser has none. */
-let prevOpen = remember('prevOpen') === '1', prevSrc = remember('prevSrc') || 'written';
+/* ---- PREVIEW: the site itself, beside Edit or over it (UX-5). Three
+   versions, named as what they are:
+     Editing preview  this project's unsaved edits in place — the fields as
+                      typed, the works as Images has them — built on this Mac
+                      by harvest.js on a throwaway copy, so looking saves
+                      nothing and publishes nothing
+     Saved preview    the files on this Mac: what Publish would put live
+     Live             what visitors get now
+   Two screens, Desktop and Phone, each drawn at its own size and scaled down
+   to fit (fitPreview), so narrowing the pane shrinks the picture of the
+   screen instead of quietly turning it into a phone. The Editing preview is
+   built again after a pause in typing, once Harvest holds the draft
+   (previewSoon) — never per keystroke; picking a work opens its picture
+   without a build, through the site's own address (previewWork). The
+   boundary — a link out of the site opens in the default browser, not in the
+   pane — is HarvestApp.swift's; a plain browser has none. */
+const DEVICES = { desktop: { w: 1280, h: 800, name: 'Desktop' }, phone: { w: 390, h: 844, name: 'Phone' } };
+let prevOpen = remember('prevOpen') === '1', prevSrc = remember('prevSrc'), prevDev = remember('prevDev') || 'desktop', prevSize = remember('prevSize') || 'beside', prevBase = '';
+if (!['edit', 'saved', 'live'].includes(prevSrc)) prevSrc = 'edit';   // 'written' was Saved's old name
+const prevKey = () => doc ? 'site:' + doc : project;
+function prevHash() {
+  if (doc) return '#' + doc;
+  const pr = S.projects.find(p => p.slug === project);
+  if (!pr || (pr.draft && prevSrc !== 'edit')) return '';
+  // the Editing preview files the project where the form has it
+  const sec = prevSrc === 'edit' && pd?.slug === project ? document.querySelector('#proj [data-p=section]').value || pr.section : pr.section;
+  return '#' + sec + '/' + pr.slug;
+}
 function loadPreview() {
+  clearTimeout(previewSoon.t);
+  const main = document.querySelector('main');
   $('prevtoggle').classList.toggle('on', prevOpen);
-  document.querySelector('main').classList.toggle('prev', prevOpen && view === 'edit');
-  document.querySelectorAll('#prevsrc [data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === prevSrc));
+  main.classList.toggle('prev', prevOpen && view === 'edit');
+  main.classList.toggle('large', prevSize === 'large');
+  for (const [box, k, v] of [['prevsrc', 'src', prevSrc], ['prevdev', 'dev', prevDev], ['prevsize', 'size', prevSize]])
+    document.querySelectorAll('#' + box + ' [data-' + k + ']').forEach(b => { b.classList.toggle('on', b.dataset[k] === v); b.setAttribute('aria-pressed', String(b.dataset[k] === v)); });
+  fitPreview();
   if (!prevOpen || view !== 'edit' || !S) return;
-  const pr = S.projects.find(p => p.slug === project), shown = pr && !pr.draft;
-  // a held-back project is not in the build, and the site would quietly show everything instead
   previewMessage();
-  $('prevframe').src = (prevSrc === 'live' ? S.live : S.preview) + '?v=' + Date.now() + (doc ? '#' + doc : shown ? '#' + pr.section + '/' + pr.slug : '');
+  prevBase = (prevSrc === 'live' ? S.live + '?' : prevSrc === 'saved' ? S.preview + '?' : S.preview + '?edit=' + encodeURIComponent(prevKey() || '') + '&') + 'v=' + Date.now();
+  const h = prevHash();
+  $('prevframe').src = prevBase + h + (h ? prevWorkPart() : '');
+}
+// the Editing preview again, a moment after the last edit Harvest now holds
+function previewSoon() {
+  clearTimeout(previewSoon.t);
+  if (prevOpen && view === 'edit' && prevSrc === 'edit') previewSoon.t = setTimeout(loadPreview, 700);
+}
+// The work picked in Images, opened in the Editing preview — and kept open
+// when it is built again: its place among the works kept is the site's
+// picture number. Picking one changes only the part after #, so the site
+// follows without a build.
+function prevWorkPart() {
+  if (prevSrc !== 'edit' || etab !== 'images' || !org || !ocur || doc) return '';
+  const n = org.stacks.filter(t => !t.removed).findIndex(t => t.id === ocur) + 1;
+  return n ? '/' + n : '';
+}
+function previewWork() {
+  if (!prevOpen || view !== 'edit' || !prevBase) return;
+  const h = prevHash(), w = h && prevWorkPart();
+  if (w) $('prevframe').src = prevBase + h + w;
 }
 function previewMessage() {
-  const pr = S?.projects.find(p => p.slug === project);
-  $('prevmsg').textContent = pr?.draft ? pr.title + ' is held back, so the site does not show it yet.'
-    : prevSrc === 'live' ? 'Published website.' : 'Saved on this Mac. Unsaved edits are not shown.';
+  const pr = S?.projects.find(p => p.slug === project), name = doc ? DOC_NAME[doc] : pr?.title || '';
+  const unsaved = !!S?.unsaved?.[doc || project]?.length, dev = DEVICES[prevDev];
+  $('prevmsg').textContent = (prevSrc === 'live' ? 'What visitors see now.'
+    : prevSrc === 'saved' ? (pr?.draft ? name + ' is held back, so the saved site does not show it.' : 'As saved on this Mac. Unsaved edits are not shown.')
+    : (!name ? 'Pick a project.' : (unsaved ? name + '’s unsaved edits, in place. Looking saves nothing and publishes nothing.' : name + ' has no unsaved edits.')
+       + (pr?.draft ? ' Held back: shown here, not on the site.' : unsaved ? '' : ' This is as saved.')))
+    + ' ' + dev.name + ' ' + dev.w + ' × ' + dev.h + (fitPreview.s < 1 ? ', shown at ' + Math.round(fitPreview.s * 100) + '%' : '') + '.';
 }
+function fitPreview() {
+  const dev = DEVICES[prevDev], st = $('prevstage'), f = $('prevframe'), box = $('prevscreen');
+  if (st.clientWidth < 48 || st.clientHeight < 48) return;   // shut: measured when it opens
+  const s = Math.min(1, (st.clientWidth - 24) / dev.w, (st.clientHeight - 24) / dev.h);
+  if (s === fitPreview.s && f.style.width === dev.w + 'px') return;
+  fitPreview.s = s;
+  f.style.width = dev.w + 'px'; f.style.height = dev.h + 'px'; f.style.transform = 'scale(' + s + ')';
+  box.style.width = Math.round(dev.w * s) + 'px'; box.style.height = Math.round(dev.h * s) + 'px';
+  if (S && prevOpen) previewMessage();
+}
+new ResizeObserver(() => fitPreview()).observe($('prevstage'));
 $('prevtoggle').addEventListener('click', () => { prevOpen = !prevOpen; remember('prevOpen', prevOpen ? '1' : '0'); loadPreview(); });
 $('prevsrc').addEventListener('click', (e) => { const b = e.target.closest('[data-src]'); if (b) { remember('prevSrc', prevSrc = b.dataset.src); loadPreview(); } });
+$('prevdev').addEventListener('click', (e) => { const b = e.target.closest('[data-dev]'); if (b) { remember('prevDev', prevDev = b.dataset.dev); loadPreview(); } });
+// Large keeps the frame as it is: only the space around it changes
+$('prevsize').addEventListener('click', (e) => { const b = e.target.closest('[data-size]'); if (b) { remember('prevSize', prevSize = b.dataset.size); document.querySelector('main').classList.toggle('large', prevSize === 'large'); loadPreview(); } });
 $('prevreload').addEventListener('click', loadPreview);
 
 let armed = null, armField = 'caption', otexts = [];
@@ -1200,6 +1263,7 @@ async function place(id, k) {
   el.value = k === 'body' ? [cur, mdEscape(text)].filter(Boolean).join('\n\n')
     : k === 'details' || k === 'nicknames' ? [cur, ...text.split('\n').map(s => s.trim())].filter(Boolean).join('\n')
     : text.replace(/\s+/g, ' ');
+  if (k === 'body') setBody(el.value);
   el.dispatchEvent(new Event('input', { bubbles: true }));   // marks the panel unsaved
   el.scrollIntoView({ block: 'nearest' });
   await mark(f, 'organize', PLACES[k].toLowerCase());
@@ -1273,7 +1337,7 @@ function flushDraft() {
   if (!pd || draftStored) return Promise.resolve(true);
   const b = draftBody(), seq = flushDraft.seq;
   if (!b.now) { pdDirty = false; drawState(); }   // typed back to what was saved
-  const sent = saving.then(() => api('/api/draft', b)).then(() => { if (seq === flushDraft.seq) draftStored = true; return true; },
+  const sent = saving.then(() => api('/api/draft', b)).then(() => { if (seq === flushDraft.seq) { draftStored = true; previewSoon(); } return true; },
     (e) => { say('⚠ Harvest could not keep the unsaved edits to the fields (' + e.message + '). They are still in the form: Save project, or try again.'); return false; });
   saving = sent;
   return sent;
@@ -1285,7 +1349,7 @@ function restoreDraft(dr) {
   for (const k in dr.now) {
     if (!changed(k) || k === 'part_of') continue;
     const v = dr.now[k];
-    if (k === 'body') { $('pbody').value = v; continue; }
+    if (k === 'body') { setBody(v); continue; }
     if (k === 'icon_image' || k === 'wordmark') { marks[k] = v; continue; }
     const el = pd.doc ? docEl(k) : document.querySelector('#proj [data-p=' + k + ']');
     if (el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
@@ -1293,7 +1357,7 @@ function restoreDraft(dr) {
   if (!pd.doc) {
     const sec = document.querySelector('#proj [data-p=section]').value;
     partOfOptions(sec, changed('part_of') ? dr.now.part_of : pd.data.part_of || '');
-    drawMarks(); addr(sec);
+    drawMarks(); addr(sec); drawLayouts();
   }
   setDirty(true);
 }
@@ -1348,8 +1412,9 @@ function fillProj() {
   partOfOptions(v.section, d.part_of || '');
   marks.icon_image = d.icon_image || ''; marks.wordmark = d.wordmark || '';
   drawMarks();
-  $('pbody').value = pd.body || '';
+  setBody(pd.body || '');
   addr(v.section);
+  drawLayouts();
   setDirty(false);
   // what the form showed when loaded: Save sends only what differs from it
   pd.shown = formValues(); pd.shownBody = $('pbody').value;
@@ -1370,7 +1435,7 @@ async function loadDoc() {
   catch (e) { tell('⚠ ' + e.message); return; }
   clearFieldErr();
   for (const k in DOC_FIELDS[pd.doc]) { const v = pd.data[k]; docEl(k).value = Array.isArray(v) ? v.join('\n') : (v ?? ''); }
-  if (pd.doc === 'about') $('pbody').value = pd.body || '';
+  if (pd.doc === 'about') setBody(pd.body || '');
   setDirty(false);
   pd.shown = docValues(); pd.shownBody = pd.doc === 'about' ? $('pbody').value : undefined;
   if (pd.draft) restoreDraft(pd.draft);
@@ -1403,7 +1468,7 @@ function markFieldErr() {
   if (tab) showTab(tab);
   const box = el.parentElement;
   box.classList.add('err'); box.insertAdjacentHTML('afterend', '<div class="errmsg">' + esc(words) + '</div>');
-  el.focus();
+  if (el.id === 'pbody' && window.desc?.active) desc.focus(); else el.focus();
 }
 function clearFieldErr() {
   ferr = null;
@@ -1446,11 +1511,35 @@ $('proj').addEventListener('change', async (e) => {
 });
 $('proj').addEventListener('click', (e) => {
   if (e.target.closest('[data-unmark]')) { marks[e.target.closest('[data-mark]').dataset.mark] = ''; setDirty(true); drawMarks(); }
-  const b = e.target.closest('[data-md]'); if (b) markup(b.dataset.md);
+  const b = e.target.closest('[data-md]');
+  if (b) { if (window.desc?.active) desc.command(b.dataset.md); else markup(b.dataset.md); }
+  const l = e.target.closest('[data-layout]'); if (l) pickLayout(l.dataset.layout);
 });
-// The description is Markdoc, as Keystatic writes it. The buttons put the
-// marks in for you. Use the site preview after Save project to see the result.
-// A second rendered description beneath this field duplicated the site pane.
+// The description is Markdoc, as Keystatic writes it, in #pbody: the value
+// everything here reads and saves. editor.mjs shows it formatted and keeps
+// #pbody current; setBody() is how a new value reaches both. In Markdoc text
+// mode (or if editor.mjs did not load) the buttons below type the marks.
+function setBody(v) { $('pbody').value = v; window.desc?.load(v); }
+// THE LAYOUT, as three drawings (UX-5). The hidden menu is the value, so the
+// form, the draft and Save read it as they read every other field.
+function drawLayouts() {
+  const v = document.querySelector('#proj [data-p=layout]').value;
+  for (const b of document.querySelectorAll('#layouts [data-layout]')) { b.setAttribute('aria-checked', String(b.dataset.layout === v)); b.tabIndex = b.dataset.layout === v ? 0 : -1; }
+}
+function pickLayout(v) {
+  const sel = document.querySelector('#proj [data-p=layout]');
+  if (sel.value !== v) { sel.value = v; sel.dispatchEvent(new Event('input', { bubbles: true })); }
+  drawLayouts();
+}
+// a radio group: the arrows move the choice, Tab leaves it
+$('layouts').addEventListener('keydown', (e) => {
+  const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  const all = [...document.querySelectorAll('#layouts [data-layout]')], i = all.indexOf(e.target.closest('[data-layout]'));
+  const next = all[(i + d + all.length) % all.length];
+  pickLayout(next.dataset.layout); next.focus();
+});
 const WRAP = { bold: ['**', '**'], italic: ['_', '_'], strike: ['~~', '~~'], underline: ['{% underline %}', '{% /underline %}'],
   light: ['{% light %}', '{% /light %}'], small: ['{% small %}', '{% /small %}'], large: ['{% large %}', '{% /large %}'], link: ['[', '](https://)'] };
 const PREFIX = { list: () => '- ', numbered: (i) => (i + 1) + '. ', quote: () => '> ' };
