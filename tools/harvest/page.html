@@ -2,125 +2,165 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Harvest</title>
 <link rel="stylesheet" href="/page.css">
+<!-- THE SHELL (UX-2, 2026-10-10). Each kind of control has one home
+     (STYLE-GUIDE.md, Placement):
+       application header  Collect / Edit, background activity, Publish
+       project header      the project's name, its saved state, Save project, Preview
+       workspace toolbar   find, filters, Grid / List, thumbnail size
+       selection toolbar   how many are selected and what can be done to them
+       details panel       the fields of the one work being looked at
+     The Projects list stays at the left in both modes, so switching mode never
+     moves the project you are on. -->
 <header>
   <h1>HARVEST</h1>
-  <nav id="tabs"><button class="btn on" data-view="collect">Collect</button><button class="btn" data-view="organize">Organize</button></nav>
-  <!-- show or hide a side column; the columns to its right take the room -->
-  <nav id="panes"><button class="btn on" data-pane="folders" title="Show or hide the Folders column">Folders</button><button class="btn on" data-pane="projects" title="Show or hide the Projects column">Projects</button></nav>
-  <span class="dim" id="rootline"></span>
-  <label class="dim"><input type="checkbox" id="indesign" style="width:auto;display:inline;margin:0 6px 0 0">Read InDesign files (opens InDesign, slow)</label>
-  <span class="dim" id="status"></span>
-  <button class="btn" id="stop" hidden>Stop</button>
-  <!-- THE STEPS TO SHIP, in order, on Organize: Collect finds and roughly
-       sorts; Organize is where a project is planned, so writing happens there
-       (Robert, 2026-10-06). Collect has no Write of its own any more. -->
-  <span id="steps" hidden><button class="btn" id="orgwrite" disabled title="Project details, the works in this order, and the accepted text, written into the project file. Not live until Publish.">Write to project</button> <span class="dim">→</span></span>
-  <button class="btn" id="publish" disabled>Publish</button>
+  <nav id="tabs" aria-label="Mode"><button class="btn tab on" data-view="collect" title="Find material and decide what belongs in the project">Collect</button><button class="btn tab" data-view="edit" title="Arrange what was kept: text, images, layout and settings">Edit</button></nav>
+  <span id="status" role="status"></span>
+  <button class="btn quiet" id="stop" hidden>Stop</button>
+  <button class="btn primary" id="publish" disabled>Publish</button>
 </header>
 <main>
-  <section id="foldercol" data-w="folders">
-    <h2 class="cap">Folders</h2>
-    <!-- above the tree, not below it: a home folder lists dozens of folders,
-         and underneath them the buttons were scrolled out of sight -->
-    <div class="tree-actions">
-      <button class="btn" id="crawl" disabled>Crawl this folder</button>
-      <button class="btn" id="link" disabled>Link to project</button>
-      <input id="site" placeholder="Or a website, e.g. rmaciel.work">
-      <button class="btn" id="crawlsite">Crawl website</button>
-    </div>
-    <div id="pages"></div>
-    <div id="tree"></div>
-  </section>
-  <div class="seam"></div>
-  <section id="projectcol" data-w="projects">
+  <aside id="projectcol" data-w="projects">
     <h2 class="cap">Projects</h2>
-    <div id="newp">
-      <input id="newtitle" placeholder="New project title">
-      <select id="newsection"><!-- the sections, filled by drawSections() --></select>
-      <button class="btn" id="newgo" disabled>Create project</button>
-    </div>
-    <!-- a new section: a file in content/sections/, off the site until a
-         project in it is published -->
-    <div id="news">
-      <input id="newsectitle" placeholder="New section, e.g. SYSTEMS">
-      <button class="btn" id="newsecgo" disabled>Add section</button>
-    </div>
-    <input id="nick" placeholder="Add a working title" hidden>
     <div id="projects"></div>
-  </section>
+    <!-- ABOUT, CONTACT and the site's settings are part of the site too; Harvest
+         does not edit them yet, and says where they are edited instead of
+         leaving them out of the picture -->
+    <div class="sitenote"><h2 class="cap">Site</h2><p class="help">About, Contact and the site's settings are edited in Keystatic for now.</p></div>
+    <div class="sidefoot">
+      <div id="newp">
+        <input id="newtitle" placeholder="New project title" aria-label="New project title">
+        <select id="newsection" aria-label="Section for the new project"><!-- the sections, filled by drawSections() --></select>
+        <button class="btn" id="newgo" disabled>Create project</button>
+      </div>
+      <!-- a new section: a file in content/sections/, off the site until a
+           project in it is published -->
+      <div id="news">
+        <input id="newsectitle" placeholder="New section, e.g. SYSTEMS" aria-label="New section">
+        <button class="btn" id="newsecgo" disabled>Add section</button>
+      </div>
+    </div>
+  </aside>
   <div class="seam"></div>
-  <section id="review">
-    <div id="bulk">
-      <span class="dim" id="n-sel">Tick cards to select</span>
-      <button class="btn" data-bulk="accepted" disabled>Accept</button>
-      <button class="btn" data-bulk="rejected" disabled>Reject</button>
-      <button class="btn" id="bforget" disabled title="Delete the ticked pending or rejected cards without deciding them; a later crawl may suggest them again">Forget</button>
-      <select id="moveto" disabled><option value="">Move to project…</option></select>
+  <section id="work">
+    <!-- PROJECT HEADER: the same place in both modes -->
+    <div id="phead">
+      <h2 id="pname">Pick a project</h2>
+      <span id="pstate"></span>
+      <span id="orgmsg" role="status"></span>
+      <span class="push"></span>
+      <button class="btn tab" id="prevtoggle" title="The site itself, beside your work: as saved on this Mac, or live">Preview</button>
+      <button class="btn primary" id="orgwrite" disabled title="Project details, the works in this order, and the kept text, saved into the project file on this Mac. Not on the site until Publish.">Save project</button>
     </div>
-    <div class="col" data-w="pending"><div class="colhead"><h2 class="cap">Pending <span id="n-pending"></span><button class="btn" id="newcards" hidden>Show new</button><button class="btn" id="pclear" title="Take the pending cards now showing out of the queue without rejecting them. A later crawl can suggest them again.">Clear</button><input type="checkbox" data-all="pending" title="Select all"></h2>
-      <div id="pfilter"><div id="ptype"><button class="btn on" data-t="">All</button><button class="btn" data-t="files">Files</button><button class="btn" data-t="web">Website</button></div><input id="pq" placeholder="Filter by path, title or text"><select id="psrc"></select><select id="psort"><option value="group">Folders and pages first</option><option value="source">By source, A–Z</option><option value="kind">By type</option></select></div></div>
-      <div id="pending"></div></div>
-    <div class="seam" data-fr="1"></div>
-    <div class="col" data-w="accepted"><div class="colhead"><h2 class="cap">Accepted <span id="n-accepted"></span><input type="checkbox" data-all="accepted" title="Select all"></h2><div id="msg"></div></div><div id="accepted"></div></div>
-    <div class="seam" data-fr="1"></div>
-    <div class="col rejected" data-w="rejected"><div class="colhead"><h2 class="cap">Rejected <span id="n-rejected"></span><button class="btn" id="clear" title="Hide these. They stay remembered as rejected, so they are never suggested again.">Hide</button><button class="btn" id="rforget" title="Forget these rejections, so the same things can be suggested again by a later crawl.">Forget all</button></h2></div><div id="rejected"></div></div>
-  </section>
-  <section id="org">
-    <div class="orghead">
-      <span id="orgtitle" class="cap">Pick a project</span>
-      <span class="dim" id="orgcount"></span>
-      <button class="btn" id="orgshowrm" hidden title="Removed works wait here until Write to project takes them off the site. Show them to Restore one.">Show removed</button>
-      <span id="orgviews"><button class="btn" data-ov="list">List</button> <button class="btn" data-ov="grid">Grid</button> <span id="orgsizes"><button class="btn" data-cell="100">S</button> <button class="btn" data-cell="170">M</button> <button class="btn" data-cell="280">L</button></span></span>
-      <input id="orgq" type="search" placeholder="Find by file name (⌘F)">
-      <button class="btn" id="orgmerge" disabled title="The ticked works are versions of one work: stack them, keep one">Same work — merge</button>
-      <button class="btn" id="orgremove" disabled title="Take the ticked works off this project. Write to project is what takes them off the site; Restore brings them back before then.">Remove from project</button>
-      <button class="btn" id="orgsplit" disabled title="Undo a grouping: every copy in the ticked works becomes a work of its own">Separate copies</button>
-      <button class="btn" id="orgmove" disabled title="Move the ticked works, with all their copies, to another project. Or drag them onto a project's name.">Move to project</button>
-      <button class="btn" id="textstoggle" title="The project's accepted text, to place in a project field or on a work">Text</button>
-      <button class="btn" id="prevtoggle" title="The site itself, beside the works: as written on this Mac, or live">Preview</button>
-      <button class="btn" id="projtoggle" title="Every other field of this project: section, icon, description…">Project details</button>
-      <span class="dim" id="orgmsg"></span>
-    </div>
-    <!-- PROJECT PANEL: every field Keystatic edits except the pictures, which
-         are the works below. Filled by loadProj() in page.js. -->
-    <div id="orgbody"><div id="orgmain">
-    <div id="proj" hidden>
-      <div class="phead"><span class="cap" id="ptitle"></span><span class="dim" id="paddr"></span><span id="punsaved" hidden>Unsaved <button class="btn" id="pwrite">Write to project</button></span></div>
-      <div class="pgrid">
-        <label>Title<input data-p="title"></label>
-        <label>Section<select data-p="section"><!-- filled by drawSections() --></select></label>
-        <label>Position in grid<input data-p="order" type="number" step="1" placeholder="Low numbers first: 10, 20, 30"></label>
-        <label class="chk"><input type="checkbox" data-p="draft">Hold back (do not publish)</label>
-        <label>Sub-project of<select data-p="part_of"></select></label>
-        <label>Client name<input data-p="client" placeholder="Only for a project with sub-projects: the heading over them"></label>
-        <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
-        <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
-        <div class="field">Grid icon
-          <select data-p="icon_type"><option value="glyph">Typed character</option><option value="image">Image (PNG or SVG)</option></select>
-          <input data-p="icon_glyph" placeholder="One character">
-          <div class="mark" data-mark="icon_image"></div>
+
+    <!-- COLLECT: which material belongs in this project? Sources at the left,
+         one review list at the right. -->
+    <div id="collect">
+      <section id="sources" data-w="folders">
+        <h2 class="cap">Sources</h2>
+        <p class="help" id="rootline"></p>
+        <!-- above the tree, not below it: a home folder lists dozens of folders,
+             and underneath them the buttons were scrolled out of sight -->
+        <div class="tree-actions">
+          <button class="btn" id="crawl" disabled>Crawl this folder</button>
+          <button class="btn" id="link" disabled>Link to project</button>
+          <label class="chk"><input type="checkbox" id="indesign">Read InDesign files <span class="help">opens InDesign, slow</span></label>
+          <input id="site" placeholder="Or a website, e.g. rmaciel.work" aria-label="Website to crawl">
+          <button class="btn" id="crawlsite">Crawl website</button>
         </div>
-        <div class="field">Wordmark / hero mark <span class="dim">(optional)</span>
-          <div class="mark" data-mark="wordmark"></div>
+        <div id="pages"></div>
+        <div id="tree"></div>
+      </section>
+      <div class="seam"></div>
+      <section id="review">
+        <div class="wsbar">
+          <nav id="rtabs" aria-label="Decision"><button class="btn tab on" data-rv="pending">Pending <span id="n-pending"></span></button><button class="btn tab" data-rv="accepted">Kept <span id="n-accepted"></span></button><button class="btn tab" data-rv="rejected">Rejected <span id="n-rejected"></span></button></nav>
+          <input id="pq" type="search" placeholder="Find (⌘F)" title="Matches the path, the page title and the text" aria-label="Find">
+          <select id="ptype" aria-label="Kind of source"><option value="">Files and websites</option><option value="files">Files</option><option value="web">Websites</option></select>
+          <select id="psrc" aria-label="Source"></select>
+          <select id="psort" aria-label="Order"><option value="group">Folders first</option><option value="source">Source, A–Z</option><option value="kind">Type</option></select>
+          <button class="btn" id="newcards" hidden>Show new</button>
+          <span class="push"></span>
+          <button class="btn quiet opens" id="qmore" title="Clearing the queue and forgetting decisions: the menu says what each one keeps">Clear and forget</button>
         </div>
-        <label>Detail lines <span class="dim">one per line</span><textarea data-p="details"></textarea></label>
-        <label>Share description <span class="dim">plain text, for link previews</span><textarea data-p="share_description"></textarea></label>
-        <label>Working titles <span class="dim">one per line — only Harvest uses these</span><textarea data-p="nicknames"></textarea></label>
-      </div>
-      <div class="field">Description
-        <div id="mdbar"><button class="btn" data-md="bold"><b>B</b></button><button class="btn" data-md="italic"><i>I</i></button><button class="btn" data-md="underline"><u>U</u></button><button class="btn" data-md="strike"><s>S</s></button><button class="btn" data-md="light">Lighter</button><button class="btn" data-md="small">Smaller</button><button class="btn" data-md="large">Larger</button><button class="btn" data-md="link">Link</button><button class="btn" data-md="list">• List</button><button class="btn" data-md="numbered">1. List</button><button class="btn" data-md="quote">Quote</button><button class="btn" data-md="divider">Divider</button></div>
-        <div class="pdesc"><textarea id="pbody" placeholder="Select words, then a button above. The preview on the right is how the site will set it."></textarea><div id="ppreview"></div></div>
-      </div>
-      <div class="pfoot"><span class="dim" id="pmsg"></span></div>
+        <div class="selbar" id="bulk">
+          <label class="chk"><input type="checkbox" id="pickall"><span id="n-sel">Nothing selected</span></label>
+          <button class="btn" data-bulk="accepted" disabled title="Kept material is what Edit works with">Keep</button>
+          <button class="btn" data-bulk="rejected" disabled title="Remembered as unwanted: a later crawl will not suggest it again">Reject</button>
+          <button class="btn" data-bulk="pending" disabled title="Back to Pending, to decide again">Reset decision</button>
+          <button class="btn opens" id="moveto" disabled>Move to…</button>
+          <button class="btn quiet" id="unpick" disabled>Clear selection</button>
+        </div>
+        <div id="cards"></div>
+      </section>
     </div>
-    <div id="stacks"></div>
-    </div><div class="seam"></div><aside id="texts" data-w="texts" hidden></aside>
-    <!-- PREVIEW: the site, in a frame that cannot leave it (see loadPreview in page.js) -->
-    <div class="seam" data-right></div><aside id="preview" data-w="preview" hidden>
-      <div class="prevhead"><span id="prevsrc"><button class="btn" data-src="written" title="Built from the files on this Mac each time it loads: what Publish would put live">As written</button> <button class="btn" data-src="live" title="What visitors see now">Live</button></span> <button class="btn" id="prevreload">Reload</button> <span class="dim" id="prevmsg"></span></div>
-      <iframe id="prevframe" title="Site preview"></iframe>
-    </aside></div>
+
+    <!-- EDIT: one project at a time. Content, Images, Layout and the project's
+         Settings; every field Keystatic edits except the pictures lives in
+         #proj (loadProj() fills it), and the pictures are the works in Images. -->
+    <div id="edit">
+      <p class="help" id="editempty">Pick a project at the left to edit it.</p>
+      <nav id="etabs" aria-label="Part of the project"><button class="btn tab" data-et="content">Content</button><button class="btn tab" data-et="images">Images</button><button class="btn tab" data-et="layout">Layout</button><button class="btn tab" data-et="settings">Settings</button></nav>
+      <div id="proj">
+        <div class="epanel" data-tab="content">
+          <div class="fields">
+            <label>Title<input data-p="title"></label>
+            <label>Detail lines <span class="help">one per line</span><textarea data-p="details"></textarea></label>
+            <div class="field">Description
+              <div id="mdbar"><button class="btn quiet" data-md="bold"><b>B</b></button><button class="btn quiet" data-md="italic"><i>I</i></button><button class="btn quiet" data-md="underline"><u>U</u></button><button class="btn quiet" data-md="strike"><s>S</s></button><button class="btn quiet" data-md="light">Lighter</button><button class="btn quiet" data-md="small">Smaller</button><button class="btn quiet" data-md="large">Larger</button><button class="btn quiet" data-md="link">Link</button><button class="btn quiet" data-md="list">• List</button><button class="btn quiet" data-md="numbered">1. List</button><button class="btn quiet" data-md="quote">Quote</button><button class="btn quiet" data-md="divider">Divider</button></div>
+              <div class="pdesc"><textarea id="pbody" placeholder="Select words, then a button above. The preview beside it is how the site will set it." aria-label="Description"></textarea><div id="ppreview"></div></div>
+            </div>
+          </div>
+          <div class="seam" data-right></div><aside id="texts" data-w="texts"></aside>
+        </div>
+        <div class="epanel form" data-tab="layout">
+          <label>Layout<select data-p="layout"><option value="standard">Standard</option><option value="grid">Grid</option><option value="text">Text</option></select></label>
+          <label class="chk"><input type="checkbox" data-p="expand">Allow image expand</label>
+          <div class="field">Grid icon — required to go on the site
+            <select data-p="icon_type" aria-label="Kind of grid icon"><option value="glyph">Typed character</option><option value="image">Image (PNG or SVG)</option></select>
+            <input data-p="icon_glyph" placeholder="One character" aria-label="Icon character">
+            <div class="mark" data-mark="icon_image"></div>
+          </div>
+          <div class="field">Wordmark / hero mark <span class="help">optional</span>
+            <div class="mark" data-mark="wordmark"></div>
+          </div>
+        </div>
+        <div class="epanel form" data-tab="settings">
+          <p class="help" id="paddr"></p>
+          <label>Section<select data-p="section"><!-- filled by drawSections() --></select></label>
+          <label>Position in grid<input data-p="order" type="number" step="1" placeholder="Low numbers first: 10, 20, 30"></label>
+          <label class="chk"><input type="checkbox" data-p="draft">Hold back (do not publish)</label>
+          <label>Sub-project of<select data-p="part_of"></select></label>
+          <label>Client name <span class="help">only for a project with sub-projects: the heading over them</span><input data-p="client"></label>
+          <label>Working titles <span class="help">names it was saved under before it was named, one per line. Only Harvest uses these</span><textarea data-p="nicknames"></textarea></label>
+          <label>Share description <span class="help">plain text, for link previews and search</span><textarea data-p="share_description"></textarea></label>
+        </div>
+      </div>
+      <div class="epanel" data-tab="images" id="images">
+        <div class="wsbar">
+          <span class="help" id="orgcount"></span>
+          <input id="orgq" type="search" placeholder="Find by file name (⌘F)" aria-label="Find by file name">
+          <span id="orgviews"><button class="btn tab" data-ov="grid">Grid</button><button class="btn tab" data-ov="list">List</button></span>
+          <span id="orgsizes" aria-label="Thumbnail size"><button class="btn tab" data-cell="100" title="Small">S</button><button class="btn tab" data-cell="170" title="Medium">M</button><button class="btn tab" data-cell="280" title="Large">L</button></span>
+          <span class="push"></span>
+          <button class="btn quiet" id="orgshowrm" hidden title="Removed works wait here until Save project takes them off the site. Show them to Restore one.">Show removed</button>
+        </div>
+        <div class="selbar">
+          <label class="chk"><input type="checkbox" id="opickall"><span id="osel">Nothing selected</span></label>
+          <button class="btn" id="orgmerge" disabled title="The selected works are versions of one work: stack them, keep one">Same work — merge</button>
+          <button class="btn" id="orgsplit" disabled title="Undo a grouping: every copy in the selected works becomes a work of its own">Separate copies</button>
+          <button class="btn opens" id="orgmove" disabled title="Move the selected works, with all their copies, to another project. Or drag them onto a project's name.">Move to…</button>
+          <button class="btn" id="orgremove" disabled title="Take the selected works off this project. Save project is what takes them off the site; Restore brings them back before then.">Remove</button>
+          <button class="btn quiet" id="ounpick" disabled>Clear selection</button>
+        </div>
+        <div class="ibody"><div id="stacks"></div><div class="seam" data-right></div><aside id="wdetail" data-w="detail"></aside></div>
+      </div>
+    </div>
   </section>
+  <!-- PREVIEW: the site, in a frame that cannot leave it (see loadPreview in page.js) -->
+  <div class="seam" data-right></div><aside id="preview" data-w="preview">
+    <div class="prevhead"><span id="prevsrc"><button class="btn tab" data-src="written" title="Built from the files on this Mac each time it loads: what Publish would put live">As saved</button><button class="btn tab" data-src="live" title="What visitors see now">Live</button></span> <button class="btn quiet" id="prevreload">Reload</button> <span class="help" id="prevmsg"></span></div>
+    <iframe id="prevframe" title="Site preview"></iframe>
+  </aside>
 </main>
 <!-- the right-click menu, filled by openMenu() in page.js -->
 <div id="menu" hidden></div>

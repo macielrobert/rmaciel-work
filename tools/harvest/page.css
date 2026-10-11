@@ -1,250 +1,331 @@
   /* The site's own face, colours and type scale, so this reads as a room of
-     the same house. Tokens copied from index.html: --bg / --ink invert with
-     the device theme, --accent-rgb does not. */
+     the same house. Tokens copied from index.html under the same names
+     (STYLE-GUIDE.md, "Where the values live"); tools/check-tokens.js fails
+     when a copy drifts. --bg / --ink invert with the device theme; the three
+     greys do not:
+       --text-2  WORDS: labels, help, resting controls. 4.60:1 on black, 4.56:1 on white
+       --edge    a line that says where a control IS: field underlines, button outlines
+       --rule    decoration: dividers, the seam, hairlines between items. No minimum
+     Harvest takes the editor values of the guide with UX-2 (2026-10-10):
+     13px Book where it was 11px Light — the Light weight was most of why it
+     read faint — and buttons with a hit area instead of a bare word. */
   @font-face { font-family:'PP Neue Montreal'; src:url('/fonts/PPNeueMontreal-Light.woff2') format('woff2'); font-weight:300; }
   @font-face { font-family:'PP Neue Montreal'; src:url('/fonts/PPNeueMontreal-Book.woff2') format('woff2'); font-weight:400; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('/fonts/PPNeueMontreal-Bold.woff2') format('woff2'); font-weight:700; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('/fonts/PPNeueMontreal-Italic.woff2') format('woff2'); font-weight:400; font-style:italic; }
   :root { --bg:#000; --ink:#fff; --accent-rgb:143,143,153;
-          --accent:rgba(var(--accent-rgb),.9); --accent-dim:rgba(var(--accent-rgb),.5); --m:20px; }
+          --text-2:rgb(117,117,126); --edge:rgb(var(--accent-rgb)); --rule:rgba(var(--accent-rgb), 0.5);
+          --m:20px; }
   @media (prefers-color-scheme: light) { :root { --bg:#fff; --ink:#000; } }
   * { box-sizing:border-box }
   /* hidden means hidden: the display:block given to every input below would otherwise win over it */
   [hidden] { display:none !important; }
   /* the columns scroll; the window never does */
   html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); }
-  body { font:300 11px/1.7 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.05em; display:grid; grid-template-rows:auto 1fr;
+  body { font:400 13px/1.5 'PP Neue Montreal', -apple-system, system-ui, sans-serif; letter-spacing:.01em; display:grid; grid-template-rows:auto 1fr;
          /* the window's width, never the content's: an "auto" column grew to
             fit the header's longest line (a deep "Last crawl" path), the whole
             page got wider than the window, and Organize's right-hand column
             of works was cut off. minmax(0, …) lets the path shorten with its
             ellipsis instead, which is what it was built to do. */
          grid-template-columns:minmax(0, 1fr); }
-  .cap { text-transform:uppercase; letter-spacing:.15em; }
-  .dim { color:var(--accent); }
-  .btn { color:var(--accent); cursor:pointer; background:none; border:0; padding:0; font:inherit; text-transform:uppercase; letter-spacing:.15em; text-align:left; }
-  .btn:hover, .btn:focus-visible { color:var(--ink); outline:none; }
-  .btn[disabled] { opacity:.35; pointer-events:none; }
-  header { display:flex; gap:24px; align-items:baseline; padding:14px var(--m); border-bottom:1px solid var(--accent-dim); }
-  header label { white-space:nowrap; }
-  header h1 { font-size:13px; font-weight:400; margin:0; letter-spacing:.15em; }
-  #status { margin-left:auto; white-space:nowrap; }
-  /* a long crawl path gives way, not Publish: it shortens with an ellipsis */
-  #rootline { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #publish[disabled] { opacity:.35; }
-  #steps { white-space:nowrap; }
-  /* instant feedback: a hairline runs along the top while anything is saving */
-  body.busy::before { content:''; position:fixed; top:0; left:0; height:2px; width:30%; background:var(--ink); animation:busy 1s linear infinite; z-index:9; }
+  /* REGION LABELS: the one place Harvest is uppercase (the guide: uppercase is a role, not a voice) */
+  .cap { font-size:11px; font-weight:400; text-transform:uppercase; letter-spacing:.12em; color:var(--text-2); margin:0 0 12px; }
+  .help, .dim { color:var(--text-2); font-size:12px; }
+  .push { flex:1; }
+
+  /* BUTTONS — three kinds for three jobs, plus tabs (STYLE-GUIDE.md, Controls).
+     Secondary is the default; .primary is the one action a region exists for;
+     .quiet does not compete; .tab chooses between views. Every one is at least
+     28px tall: a word alone is not a button. Hover changes tone; only keyboard
+     focus draws an outline, so the two are never confused. Disabled stays
+     READABLE (--text-2, never the decorative grey) and says it is unavailable
+     by a DASHED line instead — the same mark a disabled field carries. */
+  .btn { font:inherit; letter-spacing:inherit; text-transform:none; color:var(--ink); background:none; border:1px solid var(--edge); border-radius:0;
+         min-height:28px; padding:0 12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap; text-align:left; }
+  .btn:hover { border-color:var(--ink); }
+  .btn:focus-visible { outline:1px solid var(--ink); outline-offset:2px; }
+  .btn[disabled] { color:var(--text-2); border-style:dashed; border-color:var(--rule); cursor:default; }
+  .btn.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .btn.primary:hover { opacity:.8; }
+  .btn.primary[disabled] { background:none; color:var(--text-2); border-color:var(--edge); opacity:1; }
+  .btn.quiet { color:var(--text-2); border-color:transparent; padding:0 6px; }
+  .btn.quiet:hover, .btn.quiet.on { color:var(--ink); }
+  .btn.quiet[disabled] { border-color:transparent; text-decoration:underline dashed var(--rule); text-underline-offset:4px; }
+  .btn.tab { color:var(--text-2); border:0; padding:0 6px; }
+  .btn.tab:hover { color:var(--ink); }
+  /* chosen: ink AND a line under it, so tone is never the only signal */
+  .btn.tab.on { color:var(--ink); text-decoration:underline 1px; text-underline-offset:6px; }
+  /* a button that opens a menu carries the same drawn chevron as a select */
+  .btn.opens { padding-right:22px; background:linear-gradient(45deg, transparent 50%, currentColor 50%) right 11px center / 5px 5px no-repeat,
+                                                linear-gradient(-45deg, transparent 50%, currentColor 50%) right 6px center / 5px 5px no-repeat; }
+  .btn.quiet.opens { padding-right:18px; background-position:right 7px center, right 2px center; }
+
+  /* FIELDS — the label above in 12px --text-2, the line 1px --edge; hover
+     inks the line, focus doubles it (a shadow, so nothing below moves) */
+  textarea, input, select { display:block; width:100%; background:transparent; color:var(--ink);
+    border:0; border-bottom:1px solid var(--edge); border-radius:0; outline:none;
+    font:inherit; letter-spacing:inherit; padding:4px 0 5px; margin-top:4px; }
+  textarea { min-height:120px; resize:vertical; }
+  textarea:hover, input:hover, select:hover { border-bottom-color:var(--ink); }
+  textarea:focus, input:focus, select:focus { border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); }
+  input[type=checkbox] { display:inline-block; width:auto; margin:0; accent-color:var(--ink); }
+  input[type=checkbox]:focus-visible { outline:1px solid var(--ink); outline-offset:2px; }
+  /* a drawn chevron, so a menu reads as a menu: appearance:none removed the arrow */
+  select { appearance:none; cursor:pointer; padding-right:16px;
+    background:linear-gradient(45deg, transparent 50%, var(--text-2) 50%) right 6px center / 5px 5px no-repeat,
+               linear-gradient(-45deg, transparent 50%, var(--text-2) 50%) right 1px center / 5px 5px no-repeat; }
+  option { background:var(--bg); }
+  ::placeholder { color:var(--text-2); }
+  label, .field { display:block; color:var(--text-2); font-size:12px; }
+  label > input, label > textarea, label > select, .field > input, .field > select { font-size:13px; }
+  /* the label above the field, its help line below it */
+  label:not(.chk) { display:flex; flex-direction:column; }
+  label:not(.chk) > .help { order:1; margin-top:4px; }
+  label.chk { display:flex; flex-wrap:wrap; column-gap:8px; align-items:center; min-height:28px; color:var(--ink); font-size:13px; }
+  label.chk .help { flex-basis:100%; padding-left:21px; margin-top:-4px; }
+  /* AN ERROR: the line doubled in ink, then a small solid square and a sentence that says what to do */
+  .err > input, .err > textarea, input.err, textarea.err { border-bottom-color:var(--ink); box-shadow:0 1px 0 var(--ink); }
+  .errmsg { color:var(--ink); font-size:12px; margin-top:6px; }
+  .errmsg::before { content:''; display:inline-block; width:6px; height:6px; background:var(--ink); margin-right:6px; vertical-align:1px; }
+
+  /* APPLICATION HEADER */
+  header { display:flex; gap:20px; align-items:center; padding:8px var(--m); border-bottom:1px solid var(--rule); min-width:0; }
+  header h1 { font-size:11px; font-weight:400; margin:0; letter-spacing:.15em; }
+  #tabs, #etabs, #rtabs, #orgviews, #orgsizes, #prevsrc { display:flex; gap:4px; }
+  #status { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-2); font-size:12px; text-align:right; }
+  /* WORK IN PROGRESS: a 1px line runs along the top while anything is saving */
+  body.busy::before { content:''; position:fixed; top:0; left:0; height:1px; width:30%; background:var(--ink); animation:busy 1s linear infinite; z-index:9; }
   @keyframes busy { from { transform:translateX(-100%); } to { transform:translateX(400%); } }
-  .btn:active { color:var(--ink); }
-  .more { margin:14px 0; }
-  #pfilter { display:grid; gap:4px; margin:0 0 8px; }
-  #pfilter input, #pfilter select { margin:0; }
-  #newcards { margin-left:10px; color:var(--ink); }
+  @media (prefers-reduced-motion: reduce) { body.busy::before { animation:none; width:100%; } }
+
   /* COLUMNS: a side column has a width in pixels (dragged at its seam, in
-     page.js) and the review or Organize takes the rest. Every child has a
-     fixed track, so a shut column leaves a zero-width track behind instead
-     of the next one sliding into its place and its width. */
-  main { --wf:var(--w-folders, 260px); --wp:var(--w-projects, 220px);
-         display:grid; grid-template-columns:var(--wf) 0 var(--wp) 0 minmax(0, 1fr); min-height:0; }
-  main > * { grid-row:1; }
-  #foldercol { grid-column:1; } #foldercol + .seam { grid-column:2; }
-  #projectcol { grid-column:3; } #projectcol + .seam { grid-column:4; }
-  #review, #org { grid-column:5; }
-  main.organize, main.shut-folders { --wf:0px; }
-  main.shut-projects { --wp:0px; }
-  main:is(.organize, .shut-folders) :is(#foldercol, #foldercol + .seam),
-  main.shut-projects :is(#projectcol, #projectcol + .seam) { display:none; }
-  #panes { display:flex; gap:16px; }
-  #panes .btn.on { color:var(--ink); }
+     page.js) and the work area takes the rest. Every child has a fixed track,
+     so a shut column leaves a zero-width track behind instead of the next one
+     sliding into its place and its width. */
+  /* a side panel gives way before the work does: at its full width it would
+     otherwise push the work under it in a narrow window */
+  main { display:grid; grid-template-columns:var(--w-projects, 240px) 0 minmax(480px, 1fr) 0 minmax(0, var(--c-prev, 0px)); min-height:0; }
+  main > * { grid-row:1; min-height:0; }
+  #projectcol { grid-column:1; } #projectcol + .seam { grid-column:2; } #work { grid-column:3; } #work + .seam { grid-column:4; } #preview { grid-column:5; }
+  /* the Preview is Edit's, shown only there */
+  main.prev { --c-prev:var(--w-preview, 420px); }
+  main:not(.prev) > :is(#work + .seam, #preview) { display:none; }
   /* a grab strip 8px wide over each column line, sitting in a zero-width
      track so it adds no width; the line itself is still the column's border */
   .seam { width:8px; margin:0 -4px; z-index:5; cursor:col-resize; touch-action:none; }
   .seam:hover, .seam.drag { background:linear-gradient(var(--ink), var(--ink)) center / 1px 100% no-repeat; }
   body.sizing, body.sizing * { cursor:col-resize !important; user-select:none; }
-  main > section { overflow:auto; padding:var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
-  /* the three review columns share the width as proportions, so they still
-     fill it whatever the side columns do; minmax(0, …) so a drag is obeyed
-     rather than overruled by a long word */
-  #review { border-right:0; padding:0; display:grid; grid-template-rows:auto 1fr;
-            grid-template-columns:minmax(0, var(--w-pending, 1fr)) 0 minmax(0, var(--w-accepted, 1fr)) 0 minmax(0, var(--w-rejected, 1fr)); }
-  /* two pages: Collect (folders, projects, review) and Organize (projects, works) */
-  #tabs { display:flex; gap:16px; }
-  #tabs .btn.on { color:var(--ink); }
-  #org { display:none; padding:0; border-right:0; }
-  main.organize #review { display:none; }
-  /* Organize: a head, then the works (and project panel) beside the text
-     list, each scrolling on its own so a passage stays in view while the
-     works scroll under it */
-  main.organize #org { display:flex; flex-direction:column; overflow:hidden; }
-  /* works | Text | Preview, each side column shut by default. Every child has
-     its own track, so a hidden one leaves a 0 track instead of shifting the rest */
-  #orgbody { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0, 1fr) 0 var(--c-texts, 0) 0 var(--c-prev, 0); }
-  #orgbody > * { grid-row:1; }
-  #orgbody.two { --c-texts:var(--w-texts, 300px); }
-  #orgbody.prev { --c-prev:var(--w-preview, 420px); }
-  #orgmain { grid-column:1; } #orgmain + .seam { grid-column:2; } #texts { grid-column:3; } #texts + .seam { grid-column:4; } #preview { grid-column:5; }
-  #orgbody:not(.two) > #orgmain + .seam, #orgbody:not(.prev) > #texts + .seam { display:none; }
-  #preview { display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--accent-dim); }
-  .prevhead { padding:var(--m); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
-  #prevsrc .btn.on, #prevtoggle.on { color:var(--ink); }
-  #prevframe { flex:1; width:100%; border:0; border-top:1px solid var(--accent-dim); }
   body.sizing iframe { pointer-events:none; }   /* a drag over the frame would otherwise go to the site */
-  #orgmain { overflow:auto; min-height:0; }
-  #texts { overflow:auto; min-height:0; padding:var(--m); border-left:1px solid var(--accent-dim); }
-  .tblock { border-top:1px solid var(--accent-dim); padding:8px 0 10px; cursor:pointer; color:var(--accent); white-space:pre-wrap; overflow-wrap:anywhere; }
-  .tblock small { display:block; font-size:10px; color:var(--accent-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .tblock:hover, .tblock.on { color:var(--ink); }
-  .tblock.on { outline:1px solid var(--ink); outline-offset:4px; }
-  .tblock.used { opacity:.5; }
-  #textstoggle.on { color:var(--ink); }
-  body.arming .stack, body.arming .tile { cursor:copy; }
-  body.arming .stack:hover, body.arming .tile:hover .keep { outline:1px solid var(--ink); }
-  .orghead { background:var(--bg); padding:var(--m); border-bottom:1px solid var(--accent-dim); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
-  #stacks { padding:0 var(--m) var(--m); }
-  .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--accent-dim); }
-  .stack.removed { opacity:.35; }
-  /* GRID — every work at once, as its kept copy, so copies the grouping
-     missed can be seen side by side and ticked together. Three fixed sizes,
-     not a slider: the count per row adapts, the cell does not. */
-  #stacks.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--cell, 160px), 1fr)); gap:12px; padding-top:var(--m); }
-  .tile { cursor:pointer; position:relative; }
-  .tile .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; outline:1px solid transparent; }
-  .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); transition:transform .2s; -webkit-user-drag:none; }   /* the tile drags, not its picture */
-  .tile.dragging { opacity:.4; }
-  .tile.before::before, .tile.after::after { content:''; position:absolute; top:0; bottom:0; width:2px; background:var(--ink); }   /* where the drop lands: in the 12px gap */
-  .tile.before::before { left:-7px; }
-  .tile.after::after { right:-7px; }
-  .tile.on .keep { outline-color:var(--ink); }
-  .tile.removed { opacity:.35; }
-  .tile .under { display:flex; gap:10px; align-items:baseline; margin-top:4px; }
-  .tile small { flex:1; font-size:10px; color:var(--accent); }
-  .tile .under .btn { font-size:13px; letter-spacing:0; }
-  #orgq { display:inline-block; width:16em; margin:0; }
-  .tile .fname { font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* the kept copy's name; the whole of it is in the tooltip */
-  .tile .spick { position:absolute; top:4px; right:4px; width:auto; margin:0; accent-color:var(--ink); }
-  #orgviews .btn.on { color:var(--ink); }
-  .stack .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-  /* square frame so a quarter turn never spills out of it */
-  .stack .keep img { max-width:100%; max-height:100%; object-fit:contain; display:block; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
-  .turns { display:flex; gap:12px; align-items:baseline; margin-top:6px; }
-  .stack .meta { color:var(--accent); margin-top:6px; overflow-wrap:anywhere; }
-  .stack .top { display:flex; gap:14px; align-items:baseline; margin-bottom:8px; }
-  .stack .top b { font-weight:400; font-size:13px; color:var(--ink); }
-  .stack .top input { width:auto; margin:0; accent-color:var(--ink); }
-  .copies { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
-  .copy { width:96px; cursor:pointer; position:relative; }
-  .copy img { width:96px; height:72px; object-fit:contain; display:block; outline:1px solid transparent; }
-  .copy.on img { outline-color:var(--ink); }
-  .copy .sep { display:block; font-size:10px; letter-spacing:.1em; }
-  .copy small { display:block; font-size:10px; color:var(--accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .chips { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
-  .chip { text-align:left; text-transform:none; letter-spacing:.05em; }
-  .chip i { font-style:normal; color:var(--accent-dim); display:block; }
-  #bulk { grid-column:1 / -1; display:flex; gap:18px; align-items:baseline; padding:10px var(--m); border-bottom:1px solid var(--accent-dim); }
-  #bulk select { width:auto; margin:0; }
-  .card { position:relative; }
-  .card .pick, .col h2 input { position:absolute; top:12px; right:0; width:auto; margin:0; accent-color:var(--ink); cursor:pointer; }
-  .col h2 { position:relative; }
-  .col h2 input { top:0; }
-  .col h2 .btn { margin-left:10px; font-size:inherit; }
-  #newp { display:grid; grid-template-columns:1fr auto; gap:6px; margin:0 0 14px; }
+
+  /* PROJECTS — the sidebar, the same in both modes */
+  #projectcol { display:flex; flex-direction:column; border-right:1px solid var(--rule); min-height:0; }
+  #projectcol > .cap { padding:var(--m) var(--m) 0; }
+  #projects { flex:1; overflow:auto; min-height:0; padding:0 0 var(--m); }
+  /* LIST ROW: --text-2 at rest; chosen = ink AND a 2px bar at its left */
+  #projects [data-s] { cursor:pointer; color:var(--text-2); padding:4px var(--m) 4px calc(var(--m) - 2px); border-left:2px solid transparent; display:flex; gap:8px; }
+  #projects [data-s]:hover { color:var(--ink); }
+  #projects [data-s].sel { color:var(--ink); border-left-color:var(--ink); }
+  #projects [data-s]:focus-visible { outline:1px solid var(--ink); outline-offset:-1px; }
+  #projects [data-s].drop { color:var(--ink); outline:1px solid var(--ink); outline-offset:-1px; }   /* a work dragged from the grid lands here */
+  #projects [data-s] b { margin-left:auto; font-weight:400; font-size:12px; }
+  #projects [data-s] small { display:block; font-size:12px; color:var(--text-2); }
+  #projects .sec { font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--text-2); padding:20px var(--m) 4px; cursor:default; }
+  #projects .sec:first-child { padding-top:0; }
+  #projects input.rename { margin:0; padding:0 0 1px; }
+  .sitenote { padding:12px var(--m); border-top:1px solid var(--rule); }
+  .sitenote .cap { margin-bottom:4px; }
+  .sitenote p { margin:0; }
+  .sidefoot { padding:12px var(--m) var(--m); border-top:1px solid var(--rule); display:grid; gap:12px; }
+  #newp { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
+  #newp input, #newp select, #news input { margin:0; }
   #newp select { width:auto; }
   #newp #newgo { grid-column:1 / -1; }
-  #news { display:grid; grid-template-columns:1fr auto; gap:6px; align-items:end; margin:0 0 14px; }
-  #news input { margin:0; }
-  h2 { font-size:11px; font-weight:400; margin:0 0 12px; color:var(--accent); }
+  #news { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
 
+  /* PROJECT HEADER */
+  #work { display:flex; flex-direction:column; min-width:0; }
+  #phead { display:flex; gap:12px; align-items:center; padding:12px var(--m); border-bottom:1px solid var(--rule); min-height:57px; }
+  #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pstate { color:var(--ink); font-size:12px; white-space:nowrap; }
+  #pstate:not(:empty)::before { content:''; display:inline-block; width:6px; height:6px; border:1px solid var(--ink); margin-right:6px; vertical-align:1px; }
+  #orgmsg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-2); }
+  /* A FAILURE: a 1px ink rule at its left, in ink */
+  #orgmsg.fail { color:var(--ink); border-left:1px solid var(--ink); padding-left:8px; white-space:normal; }
+  /* Save and the Preview belong to Edit; Collect finds and sorts, and does
+     not write (Robert, 2026-10-06) */
+  main:not(.edit) :is(#orgwrite, #prevtoggle) { display:none; }
+  main:not(.edit) #edit, main.edit #collect { display:none; }
+
+  /* WORKSPACE AND SELECTION TOOLBARS — one line each, the same in both modes */
+  .wsbar, .selbar { display:flex; gap:12px; align-items:center; padding:8px var(--m); border-bottom:1px solid var(--rule); flex-wrap:wrap; }
+  .wsbar input, .wsbar select { width:auto; margin:0; }
+  .wsbar select { max-width:10em; }
+  .wsbar input[type=search] { width:12em; }
+  .selbar { min-height:45px; }
+  .selbar label.chk { min-width:9em; }
+
+  /* COLLECT: Sources | the review list */
+  #collect { flex:1; min-height:0; display:grid; grid-template-columns:var(--w-folders, 280px) 0 minmax(0, 1fr); }
+  #collect > * { grid-row:1; min-height:0; }
+  #sources { grid-column:1; overflow:auto; padding:var(--m); border-right:1px solid var(--rule); }
+  #collect > .seam { grid-column:2; }
+  #review { grid-column:3; display:flex; flex-direction:column; }
+  #rootline { margin:-4px 0 12px; overflow-wrap:anywhere; }
+  .tree-actions { margin:0 0 20px; display:grid; gap:8px; justify-items:start; }
+  .tree-actions .btn { white-space:normal; text-align:left; min-height:28px; padding-top:4px; padding-bottom:4px; }
+  .tree-actions input { margin:12px 0 0; }
+  #pages:not(:empty) { margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid var(--rule); }
+  #pages span { display:block; cursor:pointer; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:2px 0 2px 6px; border-left:2px solid transparent; }
+  #pages span:hover { color:var(--ink); }
+  #pages span.sel { color:var(--ink); border-left-color:var(--ink); }
   /* tree */
   #tree ul { list-style:none; margin:0; padding-left:12px; }
   #tree > ul { padding-left:0; }
-  #tree li > span { display:block; cursor:pointer; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #tree li > span { display:block; cursor:pointer; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:2px 0 2px 4px; border-left:2px solid transparent; }
   #tree li > span:hover { color:var(--ink); }
-  #tree li > span.sel { color:var(--ink); }
+  #tree li > span.sel { color:var(--ink); border-left-color:var(--ink); }
   #tree li > span i { display:inline-block; width:12px; font-style:normal; }
-  #tree li.file { display:flex; gap:6px; align-items:center; padding-left:12px; color:var(--accent-dim); }
+  #tree li.file { display:flex; gap:8px; align-items:center; padding-left:12px; color:var(--text-2); }
   #tree li.file img { width:28px; height:28px; object-fit:contain; flex:none; }
   #tree li.file span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:default; }
   #tree li.file .btn { flex:none; }
-  .tree-actions { margin:0 0 14px; display:grid; gap:6px; }
-  #pages:not(:empty) { margin:0 0 14px; padding-bottom:10px; border-bottom:1px solid var(--accent-dim); }
-  #pages span { display:block; cursor:pointer; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #pages span:hover, #pages span.sel { color:var(--ink); }
+  :is(#tree span, #pages span, .tblock):focus-visible { outline:1px solid var(--ink); outline-offset:-1px; }
 
-  /* projects */
-  #projects div { cursor:pointer; color:var(--accent); padding:3px 0; display:flex; gap:8px; }
-  #projects div:hover, #projects div.sel { color:var(--ink); }
-  #projects div.drop { color:var(--ink); outline:1px solid var(--ink); outline-offset:2px; }   /* a work dragged from the grid lands here */
-  #projects div b { margin-left:auto; font-weight:400; }
-  #projects div small { display:block; font-size:inherit; color:var(--accent-dim); }
-  #nick { margin:0 0 14px; }
-  .pairs { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:8px 0 4px; }
-  .pairs img { height:90px; margin:0; }
-  .card input.big { font-size:13px; }
-  #projects .sec { color:var(--accent-dim); margin-top:12px; cursor:default; }
-
-  /* review columns */
-  .col { overflow:auto; padding:0 var(--m) var(--m); border-right:1px solid var(--accent-dim); min-height:0; }
-  /* the column's title, filter and actions stay pinned while its cards scroll;
-     the column has no top padding so the pinned head sits flush, and carries
-     the gap itself */
-  .colhead { position:sticky; top:0; z-index:2; background:var(--bg); padding-top:var(--m); border-bottom:1px solid var(--accent-dim); margin-bottom:4px; }
-  .col:last-child { border-right:0; }
-  .col.rejected .card { opacity:.45; }
-  .card { border-top:1px solid var(--accent-dim); padding:12px 0 16px; }
+  /* THE REVIEW LIST: one at a time, Pending / Kept / Rejected. Cards in a
+     grid of one fixed width; the count per row is what adapts. */
+  #cards { flex:1; overflow:auto; min-height:0; padding:var(--m); display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:20px; align-content:start; align-items:start; }
+  #cards > p, #cards > .more { grid-column:1 / -1; }
+  .card { position:relative; padding:12px; outline:1px solid var(--rule); }
+  /* chosen: ticked AND a 1px ink frame */
+  .card.on { outline-color:var(--ink); }
+  .card .pick { position:absolute; top:12px; right:12px; }
+  .card .kind { font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--text-2); padding-right:24px; }
   .card img { width:100%; max-height:220px; object-fit:contain; display:block; margin-bottom:8px; }
-  .src { color:var(--accent); overflow-wrap:anywhere; }
-  .acts { display:flex; gap:16px; margin-top:8px; }
-  textarea, input, select { display:block; width:100%; background:transparent; color:var(--ink);
-    border:0; border-bottom:1px solid var(--accent-dim); border-radius:0; outline:none;
-    font:inherit; letter-spacing:inherit; padding:4px 0 5px; margin-top:6px; }
-  textarea { min-height:120px; resize:vertical; }
-  textarea:focus, input:focus, select:focus { border-bottom-color:var(--ink); }
-  /* a drawn chevron, so a menu reads as a menu: appearance:none removed the arrow */
-  select { appearance:none; cursor:pointer; color:var(--accent); padding-right:16px;
-    background:linear-gradient(45deg, transparent 50%, var(--accent) 50%) right 6px center / 5px 5px no-repeat,
-               linear-gradient(-45deg, transparent 50%, var(--accent) 50%) right 1px center / 5px 5px no-repeat; }
-  #ptype { display:flex; gap:14px; }
-  #ptype .btn.on { color:var(--ink); }
-  option { background:var(--bg); }
-  ::placeholder { color:var(--accent-dim); }
-  #msg { color:var(--ink); }
-  /* project panel */
-  #proj { padding:var(--m); border-bottom:1px solid var(--accent-dim); }
-  #projtoggle.on { color:var(--ink); }
-  .phead { display:flex; gap:16px; align-items:baseline; margin-bottom:10px; }
-  .pgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px 24px; align-items:start; }
-  #proj label, #proj .field { display:block; color:var(--accent); }
-  #proj label.chk { display:flex; gap:8px; align-items:center; padding-top:18px; }
-  #proj label.chk input { width:auto; margin:0; accent-color:var(--ink); }
-  #proj textarea[data-p] { min-height:60px; }
-  #proj .field { margin-top:14px; }
-  .pgrid .field { margin-top:0; }
-  /* marks are white-on-transparent: shown on grey so they read in either theme */
-  .mark { display:flex; gap:12px; align-items:center; margin-top:8px; }
-  .mark .tile { width:64px; height:64px; background:var(--accent-dim); display:flex; align-items:center; justify-content:center; flex:none; }
-  .mark .tile img { max-width:52px; max-height:52px; }
-  #mdbar { display:flex; flex-wrap:wrap; gap:14px; margin:8px 0 4px; }
-  #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:12px; }
-  .pdesc { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
-  #pbody { min-height:220px; }
+  #review[data-rv=rejected] .card img { opacity:.6; }
+  .src { color:var(--text-2); font-size:12px; overflow-wrap:anywhere; padding-right:24px; }
+  .acts { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .card input.big { font-size:16px; }
+  .card .next { color:var(--text-2); font-size:12px; margin-top:4px; }
+  .pairs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0 4px; }
+  .pairs img { height:90px; margin:0; }
+  #newcards { color:var(--ink); }
+
+  /* EDIT: tabs, then one part of the project at a time */
+  #edit { flex:1; min-height:0; display:flex; flex-direction:column; }
+  #etabs { padding:8px var(--m); border-bottom:1px solid var(--rule); }
+  #proj { display:contents; }
+  #editempty { padding:var(--m); margin:0; }
+  #edit.has #editempty, #edit:not(.has) > :not(#editempty) { display:none; }
+  #edit .epanel { flex:1; min-height:0; }
+  #edit .epanel:not(.on) { display:none; }
+  .epanel.form { overflow:auto; padding:var(--m); }
+  .epanel.form > :is(label, .field, p) { max-width:32em; margin:0 0 20px; }
+  /* Content: the fields, and the project's kept text beside them */
+  .epanel[data-tab=content] { display:grid; grid-template-columns:minmax(260px, 1fr) 0 min(var(--w-texts, 300px), 45%); }
+  .epanel[data-tab=content] > * { grid-row:1; min-height:0; }
+  .epanel[data-tab=content] .fields { overflow:auto; padding:var(--m); }
+  .fields > :is(label, .field) { margin:0 0 20px; }
+  .fields > label { max-width:32em; }
+  .fields [data-p=title] { font-size:16px; letter-spacing:.06em; }
+  #proj textarea[data-p] { min-height:72px; }
+  #mdbar { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0 4px; }
+  #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:13px; }
+  .pdesc { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:20px; }
+  #pbody { min-height:240px; font-size:13px; }
   /* the site's body copy and its three custom marks (values mirror index.html, as keystatic.config.tsx's do) */
   #ppreview { font-size:13px; font-weight:400; letter-spacing:0; line-height:1.5; color:var(--ink); max-width:33em; padding-top:6px; }
   #ppreview p { margin:0 0 1em; }
   #ppreview .w-l { font-weight:300; } #ppreview .t-s { font-size:.85em; } #ppreview .t-l { font-size:1.27em; }
   #ppreview a { color:inherit; }
-  .pfoot { display:flex; gap:16px; align-items:baseline; margin-top:14px; }
-  #pmsg { color:var(--ink); }
+  #texts { overflow:auto; padding:var(--m); border-left:1px solid var(--rule); }
+  .tblock { border-top:1px solid var(--rule); padding:8px 0 12px; cursor:pointer; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .tblock small { display:block; font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tblock:hover { color:var(--ink); background:linear-gradient(var(--rule), var(--rule)) left / 2px 100% no-repeat; }
+  .tblock.on { outline:1px solid var(--ink); outline-offset:4px; }
+  .tblock.used { color:var(--text-2); }
+  /* marks are white-on-transparent: shown on grey so they read in either theme */
+  .mark { display:flex; gap:12px; align-items:center; margin-top:8px; color:var(--ink); font-size:13px; }
+  .mark .tile { width:64px; height:64px; background:var(--rule); display:flex; align-items:center; justify-content:center; flex:none; }
+  .mark .tile img { max-width:52px; max-height:52px; }
+  .field > select { margin-bottom:8px; }
+
+  /* IMAGES: works in a grid; the one being looked at in the details panel */
+  #images { display:flex; flex-direction:column; }
+  .ibody { flex:1; min-height:0; display:grid; grid-template-columns:minmax(140px, 1fr) 0 minmax(0, var(--c-detail, 0px)); }
+  .ibody > * { grid-row:1; min-height:0; }
+  .ibody.grid { --c-detail:min(var(--w-detail, 340px), 50%); }
+  .ibody:not(.grid) > :is(.seam, #wdetail) { display:none; }
+  #stacks { overflow:auto; padding:0 var(--m) var(--m); }
+  #wdetail { overflow:auto; padding:var(--m); border-left:1px solid var(--rule); }
+  body.arming #stacks .stack, body.arming #stacks .tile { cursor:copy; }
+  body.arming #stacks .stack:hover, body.arming #stacks .tile:hover .keep { outline:1px solid var(--ink); }
+  .stack { display:grid; grid-template-columns:minmax(220px, 360px) 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--rule); }
+  .stack.removed { opacity:.5; }
+  /* the details panel is the List's row, one column high */
+  /* the details panel is the List's row, one column high, its number and
+     actions first: the row's two halves are dissolved and re-ordered */
+  #wdetail .stack { display:flex; flex-direction:column; padding:0; border:0; }
+  #wdetail .stack > div { display:contents; }
+  #wdetail .stack .top { order:-1; margin-bottom:12px; }
+  #wdetail .keep { max-height:300px; }
+  /* GRID — every work at once, as its kept copy, so copies the grouping
+     missed can be seen side by side and selected together. Three fixed sizes,
+     not a slider: the count per row adapts, the cell does not. */
+  #stacks.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--cell, 160px), 1fr)); gap:12px; padding-top:var(--m); align-content:start; }
+  #stacks .tile { cursor:pointer; position:relative; outline:none; }
+  #stacks .tile .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; outline:1px solid transparent; }
+  #stacks .tile .keep img { max-width:100%; max-height:100%; object-fit:contain; transform:rotate(var(--turn, 0deg)); transition:transform .2s; -webkit-user-drag:none; }   /* the tile drags, not its picture */
+  #stacks .tile.dragging { opacity:.4; }
+  #stacks .tile.before::before, #stacks .tile.after::after { content:''; position:absolute; top:0; bottom:0; width:2px; background:var(--ink); }   /* where the drop lands: in the 12px gap */
+  #stacks .tile.before::before { left:-7px; }
+  #stacks .tile.after::after { right:-7px; }
+  /* chosen: ticked AND a 1px ink frame; the one in the details panel, a 2px frame */
+  #stacks .tile.on .keep { outline-color:var(--ink); }
+  #stacks .tile.cur .keep { outline:2px solid var(--ink); }
+  #stacks .tile:focus-visible .keep { outline:1px solid var(--ink); outline-offset:3px; }
+  #stacks .tile.removed { opacity:.5; }
+  #stacks .tile .under { display:flex; gap:4px; align-items:center; margin-top:4px; }
+  #stacks .tile small { flex:1; font-size:12px; color:var(--text-2); }
+  #stacks .tile .under .btn { font-size:14px; letter-spacing:0; min-height:24px; padding:0 4px; }
+  #stacks .tile .fname { font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* the kept copy's name; the whole of it is in the tooltip */
+  #stacks .tile .spick { position:absolute; top:6px; right:6px; }
+  .stack .keep { aspect-ratio:1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  /* square frame so a quarter turn never spills out of it */
+  .stack .keep img { max-width:100%; max-height:100%; object-fit:contain; display:block; transform:rotate(var(--turn, 0deg)); transition:transform .2s; }
+  .turns { display:flex; gap:4px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .stack .meta { color:var(--text-2); font-size:12px; margin-top:8px; overflow-wrap:anywhere; }
+  .stack .top { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .stack .top b { font-weight:400; font-size:16px; color:var(--ink); margin-right:4px; }
+  .stack label { margin-top:12px; }
+  .copies { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; }
+  .copy { width:96px; cursor:pointer; position:relative; }
+  .copy img { width:96px; height:72px; object-fit:contain; display:block; outline:1px solid transparent; }
+  .copy.on img { outline-color:var(--ink); }
+  .copy .sep { font-size:12px; padding:0; min-height:24px; }
+  .copy small { display:block; font-size:12px; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chips { display:flex; flex-direction:column; gap:8px; margin-top:12px; align-items:flex-start; }
+  .chips span { display:flex; gap:4px; flex-wrap:wrap; }
+  .btn.chip { white-space:normal; text-align:left; padding:4px 6px; height:auto; display:block; }
+  .chip i { font-style:normal; color:var(--text-2); display:block; font-size:12px; }
+  .more { margin:12px 0; }
+
+  /* PREVIEW */
+  #preview { display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--rule); }
+  .prevhead { padding:8px var(--m); display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--rule); min-height:45px; }
+  #prevframe { flex:1; width:100%; border:0; }
 
   /* RIGHT-CLICK MENU — the site's type, not the Mac's: a panel of the same
      buttons as everywhere else. Fixed, so a scrolled column does not carry it
-     off; a submenu is fixed too, placed beside its item by page.js. */
-  #menu, #menu .sub { position:fixed; z-index:20; background:var(--bg); border:1px solid var(--accent-dim); padding:6px 0; min-width:190px; max-height:80vh; overflow:auto; }
+     off; a submenu is fixed too, placed beside its item by page.js. The row
+     under the pointer is inverted: a change of tone, as hover is everywhere. */
+  #menu, #menu .sub { position:fixed; z-index:20; background:var(--bg); border:1px solid var(--edge); padding:4px 0; min-width:200px; max-height:80vh; overflow:auto; }
   #menu .sub { display:none; }
   #menu .mwrap.open > .sub { display:block; }
-  #menu .mi { display:block; width:100%; padding:3px 14px; white-space:nowrap; }
-  /* project names as the Projects column sets them, not shouted */
-  #menu .sub .mi { text-transform:none; letter-spacing:.05em; }
-  #menu .mi.opens::after { content:'›'; float:right; margin-left:16px; }
-  #menu .mwrap.open > .mi { color:var(--ink); }
-  #menu .mh { padding:8px 14px 2px; color:var(--accent-dim); text-transform:uppercase; letter-spacing:.15em; }
-  #menu hr { border:0; border-top:1px solid var(--accent-dim); margin:6px 0; }
-  #projects input.rename { margin:0; padding:0 0 1px; }
+  #menu .mi { display:flex; width:100%; border:0; padding:0 12px; min-height:28px; color:var(--ink); background:none; }
+  #menu .mi:hover, #menu .mi:focus-visible, #menu .mwrap.open > .mi { background:var(--ink); color:var(--bg); outline:none; }
+  #menu .mi[disabled] { color:var(--text-2); background:none; }
+  #menu .mi.opens::after { content:'›'; margin-left:auto; padding-left:16px; }
+  #menu .mh { padding:8px 12px 2px; color:var(--text-2); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+  #menu .mt { padding:0 12px 4px; color:var(--text-2); font-size:12px; white-space:normal; max-width:320px; }
+  #menu hr { border:0; border-top:1px solid var(--rule); margin:4px 0; }

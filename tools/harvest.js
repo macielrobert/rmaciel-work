@@ -1515,7 +1515,7 @@ async function pagePicture(fid) {
 
 function organizeOp(slug, b) {
   const o = state.organize?.[slug];
-  if (!o) throw new Error('Open the project in Organize first.');
+  if (!o) throw new Error('Open the project in Edit first.');
   const at = o.stacks.findIndex(t => t.id === b.stack), t = o.stacks[at];
   if (!t) throw new Error('That work is no longer here — reload.');
   if (b.op === 'keeper') { t.keeper = b.key; t.chosen = true; t.rotate = 0; }   // a turn belongs to the copy it was made for
@@ -1607,7 +1607,7 @@ async function turn(src, deg) {
 
 async function saveOrganize(slug, confirmed) {
   const o = state.organize?.[slug];
-  if (!o) throw new Error('Open the project in Organize first.');
+  if (!o) throw new Error('Open the project in Edit first.');
   await catchUp();
   const ms = await members(slug), byKey = new Map(ms.map(m => [m.key, m]));
   const keep = o.stacks.filter(t => !t.removed && byKey.has(t.keeper));
@@ -2034,7 +2034,7 @@ const previewServer = http.createServer(async (req, res) => {
         // what build.js said, so the pane explains itself instead of going blank
         const why = String(e.message).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
         res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
-        return res.end('<pre style="font:12px/1.6 -apple-system,sans-serif;padding:16px;white-space:pre-wrap">The site would not build, so there is nothing to preview. Write to project says why too.\n\n' + why + '</pre>');
+        return res.end('<pre style="font:12px/1.6 -apple-system,sans-serif;padding:16px;white-space:pre-wrap">The site would not build, so there is nothing to preview. Save project says why too.\n\n' + why + '</pre>');
       }
     }
     const abs = path.join(DIST, rel === '/' ? 'index.html' : rel);

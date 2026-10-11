@@ -21,37 +21,63 @@ The launcher is `tools/Harvest.command`. Nothing in it ships to the site.
 - `tools/Harvest.command`: the same server in Terminal + the default browser.
 - Never run both at once: they share one state file.
 
+## The shell (UX-2, built 2026-10-10)
+
+Two modes, **Collect** and **Edit** (Edit was Organize), switched in the
+application header. The **Projects** list stays at the left in both, and the
+**project header** above the work names the selected project in the same place
+in both. Each kind of control has one home (`STYLE-GUIDE.md`, Placement):
+
+| Where | What |
+|---|---|
+| Application header | Collect / Edit, the status line (background work, Stop), **Publish** |
+| Project header | name, **Unsaved changes** (the fields only — see UX-3), the message line, Preview and **Save project** (Edit only) |
+| Workspace toolbar | Collect: Pending / Kept / Rejected, find, source filters, order, **Clear and forget** menu. Images: count, find, Grid / List, S M L, Show removed |
+| Selection toolbar | always there; its actions wait, readable, until something is selected |
+| Details panel | Images in Grid: the work clicked last, with List's fields for it |
+
+Words on screen changed; **the server's names did not**: Kept is
+`status: 'accepted'`, Reset decision sets `'pending'`, Save project is the old
+Write to project (the same three writes). Old remembered layout keys
+(`pane-*`, `projOpen`, `textsOpen`, `orgView`) are no longer read; Images
+remembers `imgView` (Grid by default) and Edit its tab as `etab`.
+
 ## What Robert does
 
 1. Double-clicks `tools/Harvest.command`. It runs `git pull --ff-only` and opens
    the page in his browser.
-2. Picks a folder in the tree and clicks **Crawl this folder**.
-3. For each project: accepts or rejects cards. Text is editable; images need alt
-   text; text cards choose a target (description / detail lines / share).
-4. In **Organize**, clicks **Write to project → Publish** (top right; both
-   show only on Organize — Collect finds and sorts, it no longer writes).
-   Write is ONE button for three writes, in this order: Project details if the
-   panel holds edits (build-checked), the works (second click if pictures come
-   off the site; every kept work needs alt text or it stops there), then
-   accepted text not placed elsewhere (`/api/write`). Each step is
-   all-or-nothing; a failure stops the rest and the line says what was
-   written first. The panel and Collect have no save buttons of their own
-   (2026-10-06). Publish runs
+2. Picks a project at the left, then a folder in **Collect › Sources** and
+   clicks **Crawl this folder for <project>**.
+3. In the review list (Pending by default): **Keep** or **Reject** cards.
+   Text is editable; text cards choose a target (description / detail lines /
+   share). Kept material is what Edit works with.
+4. In **Edit**, clicks **Save project → Publish** (Save is in the project
+   header and only in Edit — Collect finds and sorts, it does not write;
+   Publish is top right). Save is ONE button for three writes, in this order:
+   the project's fields if they hold edits (build-checked), the works (second
+   click if pictures come off the site; every kept work needs alt text or it
+   stops there — and then that work is selected in Images with its alt text
+   field marked), then kept text not placed elsewhere (`/api/write`). Each step
+   is all-or-nothing; a failure stops the rest and the line says what was
+   saved first. Publish runs
    build.js, commits ONLY content/ and images/ as "Harvest: <slugs>", pulls with
    rebase, pushes to main. On a clash it undoes its commit and says "ask Claude
    to publish" — that is the case below.
-5. Bulk: tick cards → Accept / Reject / Move to project (moved cards arrive
-   accepted; the original is kept rejected+hidden so a re-crawl can't refile it).
-   Rejected → Clear hides them but keeps them rejected.
+5. Bulk: tick cards → Keep / Reject / Reset decision / Move to… (moved cards
+   arrive kept; the original is kept rejected+hidden so a re-crawl can't refile
+   it). **Clear and forget** (toolbar, right) holds the housekeeping, each item
+   saying what it keeps: Clear N from the queue (forgets what Pending shows),
+   Hide rejected (stays rejected), Forget all rejections, Forget selected.
+   More than one card asks first with confirm().
 6. Add section (Projects column, 2026-10-10): writes `content/sections/<slug>.json`
    (`{ title, order }`, after the last), as Keystatic's Sections collection
    does. The section lists, the menus and the Projects headings all come from
    that folder (`sections()` in harvest.js, read fresh), and an empty one is
    listed as such. It counts toward Publish as "<slug> (section)". build.js
    leaves an empty section off the site, so adding one is always safe.
-7. New project (Projects column): writes a draft .mdoc; needs a grid icon
-   before it can go live — Organize › Project details uploads one (a typed
-   character shows "Or an image" under it; choosing a file switches to it).
+7. New project (foot of the Projects list): writes a draft .mdoc; needs a grid
+   icon before it can go live — Edit › Layout uploads one (a typed character
+   shows "Or an image" under it; choosing a file switches to it).
 
 ## What "publish the harvest" means for Claude
 
@@ -93,7 +119,7 @@ Never test against Robert's real state or repo content without reverting:
 - Run with a scratch home: `HOME="$TMPDIR/hv" HARVEST_NO_OPEN=1 node tools/harvest.js`.
   The state folder then lives under that fake home.
 - `/api/*` POSTs need `Origin: http://127.0.0.1:<port>` or they get 403.
-- Accepting a working title, and **Write to project**, write into
+- Keeping a working title, and **Save project**, write into
   `content/projects/`. Afterwards `git checkout` ONLY the files your test
   changed — never all of `content/`: Robert's unpublished work lives there —
   and delete any new `images/<slug>/images/<n>/` you created.
@@ -117,7 +143,7 @@ Never test against Robert's real state or repo content without reverting:
 A crawl never takes pictures OUT of a PDF; a page matches by its words. A PDF
 text card has **Add page N as a picture** (button and right-click): the helper's
 `--page` mode draws the whole page (crop box) as a 2400 px JPEG into
-`.../Harvest/pages/`, filed as an accepted picture for Organize. Whole page,
+`.../Harvest/pages/`, filed as a kept picture for Edit › Images. Whole page,
 not the photo placed on it (2026-10-07). Text caches are keyed with `READ_V`;
 bump it when a reader starts finding more, so cached files are read again.
 
@@ -142,7 +168,7 @@ transform for `.gif` in `IMAGE_TRANSFORM` (index.html).
 A refused GIF gets a smaller copy from `tools/gif-shrink.swift` (header says how
 to run it): every frame and its timing kept, 720 wide, 32 colours by default —
 IMG_8617 went 66.5 MB → 8.4 MB. Write the copy beside the original, add it to
-the project, and check Organize kept the new one (2026-10-09).
+the project, and check Edit › Images kept the new one (2026-10-09).
 The Mac's not-added alert groups failures by reason with three names each:
 an NSAlert does not scroll, and forty lines pushed OK off the screen.
 
@@ -159,12 +185,12 @@ see PUNCH-LIST §4.
 
 ## Columns (built 2026-10-05)
 
-**Folders** and **Projects** in the header show/hide those columns
-independently (Folders is hidden on Organize, which has none). Every column
-line is a drag seam (`.seam`, a zero-width grid track): side columns
-(Folders, Projects, Text) are sized in px, the three review columns as
-proportions, so with both side columns shut they fill the window. Both are
-remembered in the page's localStorage (`pane-*`, `widths`).
+Every column line is a drag seam (`.seam`, a zero-width grid track). Side
+columns (Projects, Sources, Kept text, the details panel, Preview) are sized
+in px and remembered in localStorage (`widths`); each gives way before the
+work beside it does in a narrow window (a `min(…, %)` or `minmax(0, …)`
+track). The header's Folders / Projects show-hide buttons and the three
+review columns' proportions went with UX-2.
 
 ## Right-click menu (built 2026-10-05)
 
@@ -182,9 +208,9 @@ documents, never an .app). A PDF text card's **Open at page N** opens
 sent to a page; `/pdf` serves only PDFs a card names. Test with a stub
 `open` first on PATH, so nothing opens on Robert's screen.
 
-## The Organize page (built 2026-10-04)
+## Edit › Images — was the Organize page (built 2026-10-04)
 
-A second page after Collect, one project at a time, working on WORKS not files:
+The second mode after Collect, one project at a time, working on WORKS not files:
 copies of one drawing (crops, edits, resolutions, IMG_1234 names) are grouped
 into one stack — Apple Vision feature prints, which survive crops where the
 crawler's dHash does not. Per stack Robert's decisions so far:
@@ -201,31 +227,38 @@ as #N?". Measured on BUS STOP: crops 0.21-0.26 (70 %), corner crop 0.50,
 different renders of one project 0.40-0.57 — hence the maybe band. Save rewrites
 the project's `images` to the kept copies in order and DELETES the files of
 site pictures it drops (build.js ships all of images/), after a second click.
-Since 2026-10-06 the works save, the text write and the Project details save
-are one button, Write to project, on Organize's header.
+Since 2026-10-06 the works save, the text write and the project fields' save
+are one button — Save project since UX-2, in the project header.
 
-Added 2026-10-04: **Grid** view (S/M/L cells) showing each work's kept copy;
-click tiles to tick, double-click opens it in List, drag a tile onto another's left or right half to reorder (the `move` op). Ticked works can be
+**Grid** view (S/M/L cells) showing each work's kept copy. Since UX-2 a
+click selects that work alone and shows it in the **details panel** at the
+right (the List row's fields, one column high); ⌘-click adds or takes away
+one, Shift-click selects a run, the corner box toggles. Keyboard: Return
+selects, Space toggles, arrows move between tiles. Double-click opens it in
+List; drag a tile onto another's left or right half to reorder (the `move`
+op), or use Earlier / Later in the panel. Selected works can be
 merged ("Same work — merge": the alts the grouping missed) or separated
 ("Separate copies", op `unstack`: every copy but the kept one becomes its own
 work, all marked apart; each copy in List also has its own **Separate**) or moved to another
-project with all copies, grouping, alt and caption — the header's **Move to project** button
-(the right-click menu's project list, for every ticked work), or by dragging a tile onto a
-project's name in the Projects column (a ticked tile carries every ticked work with it).
-Removed works (waiting for Save) are hidden in List and Grid; the header's **Show N removed**
+project with all copies, grouping, alt and caption — the selection toolbar's **Move to…**
+(the right-click menu's project list, for every selected work), or by dragging a tile onto a
+project's name in the Projects list (a selected tile carries every selected work with it).
+Removed works (waiting for Save) are hidden in List and Grid; the toolbar's **Show N removed**
 brings them back to Restore (remembered as `orgShowRemoved`). A moved copy that was on
 this project's site is copied to `.../Harvest/moved/` first and the work stays
 here marked removed, so this project's Save takes it off. A moved work lands
-first in a project never opened in Organize; reorder with the arrows.
-Collect: an accepted folder card counts the cards it brought in and has
+first in a project never opened in Edit; reorder with the arrows.
+Collect: a kept folder card counts the cards it brought in and has
 **Show what is inside**, which filters Pending to that folder's path.
 The folder tree also lists pictures and readable documents, each with **Add**
-(`/api/addfile`): a picture goes into the selected project accepted; a
+(`/api/addfile`): a picture goes into the selected project kept; a
 document is read as a job and its passages arrive pending (`from: 'manual'`).
 
-## The Project panel (built 2026-10-04)
+## The project's fields — was the Project panel (built 2026-10-04)
 
-Organize → **Project details**: every field Keystatic edits except `images`
+Edit › **Content** (title, detail lines, description), **Layout** (layout,
+expand, grid icon, wordmark) and **Settings** (section, order, hold back,
+part_of, client, working titles, share description): every field Keystatic edits except `images`
 (title, section, order, draft, part_of, client, details, layout, expand,
 icon_type/glyph/image, wordmark, share_description, nicknames, and the
 description body as Markdoc with toolbar buttons + a live preview rendered by
@@ -239,21 +272,21 @@ fields it changed, so newer edits from GitHub survive. Icon/wordmark uploads wai
 `.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
 Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.
-Unsaved panel edits (2026-10-10): the panel head shows **Unsaved** with its own
-**Write to project** (it clicks the header's — still one write). Picking another
+Unsaved edits (2026-10-10): the project header shows **Unsaved changes**
+beside Save project (the panel's second button went with UX-2). Picking another
 project asks BEFORE switching; Cancel stays put. It used to ask after the list,
 header and works had moved, so Cancel left one project's details over another's
 works and every click asked again.
 
-Organize → **Text**: the project's accepted passages in a column beside the
-works. Click (or right-click) one for where it goes: a Project details field
+Edit › Content › **Kept text**: the project's kept passages in a column beside
+the fields. Click (or right-click) one for where it goes: a project field
 (description — Markdoc-escaped as Write does —, detail lines, share
 description, title, client, working titles; one-line fields are replaced, the
-rest appended), filled in the panel for ITS Save to check and write; or a
-work's caption / alt text, then click the work. Target becomes `caption` (a
+rest appended), filled in for Save project to check and write; or a
+work's caption / alt text — Images opens, then click the work. Target becomes `caption` (a
 work) or `organize` (a field), both of which the text write skips; `used`
-records where, and the passage stays, dimmed. A work's right-click ›
-**Extract text** (`/api/extract`) reads its kept copy with the Vision helper's
+records where, and the passage stays, dimmed. A work's **Extract text**
+(details panel, List row, right-click) (`/api/extract`) reads its kept copy with the Vision helper's
 `--image` mode (a website picture at 2500w, into `downloads/` as Write does)
 and adds an accepted passage with target `organize`. Vision reads sideways
 text as it is, so a work's turn is not passed.
@@ -265,15 +298,15 @@ actions.
 
 ## The Preview pane (built 2026-10-10)
 
-Organize › **Preview**: the site itself in a pane right of the works (and of
-Text), drag-resizable up to 75 % of the window (`data-right` seam). **As
-written** is `dist/` served by a second server inside harvest.js on its own
+Edit › **Preview** (project header): the site itself in a pane at the right
+of the window, Edit only, drag-resizable up to 75 % of it (`data-right`
+seam). **As saved** (was As written) is `dist/` served by a second server inside harvest.js on its own
 port (`PREVIEW` in `/api/state`), rebuilt by build.js on every load of `/`
 (~0.1 s; `buildSite()` queues it with Publish's build, both empty dist/). Own
 port because from Harvest's origin the site's script would pass the Origin
 check on `/api/` POSTs — verified 403 from the preview port. **Live** is `LIVE`.
 `loadPreview()` reloads it with `?v=<time>#section/slug` on every `loadOrg()`
-(project switch, after Write); a held-back project is not in the build, so the
+(project switch, after Save); a held-back project is not in the build, so the
 pane says so. The boundary is HarvestApp.swift: a clicked link inside a frame
 may only stay on the frame's host; anything else (and any `target=_blank`)
 opens in the default browser. In a plain browser (Harvest.command) there is

@@ -204,7 +204,7 @@ workflow or the final site content layouts.
   ratios were 4.60 on black / 4.56 on white. `node tools/check-tokens.js`
   passed (3 shared names and 2 mark sizes). This review did not repeat
   Claude's mobile or deployed-site regression tests.
-- [ ] **Claude, carry into UX-2: keep disabled labels readable.** The guide
+- [x] **Claude, carry into UX-2: keep disabled labels readable.** The guide
   says disabled controls stay readable, but its state table and the specimen
   use `--rule` for disabled quiet buttons, toggles, and list rows. That is
   the decorative grey (2.29 on black / 1.68 on white). Use `--text-2` for
@@ -212,7 +212,7 @@ workflow or the final site content layouts.
   an explanation where needed. Align the guide and specimen before copying
   these styles into Harvest. This is an internal legibility requirement,
   not a claim that disabled controls fail a contrast conformance rule.
-- [ ] **Claude, carry into UX-2: distinguish state drawings from keyboard
+- [x] **Claude, carry into UX-2: distinguish state drawings from keyboard
   proof.** The specimen says every state cell is live, but its footer anchors
   have no `href` or explicit `tabindex`, several list examples are static,
   and the clickable project rows have no keyboard activation handler.
@@ -234,20 +234,20 @@ Accepted, Rejected). Organize's wrapping toolbar mixes project settings,
 image operations, view controls and panel toggles. Editing already happens
 in both modes, making the boundary hard to understand.
 
-- [ ] Prototype **Collect / Edit** as two working modes, with Edit replacing
+- [x] Prototype **Collect / Edit** as two working modes, with Edit replacing
       Organize's label. They are revisitable workspaces, not mandatory wizard
       steps. Keep the selected project and sidebar position stable across them.
-- [ ] Keep Projects at the left in BUILD / DESIGN / ART order (in the
+- [x] Keep Projects at the left in BUILD / DESIGN / ART order (in the
       footer's order since 2026-10-10, when sections became content and Add
       section arrived). Keep project creation and Add section there; move
       working titles and less frequent settings into the selected project's
       settings.
-- [ ] Collect answers “Which material belongs in this project?” Put folders
+- [x] Collect answers “Which material belongs in this project?” Put folders
       and websites in its Sources area. Present one review workspace with
       Pending / Kept / Rejected filters and counts, Pending by default; do not
       permanently give rejected material an equal column. Preserve source
       provenance, individual/batch decisions, and the existing review history.
-- [ ] Clarify actions: Keep makes material available to Edit; Reject remembers
+- [x] Clarify actions: Keep makes material available to Edit; Reject remembers
       an unwanted match; Reset decision permits reconsideration. Put less
       frequent queue housekeeping in a secondary menu, explicitly stating
       whether it hides an item or forgets a decision. Rename existing states
@@ -256,11 +256,11 @@ in both modes, making the boundary hard to understand.
       grouping, working titles, and share/search information. Reuse existing
       fields and operations. Account for ABOUT, CONTACT and site settings as
       well, so “main editor” does not mean project editing only.
-- [ ] Use an image grid for overview and ordering; selection opens a stable
+- [x] Use an image grid for overview and ordering; selection opens a stable
       details panel for caption, alt text, rotation, and alternate copies.
       Preserve list inspection, grouping/separation, moves, removed-item
       recovery, and comparison of copies without showing a large form per tile.
-- [ ] Apply this control placement consistently:
+- [x] Apply this control placement consistently:
 
 | Location | Scope |
 |---|---|
@@ -270,13 +270,67 @@ in both modes, making the boundary hard to understand.
 | Selection toolbar | Selection count, group/separate, move, remove |
 | Details panel | Fields and actions for the selected object |
 
-- [ ] Show selection actions when applicable; keep their location stable.
+- [x] Show selection actions when applicable; keep their location stable.
       Put InDesign scanning beside source controls in Collect. Right-click
       menus accelerate visible actions rather than being their only entrance.
       Preserve keyboard operation and offer alternatives to drag-only actions.
 
 **Done when:** a user can identify the selected project, current mode, affected
 items, and next action without interpreting a tooltip or a wrapping button row.
+
+**Record, 2026-10-10 — Claude.** Branch `ux-2-shell`. Scope: Harvest's page
+(`tools/harvest/page.*`), two server messages, and the docs that name its
+controls. No state, endpoint or recrawl behaviour changed.
+- **What changed:** Collect / Edit in the application header, with Publish and
+  the status line. The Projects list at the left in both modes, New project and
+  Add section at its foot, and a note that ABOUT, CONTACT and the site's
+  settings are edited in Keystatic. A project header with the name in both
+  modes; in Edit, *Unsaved changes*, Preview and **Save project** (was Write to
+  project — the same three writes). Collect is Sources (folders, websites,
+  InDesign) beside ONE review list with Pending / Kept / Rejected and counts,
+  a workspace toolbar (find, filters, order, **Clear and forget** menu that says
+  for each item whether it hides or forgets) and a selection toolbar that is
+  always there (Keep, Reject, Reset decision, Move to…). Edit is Content (title,
+  detail lines, description, kept text), Images, Layout (layout, expand, icon,
+  wordmark) and Settings (section, order, hold back, sub-project, client,
+  working titles, share description). Images opens on a Grid with a details
+  panel: click selects one work and shows its copies, alt text and caption;
+  ⌘-click and Shift-click extend; List is kept as it was. Extract text and Show
+  original are buttons there now, not right-click only. The style guide's
+  editor values are live in Harvest: 13px Book, `--text-2` / `--edge` /
+  `--rule`, three button kinds at 28px, tabs with a line, rows with a bar.
+  Disabled controls keep readable words and turn dashed (guide and specimen
+  aligned); the specimen says which state cells are drawings, and its project
+  rows answer Return and Space.
+- **Renamed on screen only:** Accept → Keep, Accepted → Kept, Undo → Reset
+  decision, Organize → Edit, Write to project → Save project, As written → As
+  saved. The server still stores `accepted`, `pending`, `rejected`, `written`.
+- **Checks, on an isolated copy** (a scratch HOME, a worktree's content,
+  fixture folders): crawl → keep seven pictures with the selection toolbar →
+  Edit › Images groups them → Save stops at work 5 with its alt field marked
+  (doubled ink line, square, sentence, focus in the field) → alt text typed,
+  error gone → Save writes the two new works and nothing else (diff read) →
+  keep a passage → place it in the description → *Unsaved changes* → switching
+  project asks first and Cancel stays → Save → Preview shows the saved text.
+  Keyboard with real keys: Return selects a project row, the focus ring is
+  drawn; in the grid Return selects, Space adds, arrows move. Both themes, 1440
+  and 1024 wide; at 1024 with Preview open the side panels give way instead of
+  overlapping. Right-click menus on a card, a project and a work; Clear and
+  forget; Reset decision in bulk; Move to…. `check-harvest` and `check-tokens`
+  (now 6 shared names) pass. Test writes reverted.
+- **Fixed in passing:** a card's right-click menu threw before it opened
+  (`page` used before it was defined), so it had not worked at all.
+- **Defaults I chose, for Robert to judge by using it:** Grid is Images'
+  default (a new remembered key, so an old List preference does not hide the
+  panel); a click on a work selects it alone, as Finder does, where it used to
+  tick; Edit opens on Images and remembers its tab; Save and Preview show in
+  Edit only, keeping his 2026-10-06 rule that Collect does not write.
+- **Not done, and why:** ABOUT, CONTACT and the site's settings are listed,
+  not editable — a real editor for them needs server endpoints and the build
+  check, and is a task of its own. *Unsaved changes* covers the project's
+  fields only; what is kept in Harvest but not yet saved to the file, and the
+  publishing review, are UX-3's. At 1024 wide with Preview open the selection
+  toolbar wraps to two lines.
 
 ### UX-3 — Make saving and publishing states unambiguous
 
