@@ -167,16 +167,30 @@
 
   /* PROJECT HEADER */
   #work { display:flex; flex-direction:column; min-width:0; }
-  #phead { display:flex; gap:12px; align-items:center; padding:12px var(--m); border-bottom:1px solid var(--rule); min-height:57px; }
-  #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; max-width:45%; }   /* a long message gives way, not the name */
+  #phead { display:flex; gap:12px; align-items:flex-start; padding:12px var(--m); border-bottom:1px solid var(--rule); min-height:57px; }
+  /* NARROW WINDOWS (UX-6): everything but Preview and Save wraps inside
+     #pmain. It was one row of pieces that could not break: at 1024 wide
+     with the Preview open it ran 757px into a 480px column, under the
+     Preview pane — a click on Save project landed on Live — and the message
+     line was 0px wide. Now the saved state wraps as words, the message
+     takes a line of its own when under 200px is left beside it, and the
+     buttons stay where they are — on the first line, so a message arriving
+     or clearing below never moves them out from under a click. */
+  #pmain { flex:1; min-width:0; min-height:28px; display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+  #prevtoggle, #orgwrite { flex-shrink:0; }
+  /* "Takes 2 pictures off the site — click again" wraps, as Discard does, rather than pushing the name out */
+  #pdiscard, #orgwrite { white-space:normal; }
+  #orgwrite { max-width:200px; }
+  #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; max-width:100%; }   /* a long message gives way, not the name: it wraps below */
   /* WHERE THE EDITS ARE (UX-3): grey when everything is saved; ink, with the
      hollow square, while something is not */
-  #pstate { color:var(--text-2); font-size:12px; white-space:nowrap; }
+  #pstate { color:var(--text-2); font-size:12px; min-width:0; }
   #pstate.waiting { color:var(--ink); }
   #pstate.waiting::before { content:''; display:inline-block; width:6px; height:6px; border:1px solid var(--ink); margin-right:6px; vertical-align:1px; }
-  #orgmsg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-2); }
+  #orgmsg { flex:1 1 200px; min-width:0; font-size:12px; color:var(--text-2); }   /* wraps: a sentence cut off is a sentence not said */
+  #orgmsg:empty { display:none; }
   /* A FAILURE: a 1px ink rule at its left, in ink */
-  #orgmsg.fail { color:var(--ink); border-left:1px solid var(--ink); padding-left:8px; white-space:normal; }
+  #orgmsg.fail { color:var(--ink); border-left:1px solid var(--ink); padding-left:8px; }
   /* Save and the Preview belong to Edit; Collect finds and sorts, and does
      not write (Robert, 2026-10-06) */
   main:not(.edit) :is(#orgwrite, #prevtoggle) { display:none; }

@@ -107,7 +107,7 @@ $('projects').addEventListener('click', (e) => {
 async function chooseProject(slug) {
   if (!await leaveForm(slug)) return false;
   save();   // anything typed on the previous project goes before its cards do
-  project = slug; doc = null; markDocs(); tell('');
+  project = slug; doc = null; markDocs(); tell(''); remember('pick', slug);
   shown = 100; ocur = null; altErrs.clear();
   $('psrc').value = '';   // sources differ per project; the search text carries over
   drawProjects(); buttons(); nameProject();
@@ -142,7 +142,7 @@ $('sitedocs').addEventListener('click', async (e) => {
   const r = e.target.closest('[data-doc]'); if (!r) return;
   if (!await leaveForm('site:' + r.dataset.doc)) return;
   save();   // anything typed on a card goes first, as when switching project
-  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErrs.clear(); disarm();
+  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErrs.clear(); disarm(); remember('pick', 'site:' + doc);
   drawProjects(); markDocs(); buttons(); nameProject();
   view = 'edit'; loadOrg();
 });
@@ -547,13 +547,16 @@ $('qmore').addEventListener('click', (e) => {
    stacked, one copy is kept, and the works are put in order. It was a page
    of its own beside Collect, and editing happened in both; now Collect
    finds and decides, and Edit is where a project is planned and saved. */
-let view = 'collect', org = null;
 const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+// The mode and the project (or ABOUT / CONTACT) come back after a reload or a
+// quit (UX-6): Harvest reopened on "Pick a project", in Collect, every time.
+let view = remember('mode') === 'edit' ? 'edit' : 'collect', org = null;
 let etab = remember('etab') || 'images';
 // Source material is optional while writing; keep the user's choice across projects.
 let keptTextOpen = remember('keptTextOpen') === '1';
 // the mode, the Edit tab and the panels that follow them, drawn from the variables
 function look() {
+  remember('mode', view);
   document.querySelector('main').classList.toggle('edit', view === 'edit');
   document.querySelectorAll('#tabs [data-view]').forEach(x => x.classList.toggle('on', x.dataset.view === view));
   document.querySelectorAll('#etabs [data-et]').forEach(x => x.classList.toggle('on', x.dataset.et === etab));
@@ -1027,7 +1030,7 @@ function drawReview() {
   const p = S.publish, going = p && ['checking', 'sending', 'merging'].includes(p.stage);
   const li = (name, words) => '<li><b>' + esc(name) + '</b> — ' + esc(words) + '</li>';
   let h = p ? '<div class="pubnow' + (/failed|submitted|unconfirmed/.test(p.stage) ? ' fail' : '') + '">' + esc(pubSay(p)) + (p.url ? ' <button class="btn quiet" data-url="' + esc(p.url) + '">Open pull request #' + p.pr + '</button>' : '') + '</div>' : '';
-  h += rvw.items.length ? '<h3 class="cap">Goes to the site</h3><p class="help">Saved on this Mac.</p><ul>' + rvw.items.map(i => li(i.name, i.changes.join(', ') + (i.held ? ' — held back: it goes to GitHub, and the site does not show it' : ''))).join('') + '</ul>'
+  h += rvw.items.length ? '<h3 class="cap">Goes to the site</h3><p class="help">Saved on this Mac.</p><ul>' + rvw.items.map(i => li(i.name, [(i.held ? i.changes.filter(c => c !== 'held back') : i.changes).join(', '), i.held && 'held back: it goes to GitHub, and the site does not show it'].filter(Boolean).join(' — '))).join('') + '</ul>'   // held back said once, not "held back — held back:" (UX-6)
     : '<p>Nothing saved is waiting to be published.</p>';
   if (rvw.later.length) h += '<h3 class="cap">Stays behind</h3><p class="help">Not saved yet. Save project puts them in the project file; publish after that.</p><ul>' +
     rvw.later.map(l => li(l.name, l.what.join(', ') + (l.also ? ' — newer than what goes now' : ''))).join('') + '</ul>';
@@ -1179,10 +1182,12 @@ function previewWork() {
 function previewMessage() {
   const pr = S?.projects.find(p => p.slug === project), name = doc ? DOC_NAME[doc] : pr?.title || '';
   const unsaved = !!S?.unsaved?.[doc || project]?.length, dev = DEVICES[prevDev];
+  // the Editing preview holds the form's Hold back, ticked or not, as it holds the section (UX-6)
+  const held = pd?.slug === project ? document.querySelector('#proj [data-p=draft]').checked : pr?.draft;
   $('prevmsg').textContent = (prevSrc === 'live' ? 'What visitors see now.'
     : prevSrc === 'saved' ? (pr?.draft ? name + ' is held back, so the saved site does not show it.' : 'As saved on this Mac. Unsaved edits are not shown.')
     : (!name ? 'Pick a project.' : (unsaved ? name + '’s unsaved edits, in place. Looking saves nothing and publishes nothing.' : name + ' has no unsaved edits.')
-       + (pr?.draft ? ' Held back: shown here, not on the site.' : unsaved ? '' : ' This is as saved.')))
+       + (held ? ' Held back: shown here, not on the site.' : unsaved ? '' : ' This is as saved.')))
     + ' ' + dev.name + ' ' + dev.w + ' × ' + dev.h + (fitPreview.s < 1 ? ', shown at ' + Math.round(fitPreview.s * 100) + '%' : '') + '.';
 }
 function fitPreview() {
@@ -1790,5 +1795,8 @@ look(); drawFindings(); orgLook();
   li.innerHTML = '<span tabindex="0" data-p="' + esc(S.home) + '" class="sel"><i>⌄</i>~ ' + esc(S.home.split('/').pop()) + '</span>';
   const ul = document.createElement('ul'); ul.appendChild(li); $('tree').appendChild(ul);
   folder = S.home; buttons();
+  const was = remember('pick');
+  if (was?.startsWith('site:')) $('sitedocs').querySelector('[data-doc="' + CSS.escape(was.slice(5)) + '"]')?.click();
+  else if (S.projects.some(p => p.slug === was)) chooseProject(was);
   await branch(li, S.home);
 })();

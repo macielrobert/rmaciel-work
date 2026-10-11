@@ -50,10 +50,10 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] Chrome. (Safari needs *Settings → Advanced → Press Tab to highlight each
       item* — without it this will look broken when it isn't.)
 - [ ] Tab in, arrow around, Tab out to the footer. Must **never trap focus**.
-- [ ] Arrow **past the first and last item** — should clamp, not wrap.
-- [ ] Enter on an already-open project **closes** it.
-- [ ] Enter **while the contact form is open** must do nothing (matches the
-      pointer locks).
+- [x] Arrow **past the first and last item** — should clamp, not wrap. *(UX-6, 2026-10-11)*
+- [x] Enter on an already-open project **closes** it. *(UX-6, 2026-10-11)*
+- [x] Enter **while the contact form is open** must do nothing (matches the
+      pointer locks). *(UX-6, 2026-10-11)*
 - [ ] Use a footer section link while focused in the grid — focus must survive
       (the layer no longer rebuilds; one row holds every section).
 - [ ] Rotate the device with the grid focused; focus targets must follow the
@@ -61,6 +61,11 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] **VoiceOver:** 13 options, correct titles, selected state announced.
 - [ ] **VoiceOver:** confirm window copy reads as words, not letter-by-letter
       (the `spanify` per-character wrapping). *Also debt item 10.*
+      **UX-6, 2026-10-11:** still open, and now likelier to matter. Chrome's
+      accessibility tree has one text node PER CHARACTER in the window copy
+      (3,573 spans in LIGHT WORK), even with `TEXT_CHURN` off. Needs VoiceOver
+      on the iPhone. If it reads letters, the fix is to skip `spanify()` while
+      `churnOff()` — which changes the AGENTS.md rule that it always runs.
 
 ---
 
@@ -98,8 +103,8 @@ Mostly visual, but it produced a real bug, so it earns tests.
 - [ ] Tap just ABOVE the seam (window, its margins, near the `←` mark): must
       NOT close. This is the misclick protection the rule was built around.
 - [ ] Tap a footer LINK: it navigates, it does not merely exit.
-- [ ] **Contact form up: tapping below the seam must do nothing.** The `×` is
-      the only exit from a half-written message.
+- [x] **Contact form up: tapping below the seam must do nothing.** The `×` is
+      the only exit from a half-written message. *(UX-6, 2026-10-11)* Escape too.
 - [ ] Swipe the row and release over the footer — the project must survive. The
       click that follows a drag belongs to the canvas.
 - [ ] With an image expanded, a below-seam tap ejects the whole thing (like the
@@ -157,8 +162,8 @@ The one that most needs stressing.
 - [ ] **Real capability test**, not the flag: Firefox with
       `webgl.disabled=true` in `about:config`, or Chrome with hardware
       acceleration switched off. Confirm the console warning names the reason.
-- [ ] Confirm the shader build is **not** degrading silently — on a normal
-      load the console should be clean.
+- [x] Confirm the shader build is **not** degrading silently — on a normal
+      load the console should be clean. *(UX-6, 2026-10-11)* Only the favicon's 404.
 - [ ] Old Android via BrowserStack if available (the real-world case).
 
 ---
@@ -168,14 +173,15 @@ The one that most needs stressing.
 - [ ] Paste each URL shape cold into a new tab: `#build`,
       `#build/vessel-series`, `#build/vessel-series/2`, `#about`, `#contact`.
       Each must land in the right state with the right window open.
-- [ ] **Malformed / stale hashes** must fall back to rest, never a broken
-      state: `#nonsense`, `#build/deleted-project`, `#build/vessel-series/99`,
+- [x] **Malformed / stale hashes** must fall back to rest, never a broken
+      state *(UX-6, 2026-10-11)* — a deleted or held-back slug lands on its section, a picture
+      number out of range clamps to the first or last: `#nonsense`, `#build/deleted-project`, `#build/vessel-series/99`,
       `#build/vessel-series/0`, `#///`, `#about/extra/parts`.
-- [ ] **Back button ladders correctly:** expanded image → project → rest.
-      Matches what Escape does.
+- [x] **Back button ladders correctly:** expanded image → project → rest.
+      Matches what Escape does. *(UX-6, 2026-10-11)*
 - [ ] Back from a **deep link landing** (no prior history) exits the site
       cleanly rather than erroring.
-- [ ] Forward button re-enters the state it left.
+- [x] Forward button re-enters the state it left. *(UX-6, 2026-10-11)*
 - [ ] Swipe through several images while expanded, then press back **once** —
       should close the image, not step back through every image.
 - [ ] Footer section link, then back. The link scrolls the row rather than
@@ -184,8 +190,8 @@ The one that most needs stressing.
       whole row, and must take the short way round from wherever you are.
 - [ ] **Reload on a deep link** returns to the same place.
 - [ ] iOS Safari **edge-swipe back gesture**, not just the button.
-- [ ] Confirm URL never changes on a bare load (no `#build` appearing
-      unprompted in a clean address bar).
+- [x] Confirm URL never changes on a bare load (no `#build` appearing
+      unprompted in a clean address bar). *(UX-6, 2026-10-11)*
 - [ ] `document.title` updates per entry; check the browser history menu shows
       meaningful names.
 - [ ] **Known accepted behaviour:** back closes the contact form and loses a
@@ -193,4 +199,73 @@ The one that most needs stressing.
       holds.
 - [ ] Deep link into a project, then use the footer to switch sections —
       confirm no stale hash.
-- [ ] Routing under `?nogl` (both systems at once).
+- [x] Routing under `?nogl` (both systems at once). *(UX-6, 2026-10-11)*
+
+---
+
+## Editor journeys — Harvest to the live site (UX-6)
+
+**How to run them.** `tools/test-rig.sh <empty folder>` builds an isolated
+copy: a clone of the site, a local bare repository standing in for GitHub, a
+stand-in `gh` (`gh-mode`: `no-pr`, `no-merge`, `no-deploy` make it fail on
+purpose) and a stand-in Netlify serving what merged. Nothing reaches GitHub,
+Robert's working copy or his running Harvest. Source material goes in the
+rig's `home/Documents` (the scratch home is the folder tree's root). The site
+checks run best in headless Chrome over the DevTools protocol: the in-app
+browser pauses animation frames while its pane is hidden, and the site never
+finishes booting there.
+
+Run 2026-10-11 by Claude on the `ux-6-acceptance` branch, 1024×768 unless
+noted. Everything below passed after the fixes listed in `TO-DO.md`, UX-6.
+
+- [x] **BUS STOP, one whole session.** A "Wave House" folder (a working
+      title) with a HEIC photo, a crop of a site render, two new pictures and
+      a .docx: crawl → 5 found → keep all → Edit groups the crop as "Same work
+      as #1?" → merge → HEIC first by drag, turned → one render removed → alt
+      text and a caption → the docx passage placed in the description, a
+      line moved to detail lines, bold → Collection by keyboard → Editing
+      preview, Desktop and Phone, Beside and Large → Save stops on the one
+      work without alt text and opens it → alt added → Save asks a second
+      click for the picture coming off → saved.
+- [x] **Save = what the Editing preview showed.** Editing preview, Saved
+      preview and a fresh `node build.js` byte-identical after Save. LIGHT
+      WORK (13 new pictures, longer copy) captured BEFORE Save: identical to
+      the saved build once stand-in paths map to saved ones and a picture's
+      size is read as its shape (Save shrinks to 2400px; same shapes).
+- [x] **Reopen.** Quit and restart Harvest: same address, Edit mode, BUS STOP,
+      the saved fields, *Saved on this Mac, not published*, nothing marked
+      unsaved. Unsaved fields also survive a restart (drafts).
+- [x] **Source files untouched** — the material folder hashed before and
+      after: identical.
+- [x] **Publishing.** Pull request refused: *Nothing was published*, commit
+      undone, branch deleted, files still saved. Merge refused: *Sent to
+      GitHub, not merged*, pull request #1 left open. Then published: merged,
+      stand-in live page byte-identical to the saved build, *Published*.
+- [x] **Held back.** CANOPY held back: the Editing preview shows it and says
+      so (fixed — it read only the saved flag), the review names it once,
+      the live site leaves it off (`#design/canopy` lands on DESIGN).
+- [x] **Sparse** (CANOPY, title only): Images says "No pictures yet…", the
+      preview shows the title alone.
+- [x] **Many pictures** (LIGHT WORK, 13: portrait, square, landscape,
+      panorama): whole pictures at their own shapes, desktop and phone; a
+      picture from the scrolled grid and back: place kept (122 → 122).
+- [x] **Portrait first picture, Project layout:** desktop fine. **Phone: the
+      description falls below the fold behind a tall picture; the text column
+      scrolls, but nothing says it does** — open, for Robert (`TO-DO.md`).
+- [x] **Long session.** 20 project switches (BUS STOP / LIGHT WORK / CANOPY /
+      ABOUT): 7–42 ms each to the works drawn, always the right project. 12
+      one-step moves with Later: 7–17 ms each to the grid redrawn.
+- [x] **Both themes, narrow windows, keyboard:** header at 900, 1024 and 1440
+      wide, light and dark — fits, Save hit-testable. Tab reaches every
+      control with a visible mark; layouts move with arrow keys.
+- [x] **Site regressions** on the published rig build, headless Chrome with
+      WebGL: deep links and malformed hashes, back / forward ladder, image
+      return, contact lock (Escape, below the seam, Enter on the menu), a tap
+      inside the window keeps it, below the seam closes it, 1280×800,
+      1920×1080, 375×812, 812×375, 768×1024, 320×640 (menu half 127, no
+      sideways scroll), `?nogl` (warning names the reason, titles open
+      projects, routing to a picture), listbox options named, the open one
+      selected.
+- [ ] **Not run:** VoiceOver itself, iOS edge-swipe back, a real WebGL
+      failure, Harvest.app's own WebKit (the in-app browser and Chrome only),
+      the real `gh` and SSH push.

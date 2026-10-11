@@ -1675,13 +1675,16 @@ function suggestions(slug, ms) {
 async function organize(slug) {
   const ms = await members(slug);
   const byKey = new Map(ms.map(m => [m.key, m]));
+  const prints = await printsOf(ms.map(m => m.file));
+  const hashes = await Promise.all(ms.map(m => dhash(m.file)));
+  // Only now, with nothing left to wait for (UX-6): made before the feature
+  // prints, an empty grouping sat in the state for the seconds they take, and
+  // the header read "4 works taken off" while Edit was still opening.
   const o = ((state.organize ||= {})[slug] ||= { stacks: [], apart: [] });
   // members that have left the project leave their stacks
   for (const t of o.stacks) t.members = t.members.filter(k => byKey.has(k));
   o.stacks = o.stacks.filter(t => t.members.length);
 
-  const prints = await printsOf(ms.map(m => m.file));
-  const hashes = await Promise.all(ms.map(m => dhash(m.file)));
   const P = new Map(ms.map((m, i) => [m.key, prints[i]])), Hh = new Map(ms.map((m, i) => [m.key, hashes[i]]));
   const near = (a, b) => { const pa = P.get(a), pb = P.get(b); return pa && pb ? fpDist(pa, pb) : Infinity; };
   const same = (a, b) => {
@@ -1816,7 +1819,8 @@ function organizeOp(slug, b) {
   }
   if (b.op === 'merge') {
     const u = o.stacks.find(x => x.id === b.other);
-    if (u && u !== t) { t.members.push(...u.members); if (!t.alt) t.alt = u.alt; if (!t.caption) t.caption = u.caption; o.stacks = o.stacks.filter(x => x !== u); }
+    // the merged work takes the EARLIER place of the two (UX-6): "Same work as #1?" on a new crop sent #1 to the crop's place
+    if (u && u !== t) { const ua = o.stacks.indexOf(u); t.members.push(...u.members); if (!t.alt) t.alt = u.alt; if (!t.caption) t.caption = u.caption; o.stacks[Math.min(at, ua)] = t; o.stacks.splice(Math.max(at, ua), 1); }
   }
   if (b.op === 'apart') (o.apart ||= []).push([t.id, b.other]);
   // clamped, so a large step is "to the top" or "to the bottom" (the right-click menu's)
@@ -2497,7 +2501,16 @@ const previewServer = http.createServer(async (req, res) => {
 });
 previewServer.listen(0, '127.0.0.1', () => { PREVIEW = `http://127.0.0.1:${previewServer.address().port}/`; });
 
-server.listen(0, '127.0.0.1', () => {
+// ONE ADDRESS, launch after launch (UX-6). The page remembers its column
+// widths, tabs, views and the open project in localStorage, which a browser
+// keeps per address — and a port picked fresh at every launch was a new
+// address every time, so none of it outlived a quit. The Host check on every
+// request (above) is what keeps a fixed port safe from other pages. If it is
+// taken (a second Harvest, a test copy), any free port, as before;
+// HARVEST_PORT=0 makes a test copy leave it alone.
+const PORT = process.env.HARVEST_PORT ? +process.env.HARVEST_PORT : 47321;
+server.once('error', (e) => { if (e.code !== 'EADDRINUSE') throw e; server.listen(0, '127.0.0.1'); });
+server.listen(PORT, '127.0.0.1', () => {
   ORIGIN = `http://127.0.0.1:${server.address().port}`;
   console.log(`Harvest is open at ${ORIGIN}/\nClose this window (or press Ctrl-C) when you are done.`);
   if (!process.env.HARVEST_NO_OPEN) execFile('open', [ORIGIN + '/']);

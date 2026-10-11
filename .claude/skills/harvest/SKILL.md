@@ -42,6 +42,21 @@ Write to project (the same three writes). Old remembered layout keys
 (`pane-*`, `projOpen`, `textsOpen`, `orgView`) are no longer read; Images
 remembers `imgView` (Grid by default) and Edit its tab as `etab`.
 
+**Remembered across a quit (UX-6, 2026-10-11).** The page keeps its choices
+in localStorage, which a browser keeps per ADDRESS — and the server took a
+fresh port at every launch, so none of them (column widths, tabs, views)
+ever outlived a quit. It now listens on **47321**, and on any free port if
+that is taken (a second copy; `HARVEST_PORT=0` for tests). The page also
+remembers the mode (`mode`) and the project or ABOUT / CONTACT (`pick`) and
+reopens on them. The Host check on every request keeps a fixed port safe.
+
+**The project header wraps (UX-6).** Name, saved state, Discard and the
+message line sit in `#pmain` and wrap there; Preview and Save stay at the
+right of the first line, never moved by a message arriving or clearing. It
+was one unbreakable row: at 1024 wide with the Preview open it ran under
+the Preview pane — a click on Save project landed on Live — and the message
+line was 0px wide.
+
 ## What Robert does
 
 1. Double-clicks `tools/Harvest.command`. It runs `git pull --ff-only` and opens
@@ -158,8 +173,11 @@ with another name becomes a "Working title?" card. build.js ignores the field.
 
 Never test against Robert's real state or repo content without reverting:
 
-- Run with a scratch home: `HOME="$TMPDIR/hv" HARVEST_NO_OPEN=1 node tools/harvest.js`.
-  The state folder then lives under that fake home.
+- Run with a scratch home: `HOME="$TMPDIR/hv" HARVEST_NO_OPEN=1 HARVEST_PORT=0 node tools/harvest.js`
+  The state folder then lives under that fake home. `HARVEST_PORT=0`: any
+  free port, leaving Harvest's own, 47321, to Robert's copy.
+- For Save AND Publish end to end, `tools/test-rig.sh <empty folder>` builds
+  a clone of the site with local stand-ins for GitHub, gh and Netlify.
 - `/api/*` POSTs need `Origin: http://127.0.0.1:<port>` or they get 403.
 - Keeping a working title, and **Save project**, write into
   `content/projects/`. Afterwards `git checkout` ONLY the files your test
@@ -265,7 +283,8 @@ crawler's dHash does not. Per stack Robert's decisions so far:
 
 Built as described. Same-work test: dHash within tolerance OR Vision feature
 print distance <= 0.30 stacks automatically; 0.30-0.60 is offered as "Same work
-as #N?". Measured on BUS STOP: crops 0.21-0.26 (70 %), corner crop 0.50,
+as #N?" (merging, the work takes the EARLIER of the two places — UX-6; it
+used to take the newcomer's, so a crop sent #1 to the end). Measured on BUS STOP: crops 0.21-0.26 (70 %), corner crop 0.50,
 different renders of one project 0.40-0.57 — hence the maybe band. Save rewrites
 the project's `images` to the kept copies in order and DELETES the files of
 site pictures it drops (build.js ships all of images/), after a second click.

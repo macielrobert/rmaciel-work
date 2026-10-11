@@ -64,11 +64,13 @@
   <section id="work">
     <!-- PROJECT HEADER: the same place in both modes -->
     <div id="phead">
-      <h2 id="pname">Pick a project</h2>
-      <span id="pstate"></span>
-      <button class="btn quiet" id="pdiscard" hidden title="The fields go back to what was last saved">Discard unsaved fields</button>
-      <span id="orgmsg" role="status"></span>
-      <span class="push"></span>
+      <!-- the name, where its edits are, and what was said wrap in here; Preview and Save never move (UX-6) -->
+      <div id="pmain">
+        <h2 id="pname">Pick a project</h2>
+        <span id="pstate"></span>
+        <button class="btn quiet" id="pdiscard" hidden title="The fields go back to what was last saved">Discard unsaved fields</button>
+        <span id="orgmsg" role="status"></span>
+      </div>
       <button class="btn tab" id="prevtoggle" title="The site itself, beside your work: as saved on this Mac, or live">Preview</button>
       <button class="btn primary" id="orgwrite" disabled title="Project details, the works in this order, and the kept text, saved into the project file on this Mac. Checked first; not on the site until Publish.">Save project</button>
     </div>
