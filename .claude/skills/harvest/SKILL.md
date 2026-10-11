@@ -83,8 +83,9 @@ remembers `imgView` (Grid by default) and Edit its tab as `etab`.
    Edit as one form — ABOUT is Content's title, detail lines and description,
    CONTACT its email and intro — and the header's **Save ABOUT** / **Save
    CONTACT** writes `content/about.mdoc` / `content/contact.json` through
-   `/api/site`, after build.js passes on a copy holding the singletons and no
-   projects (`throwaway()`). They count toward Publish as `about` and
+   `/api/site`, after build.js passes on a copy holding that file among
+   minimal stand-ins for everything else (`STAND_IN`, `throwaway()`): build.js
+   stops at its first failure, so the real ones could hide a new error. They count toward Publish as `about` and
    `contact`. CONTACT's intro is carried by build.js but not shown on the site.
 
 ## What "publish the harvest" means for Claude
