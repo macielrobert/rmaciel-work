@@ -1103,7 +1103,24 @@ Wait about a week after Phase 9.
 
 ## NEXT — Video and audio players
 
-Requested 2026-10-09. Not started.
+Requested 2026-10-09; scope updated by Robert 2026-10-11. Not started.
+
+**Requested scope:** video and audio support within Harvest, using a generic
+player and **Cloudflare R2 hosting for both video and audio**. Give the
+player a shared visual skin that matches Harvest and the website, following
+`STYLE-GUIDE.md`. This extends the earlier video-only hosting decision.
+
+- [ ] **Shared media player and skin:** use a generic, unbranded playback
+      foundation in Harvest and on the website; style its controls to match
+      both. Cover video and audio, both themes, keyboard operation, and phone
+      and desktop sizes. The native HTML media elements below remain the
+      default foundation.
+- [ ] **Harvest: complete video and audio workflow:** collect/import, preview,
+      edit media details, upload to R2, save, and reopen. Keep Editing preview,
+      Saved preview, and Live distinct, including local media not yet uploaded.
+- [ ] **R2: host both media types:** add upload handling and saved media
+      references through Harvest, Keystatic, the build, and the site. Resolve
+      the public delivery address under the existing domain/DNS holds below.
 
 Separate follow-on work from CURRENT — Shared UX plan. The editor/layout
 redesign can proceed without resolving media hosting. When these players are
@@ -1129,14 +1146,16 @@ plays in every browser as-is; what it gives up is the quality switching.
       - *A storage bucket outside the repo* (Cloudflare R2, Bunny and the like,
         serving plain MP4 files) — no ceiling and still no branding, but a
         second account, and a second address the page loads from.
-      Depends on how long the real videos are. Audio is small enough for the
-      repo either way.
+      The original choice depended on how long the real videos were.
+      **Updated 2026-10-11: both video and audio belong on R2**, even when
+      an audio file would fit in the repo.
       **Answered 2026-10-09: up to 2 minutes each.** Converted for the web
       that is roughly 40–60 MB a video (an estimate, from typical 720p–1080p
       bitrates — real sizes depend on the footage). Under GitHub's ceiling,
       but every one stays in the repo's history for good, and every play is
       bandwidth Netlify counts against the free plan.
-      **Decided 2026-10-09: a Cloudflare R2 bucket, for video only.** Plays
+      **Decided 2026-10-09: a Cloudflare R2 bucket, initially for video only;
+      extended to audio on 2026-10-11.** Plays
       cost nothing: R2 has no egress charge (verified on Cloudflare's R2
       pricing page; free tier 10 GB stored a month). Images stay in
       `images/` — Keystatic uploads there, the build reads their sizes there,
@@ -1178,7 +1197,8 @@ plays in every browser as-is; what it gives up is the quality switching.
 - [ ] **CMS: a video field and an audio field** in Keystatic. Check whether
       Keystatic's upload to GitHub accepts a file that large before relying on
       it — only matters if the files live in the repo.
-- [ ] **Harvest: load and preview video.** Today it skips video entirely; it
+- [ ] **Harvest: video import details** (part of the video/audio workflow above).
+      Today it skips video entirely; it
       only recognises picture extensions. Needs: recognise `.mov`, `.mp4`,
       `.m4v`; read size and length with `mdls`, since `sips` cannot read
       video (both built into macOS); a still for the review grid via
