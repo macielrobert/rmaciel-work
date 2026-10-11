@@ -821,25 +821,69 @@ in the linked test record. Claude supplies concrete options with recommended
 defaults; Codex reviews consistency and gaps; Robert judges material visual
 choices. Remaining unknowns stay explicit rather than being called complete.
 
-- [ ] First prototype: one complete **BUS STOP** session on isolated content
+- [x] First prototype: one complete **BUS STOP** session on isolated content
       and state. Find material → keep it → edit text → order/select images →
       choose layout → preview → save → reopen → compare the saved result.
       Preserve source files and prior decisions. Test publishing failures without
       releasing Robert's held content.
-- [ ] Add long text (LIGHT WORK), a portrait work, a many-image collection,
+- [x] Add long text (LIGHT WORK), a portrait work, a many-image collection,
       sparse content, and a held-back project. Use isolated fixtures where real
       content is incomplete; do not edit NOISE to manufacture a passing test.
-- [ ] Check both themes, keyboard focus and operation, readable labels and
+- [x] Check both themes, keyboard focus and operation, readable labels and
       validation, selected/batch states, empty/loading/error states, narrow
       desktop windows, and phone previews. Measure long-session tasks such as
       repeated project switches and image reordering, including responsiveness.
-- [ ] Run applicable `STRESS-TESTS.md` checks for routing/history, image return,
+- [x] Run applicable `STRESS-TESTS.md` checks for routing/history, image return,
       contact behavior, resize, keyboard/VoiceOver, and no-WebGL fallback.
       Extend that test record with these journeys rather than maintaining a
       second test log. Follow the Harvest skill for isolated tests and PID cleanup.
-- [ ] Update the guide and relevant operating instructions with final behavior;
+- [x] Update the guide and relevant operating instructions with final behavior;
       record completed task IDs and evidence here. Reconcile overlapping launch
       checklist items only when their actual acceptance checks pass.
+
+**Record, 2026-10-11 — Claude. UX-6 DONE, pending Robert's look.** Branch
+`ux-6-acceptance`. Scope: Harvest (`tools/`), a new test rig, the docs. The
+site's `index.html` is untouched; no content touched; nothing published.
+Evidence, case by case, is in `STRESS-TESTS.md`, **Editor journeys**.
+- **The journey passed end to end** on an isolated rig — find (a "Wave
+  House" folder, by working title) → keep → edit text → order, merge, turn,
+  remove, alt text → layout → Editing preview → Save (stopped once for alt
+  text, then the second click for a picture coming off) → quit and reopen →
+  publish, refused at the pull request, refused at the merge, then live. The
+  saved build, the Saved preview and the stand-in live page were
+  byte-identical to the Editing preview; source files unchanged.
+- **Fixed, found on the way:**
+  - **Save project could not be clicked in a narrow window.** At 1024 wide
+    with the Preview open, the project header ran 757px into a 480px column,
+    under the Preview pane: a click on Save landed on Live, and the message
+    line — where every error is said — was 0px wide. The header now wraps;
+    Preview and Save stay put on its first line (`STYLE-GUIDE.md`).
+  - **Harvest forgot everything at every quit.** Its port changed every
+    launch, and the page's remembered choices (column widths, tabs, views)
+    are kept per address. It now uses port 47321 (any free one if taken), and
+    reopens on the mode and project you left.
+  - **Opening a project the first time said "4 works taken off"** for the
+    seconds the grouping took. The grouping is now stored only when done.
+  - **"Same work as #1? Merge" on a new crop moved #1 to the crop's place**
+    at the end. A merge now keeps the earlier place.
+  - The Editing preview did not say "Held back" for an unsaved Hold back; the
+    publish review said "held back — held back:".
+  - Tooling: `tools/test-rig.sh` builds the rig (clone, stand-in GitHub, gh
+    and Netlify) that UX-3 and UX-5 each built by hand.
+- **Measured:** project switches 7–42 ms, a reorder 7–17 ms, a 13-picture
+  crawl 0.5 s, Save of 13 new pictures 1.0 s.
+- **For Robert to judge:**
+  - **Phone, Project layout, tall first picture:** the description starts
+    below the fold. The text column scrolls, but nothing says so. Recommended:
+    fade its last visible line, as the Collection's introduction already does.
+  - **VoiceOver:** each character of the window copy is its own element in
+    the accessibility tree, churn off or on. Needs a check on the iPhone; if
+    it reads letters, skip `spanify()` while churn is off — that changes an
+    AGENTS.md rule, so it is his call (`STRESS-TESTS.md`, Grid keyboard).
+- **Not done:** VoiceOver itself, Harvest.app's own WebKit, the real `gh`
+  and SSH push, a real WebGL failure. The `PUNCH-LIST.md` §3 items ran
+  clean on a local build and stay unticked: their acceptance is the deploy
+  preview.
 
 ---
 

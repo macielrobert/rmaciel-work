@@ -153,6 +153,10 @@ these on the deploy preview **before** the cutover, not after:
 - [ ] Keyboard navigation and VoiceOver
 - [ ] Fix whatever this surfaces before going further
 
+**UX-6, 2026-10-11:** the first, second and fourth ran clean against a local
+build in headless Chrome, and keyboard (VoiceOver not run) — `STRESS-TESTS.md`,
+Editor journeys. Not ticked: the acceptance is the deploy preview.
+
 ---
 
 ## 4. Cutover — about five minutes of actual work

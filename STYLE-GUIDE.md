@@ -297,6 +297,10 @@ at the left edge of their column.
 - **Save project and Preview are Edit's**: Collect finds and sorts and does
   not write (Robert, 2026-10-06), so the project header shows them in Edit
   only. The project's name is in the same place in both modes.
+- **A narrow window wraps the project header, it never overflows it**
+  (UX-6): the name, the saved state, Discard and the message line wrap;
+  Preview and Save stay at the right of the first line, so a message
+  arriving or clearing never moves them out from under a click.
 - A right-click menu repeats actions that are visible somewhere. It is never
   the only way to reach one.
 
