@@ -299,9 +299,9 @@ document is read as a job and its passages arrive pending (`from: 'manual'`).
 ## The project's fields — was the Project panel (built 2026-10-04)
 
 Edit › **Content** (title, detail lines, description), **Layout** (layout,
-expand, grid icon, wordmark) and **Settings** (section, order, hold back,
+expand, crop, grid icon, wordmark) and **Settings** (section, order, hold back,
 part_of, client, working titles, share description): every field Keystatic edits except `images`
-(title, section, order, draft, part_of, client, details, layout, expand,
+(title, section, order, draft, part_of, client, details, layout, expand, crop,
 icon_type/glyph/image, wordmark, share_description, nicknames, and the
 description body as Markdoc with toolbar buttons + a live preview rendered by
 the repo's @markdoc/markdoc with tags mirroring build.js). Save

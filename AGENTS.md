@@ -214,7 +214,9 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
    flat row of labels and a vertical three-slot wheel (see below for which
    shows when).
 4. **Window.** Per-entry text and imagery, swapped through a hard cut,
-   arranged by a named layout (`standard` / `grid` / `text` / `form`). The
+   arranged by a named layout (`standard` / `grid` / `text` / `form`; the
+   editors call the first three **Project / Collection / Text**, and the
+   stored values never change). The
    swap used to churn every character through a pool of ASCII glyphs on the
    way past — the DOM twin of the icons' noise. **It is OFF**, at the
    `TEXT_CHURN` knob rather than deleted: it read as a screen effect from
@@ -250,8 +252,10 @@ understanding why it exists will reintroduce a solved bug.
 ### Layout
 
 - **The taskbar rule.** Things have a fixed size; only the *count* adapts.
-  Applied to the icon cell (`CELL_PX` 50), the wordmark (320), the hero (720),
-  the image-grid cell (200), and body copy (`--measure` 33em). Extra viewport
+  Applied to the icon cell (`CELL_PX` 50), the wordmark (160 x 24), the
+  stage (720, the first picture and an opened one alike), the thumbnail strip
+  (96 tall at most), a Collection's cell (200 cropped, a 160 row whole), and
+  body copy (`--measure` 31em). Extra viewport
   becomes space, never a bigger element.
 - **The band is what says where a section ends.** The row always shows every
   project, so a footer link does two things: it scrolls that section's first
@@ -444,8 +448,18 @@ understanding why it exists will reintroduce a solved bug.
   characters is a fact about prose, not about input fields.
 - **The measure is an ESTIMATE now, not a guarantee.** It was `66ch`, which in
   a monospace face was exactly 66 characters. In PP Neue Montreal `ch` is the
-  width of a zero, so it is `33em` and measured at 67 characters by counting.
+  width of a zero, so it is `31em` and measured at 66 characters by counting
+  at the 12px body (UX-4; it was 33em, 67 characters at 11px).
   Re-tune by counting, never by arithmetic.
+- **A picture does not move when it is opened (UX-4).** The Project layout's
+  first picture and an opened picture are drawn in ONE box, from its top
+  left: the left column in landscape, under the title in portrait. The
+  picture view's title row is the overview's title row (same height, same
+  20px under it), so nothing below it shifts. The picture used to sit left
+  and jump right when opened.
+- **Missing content stays missing (UX-4).** No pictures means the Text
+  layout; no detail lines or description means none is drawn; no wordmark
+  means none. The placeholder generators that filled them are deleted.
 
 ### Rendering
 
@@ -556,6 +570,9 @@ understanding why it exists will reintroduce a solved bug.
 | Caret or arrow indicators on the section wheel | Same answer the menu row gave, and for more reason: the half-lit neighbours already name what is above and below |
 | A `|` divider in the footer at every width | On a wide screen the two ends already say where the sections stop and the fixtures begin. A mark that repeats what the layout says is furniture — the same answer the menu row gave the arrows |
 | A secondary grey per theme | Robert chose one fixed grey (2026-10-10). `rgb(117,117,126)` clears 4.5:1 on both fields; a pair would mean two values to keep in step, and a theme swap for a colour that is meant to be neither |
+| Placeholder pictures and wordmarks for missing content | They were on the live site standing in for the work, where they read as the work. Deleted in UX-4; a sparse project shows what exists |
+| The wordmark in the picture's place | A client's logo stood where its work should have been. The wordmark sits with the facts (UX-4) |
+| Hanging the ← in the margin beside the title | Would keep the title from shifting sideways when a picture opens, but the 22px window padding cannot hold a 13px arrow and its keyboard outline: clipped on a phone, crossing the title on a laptop |
 | Hover auto-scroll zones at the row's ends | Not an indicator at all: you must already suspect there is more. The zones sit on top of icon cells, and the row moving under a stationary cursor means the icon you click is not the one you aimed at |
 
 ---

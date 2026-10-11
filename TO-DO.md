@@ -590,30 +590,87 @@ titles have little emphasis. Grid uses cropped 16:9 cells. Missing imagery can
 still silently produce placeholders. Some sparse pages also lack authored copy,
 which styling alone cannot fix.
 
-- [ ] Prototype three understandable choices: **Project** (existing
+- [x] Prototype three understandable choices: **Project** (existing
       `standard`), **Collection** (`grid`), and **Text** (`text`). Keep existing
       stored values/URLs compatible; the contact form retains its own layout.
-- [ ] Project: keep the main image in a stable region across overview and
+- [x] Project: keep the main image in a stable region across overview and
       expanded viewing. Keep title, close, and return controls predictable;
       preserve local return versus global close and history behavior.
-- [ ] Establish title → short project facts → description hierarchy. Try a
+- [x] Establish title → short project facts → description hierarchy. Try a
       bounded thumbnail strip instead of a fixed share of the content height,
       while preserving the established size caps and reading measure. Body
       text is decided at 12px (Robert, 2026-10-10; `STYLE-GUIDE.md`, Type).
-- [ ] Separate client identification from project imagery: a wordmark should
+- [x] Separate client identification from project imagery: a wordmark should
       not automatically displace the main photograph. If this needs a new
       authoring choice, carry it through the schema, editors, build, and site.
-- [ ] Collection: brief introduction plus image grid. Offer deliberate whole
+- [x] Collection: brief introduction plus image grid. Offer deliberate whole
       image versus crop behavior; respect portrait drawings and other aspect
       ratios. Keep text expansion local and restore the reader's position on
       return. Text layout retains a readable column and clear hierarchy.
-- [ ] Handle missing descriptions/images deliberately, without inventing copy
+- [x] Handle missing descriptions/images deliberately, without inventing copy
       or substituting fake artwork. Coordinate the existing placeholder-removal
       task in Phase 7 / `PUNCH-LIST.md` §1; verify usages before removal.
 
 **Done when:** real sparse, long-copy, portrait-image, and many-image projects
 work in desktop and phone views. Larger screens gain space without unbounded
 images or lines; the settled navigation remains intact.
+
+**Record, 2026-10-11 — Claude. UX-4 DONE, pending Robert's look.** Branch
+`ux-4-content-layouts`. Scope: the window (`index.html`), the new `crop`
+field through Keystatic, Harvest and build.js, and the docs. No content
+touched; nothing published.
+- **Names.** Keystatic and Harvest call the layouts **Project / Collection /
+  Text**, with a one-line description. Stored values stay `standard` / `grid`
+  / `text`, so no file or URL changed; the contact form keeps its own.
+- **Project.** The first picture and every opened picture are drawn in ONE
+  box from its top-left corner — the left column in landscape (it used to
+  sit left and jump right), under the title in portrait (the phone had no
+  picture until one was tapped). The picture view's title row is the
+  overview's, so nothing moves: measured at 375px, the picture's box is
+  35,73 306×219 in both views; with a three-line title, 114 in both. ← and ×
+  keep their jobs, routes and history are untouched. The strip is a quarter
+  of the window up to **96px** (it was ~155 on a laptop). Pictures cap at
+  720×720; the column gap is 32px.
+- **Hierarchy.** Title (12px, ink, .08em) → facts (detail lines, 11px grey)
+  → description (12px Book, 1.7, .02em, adopted from Robert's decision).
+  Empty parts are not drawn. The measure was re-counted: 33em held 71
+  characters at 12px, so it is **31em = 66 characters**; the form's is 45em.
+- **Wordmark.** No longer takes the picture's place: it opens the facts,
+  160×24 at most, in ink, in every layout. No new field was needed.
+- **Collection.** New `crop` field (Keystatic checkbox, Harvest's Layout tab,
+  build.js): off by default = every picture whole at its own shape in rows
+  160 tall; on = square cells 200 wide (2 columns on a phone). Both start at
+  the left margin. The clamped introduction fades its last line instead of
+  slicing it. The grid's scroll position is kept when the copy or a picture
+  is opened and given back on return.
+- **Missing content.** The placeholder generators (~120 lines: grey boxes,
+  bar-code wordmarks, test icons) are deleted; no project used them except as
+  filler. No pictures → Text layout; nothing is invented.
+- **Checks.** JS syntax, CSS braces 1:1, `check-tokens`, `check-harvest`.
+  Headless Chrome driven over the DevTools protocol (real WebGL, real
+  frames) on the real-content build and on an isolated fixture copy (LIGHT
+  WORK with 14 pictures, portrait and panorama, as a whole Collection; DAILY
+  SHAPES cropped; SP CHAIR with a portrait first picture, wordmark and a long
+  caption; COLOSSAL sparse with a wordmark, then with an over-long title):
+  1280×800 and 1920×1080, 375×812, 812×375, 768×1024, light and dark,
+  `?nogl`, ABOUT, CONTACT, the sibling row, Enter on a thumb, Tab focus on ←,
+  Escape twice (picture, then window), the Collection's scroll kept through
+  a picture and through the copy (122 → 122). No console errors. Harvest:
+  `crop` saved through `/api/project` from a scratch home, file reverted,
+  process stopped by PID.
+- **Fixed in passing:** a long title ran under the ×.
+- **For Robert to judge:** pictures anchored top-left (the alternative is
+  sitting on the strip); the wordmark's place and size; 96px strip; 160px
+  Collection rows (one landscape picture per row on a phone); square crops.
+- **Content, not code:** most published projects have no pictures or copy
+  yet, so they now open as a title alone — honest, and it shows what is
+  missing. REGENERATIONS writes its facts as bold lines in the description;
+  as detail lines they would take the facts' style.
+- **Not done:** a long title can wrap one line more in the picture view than
+  in the overview (the ← takes 21px), which moves a phone's picture down a
+  line. The specimen still shows UX-1's before/after; its "proposed" site
+  column is now what is live. Type sizes are not tokens yet — UX-5 adds them
+  when Harvest's preview reads them.
 
 ### UX-5 — Connect composition to an accurate preview
 
@@ -831,8 +888,9 @@ The site should not go live on your domain showing placeholders.
       and an over-long title, every layout, both orientations. This is the
       class of bug placeholder copy hides. Implement alongside UX-4/6;
       record the shared launch result in `PUNCH-LIST.md` §1.
-- [ ] Delete the placeholder generators once dependencies on them are gone
+- [x] Delete the placeholder generators once dependencies on them are gone
       — shared with UX-4's deliberate empty-content handling, not a second pass.
+      Done in UX-4.
 - [ ] Verify hidden-strip images stay off the wire (devtools, real images)
 
 ---

@@ -259,16 +259,30 @@ export default config({
           { label: 'Detail lines', itemLabel: (p) => p.value },
         ),
         summary: description('Description'),
+        /* THE NAMES CHANGED, THE VALUES DID NOT (UX-4). "Standard" and "Grid"
+           said how the page was built, not what it was for; Project /
+           Collection / Text say what the work is. The stored values stay
+           standard / grid / text, so no file and no URL changes. */
         layout: fields.select({
           label: 'Layout',
+          description:
+            'Project: the first picture large, the rest in a strip. Collection: every picture in a grid. Text: words only.',
           options: [
-            { label: 'Standard', value: 'standard' },
-            { label: 'Grid', value: 'grid' },
+            { label: 'Project', value: 'standard' },
+            { label: 'Collection', value: 'grid' },
             { label: 'Text', value: 'text' },
           ],
           defaultValue: 'standard',
         }),
         expand: fields.checkbox({ label: 'Allow image expand', defaultValue: true }),
+        /* WHOLE OR CROPPED, for a Collection (UX-4). Until then a collection
+           cropped every picture to 16:9, which cut the top and bottom off a
+           portrait drawing. Off — the default — shows each picture whole. */
+        crop: fields.checkbox({
+          label: "Crop a collection's pictures to squares",
+          description: 'Only for the Collection layout. Off: every picture whole, at its own shape.',
+          defaultValue: false,
+        }),
         icon_type: fields.select({
           label: 'Grid icon — kind',
           options: [
@@ -285,9 +299,11 @@ export default config({
           description: 'Transparent PNG or SVG. Alpha is the shape.',
         }),
         wordmark: fields.image({
-          label: 'Wordmark / hero mark',
+          label: 'Wordmark',
           directory: 'images',
           publicPath: '/images/',
+          description:
+            "The client's spelled-out mark, shown small with the detail lines. Transparent PNG or SVG; it is drawn in the site's ink. It never takes a picture's place.",
         }),
         /* ALT IS REQUIRED, AND THE EDITOR IS THE PLACE TO SAY SO.
 

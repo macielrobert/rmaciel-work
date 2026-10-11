@@ -120,9 +120,15 @@
     /* below this viewport width a 200px cell no longer fits even once, so the
        grid pins to 2 flexible columns instead of dropping to 1 (see l-grid).
        479 = two 200px cells + gap need inner 410px -> viewport 479. */
-    /* collapsed height of a long body in l-grid — 4 lines at 11px / 1.9.
+    /* collapsed height of a long body in l-grid — 4 lines at the body's 1.7.
+       In em so it follows the body size: it was 84px, 4 lines at 11px / 1.9,
+       and a pixel value would have clipped the fourth line at 12px.
        Past this the copy clamps and the caret appears. */
-    --body-clamp: 84px;
+    --body-clamp: 6.8em;
+    /* THE COLLECTION'S ROW HEIGHT, for whole pictures (see l-grid). Fixed like
+       every other element here: a wider window fits more pictures in a row,
+       never taller ones. */
+    --g-row: 160px;
     /* widest a HERO image may draw. Unlike the wordmark's conservative cap,
        a lead image is content and earns room — but it still stops growing
        so a 27in monitor gains surrounding space, not a bigger picture. */
@@ -147,15 +153,19 @@
        number is still exact.
 
        `em` keeps the one property that mattered: it resolves against the
-       window's 11px text, so a later type-size change widens the column on its
+       window's body text, so a type-size change widens the column on its
        own and the character count holds. Still a CAP, not a breakpoint — a
        phone in portrait never reaches it. 66 characters is the middle of the
        comfortable 45-75 range.
 
        TUNE THIS against the real face once it is in: set copy at this width,
        count the characters on a full line, and adjust if it lands outside
-       55-70. */
-    --measure: 33em;
+       55-70.
+
+       RE-COUNTED AT 12px (UX-4): 33em held 71 characters on an average full
+       line of DAILY SHAPES, because the tracking came down from .05em to
+       .02em with the size going up. 31em holds 66 (372px). */
+    --measure: 31em;
     /* THE SAME IDEA, DIFFERENT JOB. --measure is a fact about READING: a line
        of prose stops being comfortable past ~75 characters. A form is not
        prose — its fields are targets to hit, not lines to follow — so the
@@ -168,10 +178,11 @@
 
        WAS 96ch. Converted with the same reasoning as --measure above, but on
        a different basis: this value was never a character count, so what is
-       preserved is its RATIO to the reading measure — it was 1.45x, and 33em
-       x 1.45 is 48em. A form that stops being comfortably wider than the prose
-       column has lost the only thing this variable exists to say. */
-    --measure-form: 48em;
+       preserved is its RATIO to the reading measure — it was 1.45x, and 31em
+       x 1.45 is 45em (it was 48em while the measure was 33em). A form that
+       stops being comfortably wider than the prose column has lost the only
+       thing this variable exists to say. */
+    --measure-form: 45em;
     width: 100vw;
     height: 100vh;
     height: 100dvh;                           /* mobile address-bar aware */
@@ -396,7 +407,11 @@
     right:  var(--nl-m, 24px);
     bottom: var(--nl-win-bottom, 55%);
     padding: 20px 22px;
-    font-size: 11px; line-height: 1.9; letter-spacing: 0.05em;
+    /* THE BODY: 12px Book, 1.7, .02em — Robert, 2026-10-10 (STYLE-GUIDE.md,
+       Type), adopted with UX-4. It was 11px, 1.9, .05em: the tracking and
+       the tall line were compensation for type that was too small to read
+       comfortably, and both come down now that it is not. */
+    font-size: 12px; line-height: 1.7; letter-spacing: 0.02em;
     visibility: hidden;
     pointer-events: none;
     overflow: hidden;
@@ -450,19 +465,118 @@
   }
   #nl-exp-stage { touch-action: none; }        /* swipes are read manually */
 
+  /* THE TITLE (UX-4): the body's size, in ink, tracked for capitals — the
+     titles are written in capitals, so nothing transforms them. It was 11px
+     in the text grey, the voice of a caption, so a project opened without
+     anything saying what it was. It is an h2, so a screen reader can find
+     it; font: inherit takes back the browser's own heading size and weight.
+     20px under it, the spacing step for "a title and what follows it". */
+  #nl-window .hd {
+    display: block;
+    font: inherit;
+    color: var(--ink);
+    letter-spacing: 0.08em;
+    margin: 0 0 20px;
+    /* the × sits over the window's top right corner, and the title's first
+       line runs at its height: a long title went under it */
+    padding-right: 24px;
+  }
+  /* FACTS: the detail lines under the title — material, client, year. A list
+     to scan, not prose, so smaller, tighter and in the text grey. */
+  #nl-window-text .facts {
+    margin: 0 0 20px;
+    font-size: 11px; line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  /* THE TITLE ROW IS ONE ROW IN BOTH VIEWS (UX-4). The overview opens with
+     the title; the picture view opens with ← and the same title, and that
+     row must be the same height in both — one line at the body's height,
+     with the same 20px under it — or everything below it, the picture
+     included, moves when a picture is opened. The ←'s tap padding is taken
+     back with negative margins so it cannot make the row taller.
+     Tried and rejected: hanging the ← in the margin so the title would not
+     shift sideways either. The window's padding is 22px, and a 13px arrow
+     with its keyboard outline does not fit in it — the outline was clipped
+     on a phone and crossed the title's first letter on a laptop. */
+  #nl-exp-top { display: flex; align-items: baseline; gap: 8px; margin: 0 0 20px;
+                max-width: var(--measure); }    /* the overview title's column */
+  #nl-exp-top .hd { margin: 0; }
+  /* the LOCAL exit — up one layer (image -> project overview). Mirrors the ×
+     spatially; the × stays the GLOBAL eject. Only exists in the image view,
+     so the two marks document the layer structure. Static, like the ×. */
+  #nl-back {
+    padding: 6px 2px 6px 0;                    /* fat tap target */
+    margin: -6px 0;                            /* ...that does not grow the row */
+    font-size: 13px; line-height: 1;
+    color: var(--text-2);
+    cursor: pointer;
+    user-select: none;
+  }
+  #nl-back:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
+  @media (hover: hover) { #nl-back:hover { color: var(--ink); } }
+
+  /* THE STAGE — where a picture is shown, and the reason the Project layout
+     no longer moves its picture (UX-4). It used to sit LEFT of the text in
+     the overview and jump RIGHT when opened; now the overview's first picture
+     and every opened picture are drawn in ONE box, from its top left corner,
+     so opening a picture swaps it in place.
+
+     PORTRAIT — the phone: the picture runs the column's width at its own
+     shape, no taller than --stage-h (resize() sets it from the window), and
+     the caption follows directly under it. The overview's copy of that box
+     is #nl-hero-col, under the title. Both are capped at the reading measure,
+     because the overview's sits inside the text column and the two must
+     match. The ratio is set inline, so the box has its shape before the
+     picture arrives and nothing below it jumps. */
+  #nl-exp-stage {
+    flex: 0 1 auto; min-height: 0;
+    max-width: min(var(--measure), var(--hero-max));
+  }
+  #nl-exp-img, #nl-hero-col {
+    display: block;
+    width: 100%; height: auto;
+    max-height: var(--stage-h, 60vh);
+    object-fit: contain; object-position: left top;
+  }
+  #nl-hero-col { display: none; margin: 0 0 20px; }
+  #nl-window.l-standard #nl-hero-col { display: block; }
+  /* caption: a bare grey line — no bar, no border — directly under the
+     picture. STATIC: shown when the image has a caption, no show/hide
+     interaction. In portrait it takes whatever height the picture leaves
+     and scrolls past that. 11px, like the facts: secondary words. */
+  #nl-exp-cap {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* a caption is copy, so it takes the same measure as the body */
+    max-width: var(--measure);
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding-top: 8px;
+    font-size: 11px; line-height: 1.5;
+    color: var(--text-2);
+    visibility: hidden;
+  }
+  #nl-exp-cap::-webkit-scrollbar { display: none; }
+
   /* LANDSCAPE: the window is ALWAYS two-column inside the margins, expanded
      or not, so the two states share one geometry.
-     UNEXPANDED: project info text fills the RIGHT half (wrapping, scrolling
-     on overflow — the same slot the image takes when expanded); the
-     carousel sits bottom-LEFT at half width. Rows above it stay open.
-     EXPANDED: overrides below — breadcrumb + caption stack in the left
-     column, the image takes the right at full height. */
+     OVERVIEW: the text fills the RIGHT column; the picture (#nl-hero) and
+     under it the strip fill the LEFT.
+     EXPANDED: the opened picture takes the hero's box exactly — rows 1 and 2
+     of the expanded grid add up to row 1 of the overview's — and the right
+     column swaps the text for ← title and the caption. Until UX-4 these were
+     the other way round: the picture changed sides when it was opened. */
   @media (orientation: landscape) {
     #nl-window {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr) var(--car-h, 25%);
-      column-gap: var(--nl-m, 24px);
+      /* 32px, the spacing step between regions. It was one margin (--nl-m,
+         ~12px), which was room enough beside a wordmark floating in the
+         middle of the column, and is not beside a picture that now runs
+         right up to the column's edge. */
+      column-gap: 32px;
       row-gap: 10px;
     }
     #nl-main { display: contents; }
@@ -496,63 +610,37 @@
     #nl-window.l-grid            { display: flex; flex-direction: column; }
     #nl-window.l-grid #nl-main   { display: block; position: relative; }
     #nl-window.l-grid.x #nl-expand { display: flex; }
-    #nl-window.l-grid.x #nl-exp-stage { margin-top: 10px; }
+
+    /* THE STAGE, LANDSCAPE: the picture fills the space it is given, whole,
+       from the top left, inside a box no bigger than --hero-max either way —
+       a 27" monitor gains space around the picture, not a bigger picture. */
+    #nl-exp-stage {
+      flex: 1 1 auto;
+      display: flex; flex-direction: column;
+      max-width: var(--hero-max); max-height: var(--hero-max);
+    }
+    #nl-exp-fit { flex: 1 1 auto; min-height: 0; display: flex; }
+    #nl-exp-img { height: 100%; max-height: none; }
+    /* under a stage that flexes, the caption is bounded instead: four lines */
+    #nl-exp-cap { flex: 0 0 auto; max-height: calc(6em + 8px); }
+    #nl-window.l-standard #nl-hero-col { display: none; }
+    #nl-window.l-standard:not(.x) #nl-hero {
+      display: block;
+      grid-column: 1; grid-row: 1;
+      width: 100%; height: 100%;
+      max-width: var(--hero-max); max-height: var(--hero-max);
+      object-fit: contain; object-position: left top;
+    }
 
     /* expanded overrides */
     #nl-window.x { grid-template-rows: auto minmax(0, 1fr) var(--car-h, 25%); }
     #nl-window.x #nl-expand { display: contents; }
-    #nl-window.x #nl-exp-top   { grid-column: 1; grid-row: 1; }
-    #nl-window.x #nl-exp-cap   { grid-column: 1; grid-row: 2; align-self: start; max-height: none; }
-    #nl-window.x #nl-exp-stage { grid-column: 2; grid-row: 1 / span 3; margin-top: 0; }
+    #nl-window.x #nl-exp-top   { grid-column: 2; grid-row: 1; }
+    #nl-window.l-standard.x #nl-exp-cap { grid-column: 2; grid-row: 2; align-self: start;
+                                 max-height: 100%; padding-top: 0; }
+    #nl-window.x #nl-exp-stage { grid-column: 1; grid-row: 1 / span 2; }
     #nl-window.x #nl-car       { grid-row: 3; }
   }
-  #nl-exp-top { display: flex; align-items: center; gap: 8px; }
-  /* the LOCAL exit — up one layer (image -> project overview). Mirrors the ×
-     spatially; the × stays the GLOBAL eject. Only exists in the image view,
-     so the two marks document the layer structure. Static, like the ×. */
-  #nl-back {
-    padding: 6px 10px 6px 0;                   /* fat tap target */
-    font-size: 13px; line-height: 1;
-    color: var(--text-2);
-    cursor: pointer;
-    user-select: none;
-  }
-  #nl-back:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
-  @media (hover: hover) { #nl-back:hover { color: var(--ink); } }
-  #nl-exp-hd { color: var(--text-2); }
-  #nl-exp-stage {
-    flex: 1 1 auto; min-height: 0;
-    margin-top: 10px;
-    display: flex; flex-direction: column;
-  }
-  #nl-exp-fit {
-    flex: 1 1 auto; min-height: 0;
-    display: flex; align-items: center; justify-content: center;
-  }
-  /* the WHOLE image is always visible, scaled UP until its larger fit meets
-     the closest boundary — never cropped. width/height 100% is load-bearing:
-     without an explicit layout box, object-fit has nothing to fill and the
-     img sits at its intrinsic size (the old square rendered at a tiny
-     120x120 for exactly this reason). */
-  #nl-exp-img { width: 100%; height: 100%; object-fit: contain; }
-  /* caption: a bare grey line — no bar, no border — RESERVED below the image
-     area. STATIC: always visible when the image has caption content, no
-     show/hide interaction. Wraps to multiple lines (the image area yields);
-     past ~4 lines it scrolls rather than eating the image. */
-  #nl-exp-cap {
-    flex: 0 0 auto;
-    min-height: 21px;
-    max-height: 84px;
-    /* a caption is copy, so it takes the same measure as the body */
-    max-width: var(--measure);
-    overflow-y: auto;
-    scrollbar-width: none;
-    padding-top: 6px;
-    color: var(--text-2);
-    visibility: hidden;
-  }
-  #nl-exp-cap::-webkit-scrollbar { display: none; }
-  #nl-window .hd { color: var(--text-2); }
 
   /* ------------------------------------------------- the sibling row
      TWO OR MORE WORKS UNDER ONE CLIENT. The icon is the client; this row is
@@ -580,13 +668,15 @@
     /* the 8px of tap target each label carries is taken back on the left so
        the INK lands on the margin and the target overhangs it — the same
        trade the footer strip makes with its padding */
-    margin: 0 0 var(--nl-m, 12px) -8px;
+    margin: 0 0 20px -8px;
   }
   #nl-window-text .sib {
     color: var(--text-2);
     padding: 4px 8px;
-    /* the row is navigation, not prose: it does not take the body's 1.9 */
-    line-height: 1.5;
+    /* the row is navigation, not prose: it does not take the body's line
+       height, and it keeps the 11px and the tracking it had before the body
+       went to 12px — a control keeps its form */
+    font-size: 11px; line-height: 1.5; letter-spacing: 0.05em;
   }
   #nl-window-text .sib.on { color: var(--ink); }
   #nl-window-text .sib[role="button"] { cursor: pointer; }
@@ -634,31 +724,49 @@
     height: auto; min-height: 0;
     margin-top: 14px;
   }
+  /* WHOLE OR CROPPED — the author's choice, per project (UX-4, the `crop`
+     field). Until UX-4 a collection had one behaviour: every cell 16:9,
+     every picture cropped to fill it, which cut the top and bottom off every
+     portrait drawing. Both now keep a fixed size and let the COUNT adapt, and
+     both start at the left margin like every text column on the site (the
+     cells were centred).
+
+     WHOLE, THE DEFAULT: each picture at its own shape, every row the same
+     height (--g-row), as many to a row as fit. The width is the row height
+     times the picture's ratio (--r, set per cell), so the box has the
+     picture's exact shape and `cover` crops nothing. Capped at the column:
+     a panorama wider than the window shrinks rather than overflowing. */
   #nl-window.l-grid .car {
-    display: grid;
-    /* DEFAULT: fixed cells, adaptive count — the icon grid's rule, in the DOM.
-       Below --g-2up the phone can't fit even one 200px cell (inner width is
-       ~321px in portrait), so it would drop to a single column that reads too
-       close to the standard mobile layout. The override below pins portrait
-       phones to exactly TWO flexible columns instead — the one place the grid
-       guarantees a COUNT rather than a SIZE. */
-    grid-template-columns: repeat(auto-fill, min(var(--g-cell), 100%));
-    justify-content: center;
-    align-content: start;
+    display: flex; flex-wrap: wrap;
+    align-content: flex-start;
     gap: 10px;
     height: 100%;
     overflow-x: hidden; overflow-y: auto;
     scroll-snap-type: none;
   }
-  /* PORTRAIT PHONE: force 2 columns, cells flex to fit (each ~155px at 390px).
-     Gated on width so a wider portrait tablet keeps the fixed-cell default. */
-  @media (max-width: 479px) {
-    #nl-window.l-grid .car { grid-template-columns: repeat(2, 1fr); }
-  }
   #nl-window.l-grid .car .ph {
-    width: 100%; height: auto;
+    width: calc(var(--g-row) * var(--r, 1)); max-width: 100%;
+    height: auto;
     flex: none;
     scroll-snap-align: none;
+  }
+  /* CROPPED: a uniform grid of SQUARE cells, every picture cut to fill one —
+     square rather than the old 16:9 because it is the crop that costs a
+     portrait and a landscape picture the same. Fixed cells, adaptive count:
+     the icon row's rule, in the DOM. */
+  #nl-window.l-grid.crop .car {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, min(var(--g-cell), 100%));
+    justify-content: start;
+    align-content: start;
+  }
+  #nl-window.l-grid.crop .car .ph { width: 100%; }
+  /* PORTRAIT PHONE: force 2 columns, cells flex to fit (each ~140px at 375px).
+     Below 479px not even two 200px cells fit, and one column would read as
+     the Project layout's strip turned sideways. The one place the grid
+     guarantees a COUNT rather than a SIZE. */
+  @media (max-width: 479px) {
+    #nl-window.l-grid.crop .car { grid-template-columns: repeat(2, 1fr); }
   }
   /* not expandable -> not a control: no pointer, no focus affordance */
   #nl-window.l-grid .car .ph.static { cursor: default; }
@@ -672,6 +780,14 @@
      the entry, so spanify never reaches it), exactly like the x and the back
      mark. */
   #nl-window.l-grid .body      { max-height: var(--body-clamp, 84px); overflow: hidden; }
+  /* ...and the line the clamp cuts through FADES OUT instead of being sliced
+     in half. Lines cannot be made to land on the clamp: a paragraph's gap is
+     not a whole line, nor is a list's or a quote's. Only while the caret is
+     there — a body short enough to fit has no last line to fade. */
+  #nl-window.l-grid:not(.more):has(> #nl-more.on) .body {
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 1.7em), transparent);
+            mask-image: linear-gradient(#000 calc(100% - 1.7em), transparent);
+  }
   #nl-window.l-grid.more .body { max-height: none; overflow: visible; }
 
   /* =======================================================================
@@ -685,10 +801,10 @@
      WHY NAMED STEPS AND NOT NUMBERS. Three weights exist as files — 300,
      400, 700 — and nothing between them. A free numeric control would let
      the author pick 500 and get a synthesised smear that looks like a bad
-     render rather than a choice. Same for size: free values fight the 33em
+     render rather than a choice. Same for size: free values fight the
      reading measure and overflow the column. Both are therefore closed sets.
 
-     em, NOT px, on the sizes: they resolve against the 11px body text, so a
+     em, NOT px, on the sizes: they resolve against the body text (12px), so a
      later type-size change carries them along instead of stranding them.
 
      THESE STILL CHURN. spanify() walks into child elements, so characters
@@ -845,7 +961,8 @@
     margin: 12px 0 0;
   }
   /* the cells stop being a grid and become a horizontal strip again: height
-     drives the box and the inline 16:9 aspect ratio gives the width */
+     drives the box and the inline aspect ratio — the picture's own, or square
+     when the collection crops — gives the width */
   #nl-window.l-grid.x .car {
     display: flex;
     gap: 10px;
@@ -866,64 +983,43 @@
      it is l-text, which is why it borrowed that name until now. */
   #nl-window.l-form #nl-window-text { max-width: var(--measure-form); }
 
-  /* ------------------------------------------------ content-area wordmark */
-  /* The brand's FULL mark, centered in the open area above the carousel —
-     the left column's empty row in landscape. Its counterpart in the grid
-     below is the compact lettermark/icon; this is the spelled-out version.
-     LANDSCAPE ONLY: portrait has no such void (text and carousel already
-     fill the single column), so the element stays display:none there.
+  /* ------------------------------------------------ the client's wordmark */
+  /* The brand's FULL mark — its compact counterpart is the icon in the row.
+     It used to fill the left column in landscape, and it took the PICTURE'S
+     place there: a project with a wordmark showed a logo where its work
+     should have been. It sits with the FACTS now (UX-4) — who the work was
+     for is a fact about it — in every layout and both orientations, and the
+     stage always belongs to the work.
      ALPHA IS THE SHAPE: the art is used as a MASK filled with var(--ink) —
      the DOM analog of the shader's `uInk * alpha`. One file serves both
      themes, and brand colors resolve to ink exactly like the grid icons.
      Authoring constraint follows from that: transparent-background art,
-     real counterforms, no white knockouts. */
-  #nl-mark {
-    display: none;
+     real counterforms, no white knockouts.
+     A FIXED BOX, the taskbar rule: whatever the mark's shape, it fits
+     160 x 24 from the left edge. It was capped at 320 x 110 when it stood in
+     for a picture; beside a 12px title that would shout. */
+  #nl-window-text .wm {
+    width: min(100%, 160px); height: 24px;
+    margin: 0 0 12px;
     background-color: var(--ink);
     -webkit-mask-repeat: no-repeat;   mask-repeat: no-repeat;
-    -webkit-mask-position: center;    mask-position: center;
+    -webkit-mask-position: left center; mask-position: left center;
     -webkit-mask-size: contain;       mask-size: contain;
-    pointer-events: none;             /* purely presentational */
   }
-  /* HERO FALLBACK: no wordmark supplied, so the project's FIRST image takes
-     the same slot. It is NOT masked — a photograph has to read as itself, so
-     the ink fill and the mask are both switched off and the picture is drawn
-     directly, CONTAINED so nothing is cropped. Same slot, two treatments:
-     a mark becomes ink, an image stays an image. */
-  #nl-mark.hero {
-    background-color: transparent;
-    -webkit-mask-image: none;         mask-image: none;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
-  }
-  @media (orientation: landscape) {
-    /* not shown while an image is expanded (that cell becomes the
-       breadcrumb) or on carless entries (ABOUT / the form span both
-       columns — there is no left column to sit in) */
-    #nl-window:not(.x):not(.l-text):not(.l-form):not(.l-grid) #nl-mark {
-      display: block;
-      grid-column: 1; grid-row: 1;
-      justify-self: center; align-self: center;
-      /* ABSOLUTE caps, the taskbar rule applied to imagery: the mark stops
-         growing once the window passes laptop width, so a 27" monitor gets
-         more surrounding space, not a bigger logo. Percentages keep it
-         proportionate on short landscape phones. Deliberately conservative —
-         a little too small beats a little too big. */
-      width:  min(50%, 320px);
-      height: min(40%, 110px);
-    }
-    /* a hero earns more of the open area than a wordmark does */
-    #nl-window:not(.x):not(.l-text):not(.l-form):not(.l-grid) #nl-mark.hero {
-      width:  min(100%, var(--hero-max, 720px));
-      height: 100%;
-    }
-  }
+
+  /* ------------------------------------------------ the hero (landscape) */
+  /* The Project layout's first picture, in the left column above the strip:
+     the overview's half of THE STAGE (see there). An <img> rather than a
+     background, so it is drawn by exactly the rules the opened picture is.
+     It duplicates the strip's first thumb, so it is hidden from screen
+     readers; the thumb carries the alt text. Shown only by the landscape
+     rule above. */
+  #nl-hero { display: none; pointer-events: none; }
 
   /* ------------------------------------------------ image carousels (static) */
   /* #nl-car is the HOST: it owns the pinned footprint at the window's foot —
-     ~25% of the window (--car-h from resize()), same place for every
-     selection. Inside it, ONE strip PER ENTRY (unique images per project),
+     a quarter of the window up to CAR_H_MAX (--car-h from resize()), same
+     place for every selection. Inside it, ONE strip PER ENTRY (unique images per project),
      display-swapped with the text. STATIC for now — scroll/snap only, no
      modal or expansion. Pointer events on so swiping never closes the window. */
   #nl-car {
@@ -982,6 +1078,9 @@
      (Pointer events come from #nl-window-text; no per-entry rule needed.) */
   #nl-window label {
     display: block; margin: 8px 0 0;
+    /* 11px: a label is secondary words, and it kept its size when the body
+       went to 12px. The field it labels takes the body's 12px. */
+    font-size: 11px;
     color: var(--text-2); letter-spacing: 0.05em;
   }
   #nl-window input, #nl-window textarea {
@@ -989,13 +1088,16 @@
     background: transparent; color: var(--ink);
     border: 0; border-bottom: 1px solid var(--edge);
     border-radius: 0; outline: none;
-    font: inherit; letter-spacing: inherit;
+    /* the body's 12px, .02em: a field sits inside its 11px label and would
+       otherwise inherit the label's size */
+    font: inherit; font-size: 12px; letter-spacing: 0.02em;
     padding: 4px 0 5px; margin-top: 1px;
   }
   #nl-window textarea { resize: none; }
   #nl-window input:focus, #nl-window textarea:focus { border-bottom-color: var(--ink); }
   #nl-window .send {
     display: inline-block; margin-top: 14px;
+    font-size: 11px;                           /* a control keeps its form */
     color: var(--text-2); cursor: pointer; letter-spacing: 0.15em;
   }
   #nl-window .send:focus-visible { color: var(--ink); }   /* :focus-visible: a tapped control keeps focus and would stay ink */
@@ -1342,10 +1444,14 @@
   <div id="nl-window">
     <span id="nl-close" role="button" tabindex="0" aria-label="Close">&#x00D7;</span>
     <div id="nl-main">
-      <!-- content-area wordmark: centered in the open left column on wide
-           screens; hidden in portrait, while expanded, and on carless
-           entries. Non-churn material, like the images and the marks. -->
-      <div id="nl-mark" role="img"></div>
+      <!-- THE HERO: a Project's first picture, in the left column on wide
+           screens, where an opened picture is drawn too. Its phone twin,
+           #nl-hero-col, is moved under the open entry's title. Both are
+           non-churn material, like the images and the marks, and both
+           duplicate the strip's first thumb, so both are hidden from
+           screen readers. -->
+      <img id="nl-hero" alt="" aria-hidden="true" draggable="false">
+      <img id="nl-hero-col" alt="" aria-hidden="true" draggable="false">
       <div id="nl-window-text"><!-- per-entry TEXT built in boot() from CONTENT via the adapter --></div>
       <!-- expanded-image view: display-swaps with the text region ('x' class).
            Swipe = prev/next; captions are static content below the image. -->
@@ -1430,7 +1536,7 @@
      footer, form, theme) is untouched and runs identically. boot() never
      returns early any more.
    - THE MEASURE: the same rule applied to TYPE. Body copy caps at --measure
-     (66ch) rather than tracking the window, so a wide screen gains space and
+     (--measure) rather than tracking the window, so a wide screen gains space and
      not longer lines. CSS only — see the token at the top of the stylesheet.
    - WINDOW LAYOUTS, named and chosen per project by the `layout` field; the
      window wears the name as an `l-<name>` class and CSS restructures:
@@ -1498,6 +1604,16 @@
   //
   // Turning it off changes WHERE the cut lands; see applyContact.
   const TEXT_CHURN = false;
+
+  // THE STRIP AND THE STAGE (UX-4). The strip of thumbnails at the window's
+  // foot was a flat quarter of the window's height: ~155px on a laptop, a
+  // quarter of everything the window could show, spent on previews. It is
+  // still a quarter, but never taller than CAR_H_MAX; past that the room goes
+  // to the picture. STAGE_FRAC is the tallest a picture may be in portrait,
+  // as a share of the window, so the title above it and the caption or copy
+  // under it keep room. Both are written as CSS variables by setWinVars().
+  const CAR_H_MAX  = 96;        // px
+  const STAGE_FRAC = 0.6;
 
   // GRID REORGANISATION (see NOTES-GRID-MOTION.md). A section switch displaces
   // every icon while it is churned, so the grid ARRIVES SOMEWHERE rather than
@@ -1835,102 +1951,6 @@
   const SCALE_OFF = 1.0;        // footprint-filling at rest
   const SCALE_ON  = BAKE_FILL;  // tracks BAKE_FILL — the buffer-preserving value
 
-  // ------------------------------------------------------- placeholder art
-  // Test icon sources — each is referenced by ONE entry below; swapping an
-  // entry's icon for a client mark is a data edit. The bake step makes the
-  // source kind irrelevant to everything downstream.
-  const svgURL = s => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
-  const SVG_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="#fff"/></svg>`;
-  const SVG_TRI    = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><polygon points="50,8 92,86 8,86" fill="#fff"/></svg>`;
-  const SVG_RING   = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="none" stroke="#fff" stroke-width="12"/></svg>`;
-  const SVG_SQUARE = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="16" y="16" width="68" height="68" fill="#fff"/></svg>`;
-  const SVG_DIAMOND= `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><polygon points="50,6 94,50 50,94 6,50" fill="#fff"/></svg>`;
-
-  function makeTestPNG(kind) {           // genuine image/png, decoded via <img>
-    const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
-    const x = c.getContext('2d'); x.clearRect(0, 0, S, S);
-    x.fillStyle = '#fff'; x.strokeStyle = '#fff';
-    if (kind === 'blob') {
-      const g = x.createRadialGradient(S/2, S/2, 3, S/2, S/2, S*0.5);
-      g.addColorStop(0, 'rgba(255,255,255,1)');
-      g.addColorStop(0.6, 'rgba(255,255,255,0.85)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      x.fillStyle = g; x.beginPath(); x.arc(S/2, S/2, S*0.5, 0, 7); x.fill();
-    } else if (kind === 'squares') {
-      x.lineWidth = 8;
-      for (let r = S*0.46; r > 6; r -= 18) x.strokeRect(S/2 - r, S/2 - r, 2*r, 2*r);
-    } else if (kind === 'rings') {
-      x.lineWidth = 7;
-      for (let r = S*0.42; r > 8; r -= 16) { x.beginPath(); x.arc(S/2, S/2, r, 0, 7); x.stroke(); }
-    } else if (kind === 'bars') {
-      const n = 5, bw = S*0.1, gp = (S - n*bw)/(n+1);
-      for (let i = 0; i < n; i++) x.fillRect(gp + i*(bw+gp), S*0.18, bw, S*0.64);
-    } else { // dots
-      const n = 6, gap = S/(n+1), rad = gap*0.28;
-      for (let i = 1; i <= n; i++) for (let j = 1; j <= n; j++) {
-        x.beginPath(); x.arc(i*gap, j*gap, rad, 0, 7); x.fill();
-      }
-    }
-    return c.toDataURL('image/png');
-  }
-
-  // ratio-true grey placeholder image — stands in for real project imagery
-  // in both the thumbs and the expanded view (one src, two uses)
-  const PH = (r) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${r[0] * 120}" height="${r[1] * 120}"><rect width="100%" height="100%" fill="#808080"/></svg>`);
-
-  // Placeholder image records for one entry: 4 DISTINCT aspect ratios from a
-  // shuffle SEEDED by the entry index (mulberry32) — every entry gets its own
-  // mix, identical across loads. Filler captions on images 1-3; the last
-  // stays captionless to demonstrate the empty state. Real records replace
-  // these wholesale: { src, caption, alt, ratio:[w,h] } — ratio optional
-  // (stored = stable layout; omitted = measured on decode, settles once).
-  const RATIOS = [[4,3],[3,4],[16,9],[2,3],[3,2],[1,1],[9,16]];
-  const seededRnd = (seed) => () => {           // mulberry32 — tiny seeded PRNG
-    seed = (seed + 0x6D2B79F5) | 0;
-    let z = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
-    return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
-  };
-  // Placeholder wordmark: abstract letterform blocks at roughly 4:1, seeded
-  // by entry index so each project reads as a different mark and is identical
-  // across loads. White on transparent — the mask only reads alpha. Drawn as
-  // shapes, never SVG <text>: rasterising text-in-SVG is the known-bad path
-  // in this codebase (same reason the icon bake draws glyphs to canvas).
-  function placeholderWordmark(i, title) {
-    const rnd = seededRnd(i * 7919 + 13);
-    const W = 400, H = 100;
-    let bars = '', x = 14;
-    while (x < W - 30) {
-      const w = 18 + Math.round(rnd() * 44);
-      if (x + w > W - 14) break;
-      const h = 34 + Math.round(rnd() * 30);
-      bars += `<rect x="${x}" y="${((H - h) / 2).toFixed(1)}" width="${w}" height="${h}" rx="3" fill="#fff"/>`;
-      x += w + 11;
-    }
-    return {
-      src: svgURL(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bars}</svg>`),
-      alt: title + ' — placeholder wordmark',
-    };
-  }
-
-  function placeholderImages(i, hd, count) {
-    const rnd = seededRnd(i * 1013 + 7);
-    const pool = RATIOS.slice();                // per-entry deterministic shuffle
-    for (let j = pool.length - 1; j > 0; j--) {
-      const q = (rnd() * (j + 1)) | 0;
-      [pool[j], pool[q]] = [pool[q], pool[j]];
-    }
-    const n = count || 4;
-    while (pool.length < n) pool.push(RATIOS[(rnd() * RATIOS.length) | 0]);
-    return pool.slice(0, n).map((r, k) => ({
-      src: PH(r),
-      ratio: r,                                 // always present -> no probe, no measuring fetch
-      caption: k < 3 ? `${hd} — detail 0${k + 1}, placeholder caption.` : '',   // last ones bare: the empty state
-      alt: `${hd} — placeholder image ${k + 1}`,
-    }));
-  }
-
   /* =======================================================================
      EDITABLE CONTENT  —  edit the text between the quotes; leave the rest.
      =======================================================================
@@ -1954,16 +1974,18 @@
          seam a CMS plugs into.
 
      THE FIELDS (same for a project and for ABOUT):
-       title    — the header, shown in grey
-       details  — the three short lines under it (material / edition / year…)
+       title    — the header, shown in ink at the body's size
+       details  — the FACTS: short lines under it (material / edition /
+                  year…), smaller and grey. Leave it out and nothing shows.
        summary  — the description. A single string, OR a LIST of strings for
                   multi-paragraph copy. In the 'grid' layout a long body is
                   clamped and opened by a caret; elsewhere it simply runs on.
-       icon     — placeholder art for now; becomes a client mark later. You
-                  won't edit these until real marks exist. 'placeholder' art
-                  is generated; 'glyph' is a single typed character.
-       images   — OPTIONAL. Leave it out for no image strip (ABOUT has none).
-                  Omitting it auto-fills placeholders so layout can be judged.
+       icon     — the mark in the row: { kind:'glyph', ch } for one typed
+                  character, or { kind:'svg'|'png', src } for a drawn one.
+       images   — OPTIONAL. Leave it out and the project shows as 'text':
+                  no strip, no picture, nothing standing in for them. (Until
+                  UX-4 a missing list was filled with grey placeholder boxes,
+                  which put fake artwork on the live site.)
                   Each image is one record:
 
                     src     ONE uploaded file, full size. You do NOT export or
@@ -1986,24 +2008,27 @@
                   name: 'standard' (default), 'grid', or 'text'. A section can
                   set its own default via `layout` on the section; a project's
                   own value always wins. Unknown names fall back to standard.
-                    standard  carousel strip at the foot, wordmark beside it
-                    grid      fixed 16:9 cells, column count adapts to width;
-                              text above, grid fills the rest and scrolls
-                    text      copy only, full width
+                    standard  "Project" in the editors. The first picture
+                              large, the strip of the rest at the foot, the
+                              copy beside (wide) or under the picture (phone);
+                              an opened picture takes the first one's place
+                    grid      "Collection". A short introduction, then every
+                              picture in a grid that fills the rest and
+                              scrolls — whole, or cropped square (`crop`)
+                    text      "Text". Copy only, full width
+       crop     — OPTIONAL true/false, 'grid' only. False (the default) shows
+                  every picture whole, at its own shape, in rows of one
+                  height; true crops every picture to a square cell.
        expand   — OPTIONAL true/false. Whether tapping an image opens it full
                   size. Defaults to TRUE on 'standard' and FALSE on 'grid' —
                   in a grid the pictures are usually the presentation, not a
                   set of doors. Set it either way to override.
-       wordmark — OPTIONAL. If OMITTED, the project's FIRST image is used as a
-                  hero in the same slot instead (shown as a picture, not an
-                  ink silhouette). Client work supplies a mark; self-authored
-                  work usually will not, and gets the hero.
-                  When supplied: the spelled-out brand mark, shown centered in the
-                  open area on WIDE screens only (its compact counterpart is
-                  the `icon` in the grid). Like the icons, it is drawn as a
-                  SILHOUETTE in the site's ink — supply transparent-background
-                  art with real counterforms; brand colors are discarded.
-                  Omitting it auto-fills a placeholder so layout can be seen.
+       wordmark — OPTIONAL. The client's spelled-out brand mark (its compact
+                  counterpart is the `icon` in the row), shown small with the
+                  facts, in every layout. It never takes the picture's place.
+                  Like the icons, it is drawn as a SILHOUETTE in the site's
+                  ink — supply transparent-background art with real
+                  counterforms; brand colors are discarded.
 
      SECTIONS: the work is split into BUILD / DESIGN / ART / ... — as many as
      content/sections/ holds (build.js writes only the ones with published
@@ -2141,17 +2166,17 @@
 
   /* THESE THREE STAY CONSTANTS, and the difference is not inconsistency.
      A constant is safe wherever it is a CEILING the element cannot grow past;
-     it is unsafe wherever the element's size is a knob. The mark and the hero
-     are capped by CSS at 320 and 720 CSS px, so 2x of each is a ceiling. The
-     expanded image has no width rule at all, but it can never be wider than
-     the window, and the window can never be wider than the screen — 2048
-     covers a 14" MacBook (~1480 device px) outright and upscales ~1.2x on a
-     5K 27" (~2500), which on a photograph is invisible. The thumbnail was the
-     one whose size a stylesheet edit could change, which is why it is the one
-     that now measures. */
-  const MARK_W   = 640;   // wordmark — capped at 320px wide by CSS, at 2x
-  const HERO_W   = 1440;  // hero image — capped at 720px wide by CSS, at 2x
-  const EXPAND_W = 2048;  // expanded image — see above
+     it is unsafe wherever the element's size is a knob. The wordmark and the
+     stage are capped by CSS at 160 and 720 CSS px, so 2x of each is a
+     ceiling. The thumbnail was the one whose size a stylesheet edit could
+     change, which is why it is the one that now measures.
+     ONE WIDTH FOR THE HERO AND AN OPENED PICTURE (UX-4). The opened picture
+     had no width rule and asked for 2048; it is drawn in the hero's box now,
+     under the same 720 cap, so it asks for the hero's width — and the first
+     picture opened is the very URL the hero already holds. */
+  const MARK_W   = 320;   // wordmark — capped at 160px wide by CSS, at 2x
+  const HERO_W   = 1440;  // the stage — capped at 720px by CSS, at 2x
+  const EXPAND_W = HERO_W;  // an opened picture — the same box, see above
   const PROBE_W  = WIDTH_STEPS[0];   // only ever loaded to READ A SHAPE (the
                                      // no-ratio fallback), never to be looked at
 
@@ -2198,7 +2223,7 @@
      until a picture is nearly on screen, which is the pop-in this exists to
      prevent. The site is furniture; its mechanism should not be watched. */
   const held = new Map();     // url -> Image, kept so the bytes stay in memory
-  let markLoad = null;        // the open entry's hero, while it is in tier 2
+  let heroLoad = null;        // the open entry's hero, while it is in tier 2
   function warm(url, pri) {
     let im = held.get(url);
     if (!im) {
@@ -2238,7 +2263,7 @@
   function fitThumbs(en) {
     if (!en || !en.thumbs || !en.images) return;
     const view = en.car.getBoundingClientRect();
-    const first = markLoad ? [markLoad] : [], rest = [];
+    const first = heroLoad ? [heroLoad] : [], rest = [];
     for (let k = 0; k < en.thumbs.length; k++) {
       const ph = en.thumbs[k];
       const r = ph.getBoundingClientRect();
@@ -2272,9 +2297,7 @@
   // per-section icon sets, window text, carousels, expand view) derives from
   // the adapter's output. ABOUT and CONTACT are fixtures with NO grid icon —
   // they live in the footer and sit at the end of the flat window list.
-  // Runs LAZILY in boot(): resolving a 'placeholder'
-  // icon calls makeTestPNG (canvas + toDataURL), which is too heavy for script
-  // eval on mobile — it would delay first paint.
+  // Runs in boot(), with everything else that waits for the first paint.
   // WHICH SECTION the grid is showing (index into CONTENT.sections). The
   // footer will drive this once switching is wired; until then it stays 0.
   // THE BAND: which section is drawn in ink, everything else in accent grey.
@@ -2305,29 +2328,16 @@
 
   let DATA = null;
   function buildData() {
-    // placeholder icon descriptors -> a real bakeable icon object. Real marks
-    // arrive as { kind:'svg'|'png', src } and pass straight through.
-    const SHAPE_SVG = { circle:SVG_CIRCLE, tri:SVG_TRI, ring:SVG_RING, square:SVG_SQUARE, diamond:SVG_DIAMOND };
-    function resolveIcon(ic) {
-      if (!ic || ic.kind === 'glyph' || ic.kind === 'svg' || ic.kind === 'png') return ic;
-      if (ic.kind === 'placeholder') {
-        return SHAPE_SVG[ic.shape]
-          ? { kind:'svg', src: svgURL(SHAPE_SVG[ic.shape]) }   // one of the SVG shapes
-          : { kind:'png', src: makeTestPNG(ic.shape) };        // otherwise a generated PNG
-      }
-      return ic;
-    }
     // authoring shape -> internal shape, EVERY section. All of them are built
     // (and baked) up front: a section switch churns the grid over on the fast
     // clock and swaps at the midpoint, which leaves no room for an async bake.
-    const sections = CONTENT.sections.map((sec, si) => {
+    const sections = CONTENT.sections.map(sec => {
       const usedSlugs = Object.create(null);   // per section: two projects can
                                                // share a title across sections
       return {
       id: sec.id, label: sec.label,
-      entries: sec.projects.map((p, i) => {
-        const seed = si * 100 + i;             // per-section placeholder variety
-        const en = { icon: resolveIcon(p.icon), hd: p.title, lines: p.details,
+      entries: sec.projects.map(p => {
+        const en = { icon: p.icon, hd: p.title, lines: p.details,
                      blurb: paras(p.summary) };
         // GROUPING. `group` is a client key shared by two or more projects;
         // `groupTitle` is what the window calls that client. Both optional —
@@ -2344,19 +2354,22 @@
         if (usedSlugs[sl]) { let n = 2; while (usedSlugs[sl + '-' + n]) n++; sl = sl + '-' + n; }
         usedSlugs[sl] = 1;
         en.slug = sl;
-        const wantLayout = p.layout || sec.layout || DEFAULT_LAYOUT;
-        en.images = (p.images && p.images.length) ? p.images
-                  : placeholderImages(seed, p.title, wantLayout === 'grid' ? 12 : 4);
-        // PLACEHOLDER POLICY (filler only — real content just omits the field):
-        // BUILD stands in for client work, which ships a wordmark. DESIGN and
-        // ART stand in for self-authored work, which does not — so they fall
-        // through to the hero image and the fallback is visible there.
-        en.wordmark = p.wordmark || (si === 0 ? placeholderWordmark(seed, p.title) : null);
+        // WHAT IS MISSING STAYS MISSING (UX-4). No pictures means no strip
+        // and no picture — the 'text' rule just below — and no wordmark means
+        // none is drawn. Both used to be FILLED: grey boxes at seeded ratios
+        // and a bar-code wordmark, so the layouts could be judged before real
+        // work existed. Real work exists now, and the filler was on the live
+        // site standing in for it, where it read as the work.
+        en.images = p.images || [];
+        en.wordmark = p.wordmark || null;
         // project layout > section default > global default; an entry with no
         // imagery is 'text' regardless, since the other layouts need images
         const want = p.layout || sec.layout || DEFAULT_LAYOUT;
         en.layout = !en.images.length ? 'text'
                   : (LAYOUTS.indexOf(want) >= 0 ? want : DEFAULT_LAYOUT);
+        // a collection shows its pictures whole unless the author asked for
+        // square crops — see the l-grid rules
+        en.crop = en.layout === 'grid' && !!p.crop;
         // tapping a picture opens it full size? grids default to no.
         en.expand = (p.expand !== undefined) ? !!p.expand : (en.layout !== 'grid');
         return en;
@@ -3142,6 +3155,14 @@ void main() {
   // the seam — is exactly canvas + footer reserve. Contact takes the rest.
   // Wide enough for every icon in one row (~950px at 15 icons) reads as a
   // menu bar at the foot of the page.
+  // The strip's height and the phone's tallest picture, from the window's
+  // actual height. The strip is a quarter of it, floored so a short screen
+  // keeps a visible strip and capped (CAR_H_MAX) so a tall one gives the
+  // room to the picture instead.
+  function setWinVars(winH) {
+    rootEl.style.setProperty('--car-h', Math.min(CAR_H_MAX, Math.max(48, winH * 0.25)).toFixed(1) + 'px');
+    rootEl.style.setProperty('--stage-h', (winH * STAGE_FRAC).toFixed(1) + 'px');
+  }
   function resize(force) {
     // the on-screen keyboard collapses 100dvh — re-deriving the grid from that
     // transient viewport makes the page thrash mid-typing. FORCE overrides it
@@ -3204,8 +3225,7 @@ void main() {
       const wb = Math.min(gh + FOOTER_RESERVE + marginPxCss,
                           nlRect.height - marginPxCss - 60);   // keep >=60px of window
       rootEl.style.setProperty('--nl-win-bottom', Math.max(0, wb).toFixed(1) + 'px');
-      const wh = nlRect.height - marginPxCss - Math.max(0, wb);
-      rootEl.style.setProperty('--car-h', Math.max(48, wh * 0.25).toFixed(1) + 'px');
+      setWinVars(nlRect.height - marginPxCss - Math.max(0, wb));
       if (typeof updateMore === 'function') updateMore();
       fitThumbs(winEntries[winActive]);   // --car-h just moved, so the thumbs did
       return;
@@ -3265,15 +3285,12 @@ void main() {
     rootEl.style.setProperty('--nl-m', marginPxCss.toFixed(1) + 'px');
     rootEl.style.setProperty('--nl-win-bottom', Math.max(0, winBottom).toFixed(1) + 'px');
 
-    // carousel height: ~25% of the window's actual height, floored so short
-    // screens keep a visible strip
-    const winH = nlRect2.height - marginPxCss - Math.max(0, winBottom);
-    rootEl.style.setProperty('--car-h', Math.max(48, winH * 0.25).toFixed(1) + 'px');
+    setWinVars(nlRect2.height - marginPxCss - Math.max(0, winBottom));
 
     // the window just changed width: copy re-wraps, so whether it overflows
     // the clamp may have flipped
     if (typeof updateMore === 'function') updateMore();
-    /* AND THE THUMBS JUST CHANGED SIZE. --car-h is a fraction of the window,
+    /* AND THE THUMBS JUST CHANGED SIZE. --car-h follows the window,
        so every resize and every rotation moves them; a portrait phone crossing
        480px swaps the grid's column rule outright. Unguarded on purpose:
        resize() is only ever reached from boot() below the point winEntries is
@@ -4342,15 +4359,28 @@ void main() {
   // background (grey base shows while loading) and are tappable (expand /
   // jump / collapse); the expand view reads the SAME records.
   const carHost = document.getElementById('nl-car');
+  // a thumb takes its picture's shape: aspect-ratio for the strip, which sizes
+  // by height, and --r for a collection of whole pictures, which sizes by
+  // width (see l-grid)
+  const shape = (el, r) => {
+    el.style.aspectRatio = r[0] + ' / ' + r[1];
+    el.style.setProperty('--r', (r[0] / r[1]).toFixed(4));
+  };
   const winEntries = LIST.map((en, i) => {
     const d = document.createElement('div');
     if (i !== 0) d.style.display = 'none';
     // THE HEADING IS THE CLIENT when this entry belongs to a group — the
     // icon named them, so the window agrees with the icon and the sibling row
     // below says which of their projects you are looking at.
-    d.innerHTML = `<span class="hd">${en.groupTitle || en.hd}</span><br><br>`
-      + `${en.lines.join('<br>')}<br><br>`
-      + `<div class="body">${paras(en.blurb).join('<br><br>')}</div>`;
+    // TITLE -> FACTS -> DESCRIPTION, as three blocks (UX-4). They were one
+    // run of text spaced with <br><br>, so an entry with no facts still
+    // carried their blank lines, and nothing could be sized on its own. A
+    // part with nothing in it is simply not there.
+    const lines = en.lines || [];
+    const blurb = paras(en.blurb).filter(Boolean).join('<br><br>');
+    d.innerHTML = `<h2 class="hd">${en.groupTitle || en.hd}</h2>`
+      + (lines.length ? `<div class="facts">${lines.join('<br>')}</div>` : '')
+      + (blurb ? `<div class="body">${blurb}</div>` : '');
     winTxt.appendChild(d);
     let car = null, thumbs = null;
     if (en.images && en.images.length) {
@@ -4366,12 +4396,12 @@ void main() {
         // that box — so the background-image is fitThumbs()' job, not the
         // builder's. The one URL this function still builds is the ratio
         // probe below, and that is not a picture: nobody looks at it.
-        if (en.layout === 'grid') {
-          // a grid is uniform by definition: every cell 16:9, images cropped
-          // to fill. The per-image ratio is deliberately ignored here.
-          ph.style.aspectRatio = '16 / 9';
+        if (en.crop) {
+          // a CROPPED collection is uniform by definition: every cell square,
+          // pictures cut to fill. The per-image ratio is deliberately ignored.
+          ph.style.aspectRatio = '1 / 1';
         } else if (im.ratio) {
-          ph.style.aspectRatio = im.ratio[0] + ' / ' + im.ratio[1];
+          shape(ph, im.ratio);
         } else {
           // FALLBACK ONLY — a record with no ratio. Hold a square, measure on
           // decode, settle once. This costs a network fetch PER IMAGE at load,
@@ -4385,7 +4415,7 @@ void main() {
           // of the bytes. This image is never displayed.
           probe.onload = () => {
             im.ratio = [probe.naturalWidth, probe.naturalHeight];
-            ph.style.aspectRatio = im.ratio[0] + ' / ' + im.ratio[1];
+            shape(ph, im.ratio);
           };
           probe.src = thumbURL(im, PROBE_W);
         }
@@ -4413,8 +4443,9 @@ void main() {
       });
     }
     return { el: d, car, thumbs, images: en.images || null, hd: en.hd,
+             head: en.groupTitle || en.hd,      // what the heading says
              body: d.querySelector('.body'),
-             layout: en.layout || DEFAULT_LAYOUT,
+             layout: en.layout || DEFAULT_LAYOUT, crop: !!en.crop,
              expand: en.expand !== false,
              wordmark: en.wordmark || null, spans: spanify(d) };
   });
@@ -4449,8 +4480,25 @@ void main() {
       }
       row.appendChild(el);
     });
-    // after the heading and its two breaks: [span.hd, br, br, ...]
-    we.el.insertBefore(row, we.el.childNodes[3] || null);
+    we.el.querySelector('.hd').after(row);
+  });
+
+  // THE WORDMARK, inserted late for the same reason as the sibling row: it
+  // is a picture, and pictures never churn. It opens the facts, after the
+  // title and the sibling row — who the work was for is a fact about it.
+  // The mask is set now; a browser fetches nothing for an entry that is not
+  // displayed, and warmFirstViews() asks for it ahead of time anyway.
+  winEntries.forEach((we, i) => {
+    const wm = LIST[i] && LIST[i].wordmark;
+    if (!wm) return;
+    const el = document.createElement('div');
+    el.className = 'wm';
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', wm.alt || '');
+    const url = 'url("' + sized(wm.src, MARK_W) + '")';
+    el.style.webkitMaskImage = url;
+    el.style.maskImage       = url;
+    (we.el.querySelector('.sibs') || we.el.querySelector('.hd')).after(el);
   });
 
   // Picking a work from the sibling row. The GRID DOES NOT MOVE — same icon,
@@ -4476,6 +4524,19 @@ void main() {
   function applyLayout(en) {
     for (const n of LAYOUTS) winEl.classList.remove('l-' + n);
     winEl.classList.add('l-' + ((en && en.layout) || DEFAULT_LAYOUT));
+    winEl.classList.toggle('crop', !!(en && en.crop));
+  }
+
+  // THE READER'S PLACE IN A COLLECTION (UX-4). Opening the copy or a picture
+  // hides the grid, or turns it into the filmstrip, and a scroller that has
+  // been hidden forgets how far down it was — so closing either one dropped
+  // the reader back at the first row of a forty-picture grid. The place is
+  // kept on the way in and given back on the way out.
+  function keepPlace(we) {
+    if (we && we.car && we.layout === 'grid') we.gridTop = we.car.scrollTop;
+  }
+  function returnToPlace(we) {
+    if (we && we.car && we.gridTop) we.car.scrollTop = we.gridTop;
   }
 
   // READ MORE: the caret appears only when a body actually overflows its
@@ -4490,14 +4551,17 @@ void main() {
   // fallback fonts the visitor happened to have. Only the accessible state
   // is set here; a screen reader never saw the glyph anyway.
   function setMore(on) {
+    const was = winEl.classList.contains('more');
+    if (on && !was) keepPlace(winEntries[winActive]);
     winEl.classList.toggle('more', on);
+    if (!on && was) returnToPlace(winEntries[winActive]);
     moreEl.setAttribute('aria-expanded', on ? 'true' : 'false');
     moreEl.setAttribute('aria-label', on ? 'Show less' : 'Read more');
   }
   // measure the ACTIVE entry: is there more copy than the clamp shows?
   // Re-run on entry switch and on resize — a width change re-wraps the text
   // and can flip the answer either way. (The measure cap means this now
-  // stops flipping once the window passes 66ch — the column stops widening,
+  // stops flipping once the window passes the measure — the column stops widening,
   // so the wrap stops changing.)
   function updateMore() {
     const en = winEntries[winActive];
@@ -4512,43 +4576,34 @@ void main() {
     }
   });
 
-  const markEl = document.getElementById('nl-mark');
-  // The slot holds a WORDMARK if one exists, otherwise the project's FIRST
-  // image as a hero, otherwise nothing. Both are sized through the host
-  // transform at what they can actually draw — a mark never exceeds 320 CSS
-  // px, a hero never exceeds 720.
-  // ONE URL per entry, shared with warmFirstViews(): the same picture asked
-  // for at a different width is a second download, not a cache hit.
-  function markURL(en) {
-    const wm = en && en.wordmark;
-    if (wm) return sized(wm.src, MARK_W);
-    return (en && en.images && en.images.length) ? sized(en.images[0].src, HERO_W) : null;
+  // THE HERO: the open Project's first picture, in both of its places —
+  // #nl-hero in the left column (landscape) and #nl-hero-col under the title
+  // (portrait). CSS shows one of the two. They share ONE URL, also shared
+  // with warmFirstViews() and with the first picture opened, so whichever is
+  // drawn costs one download: the same picture asked for at a different width
+  // is a second download, not a cache hit.
+  // It used to be a slot that held the WORDMARK when there was one and fell
+  // back to this picture when there was not, so a client's logo stood where
+  // its work should have been. The wordmark sits with the facts now.
+  const heroEl    = document.getElementById('nl-hero');
+  const heroColEl = document.getElementById('nl-hero-col');
+  function heroURL(en) {
+    return (en && en.layout === 'standard' && en.images && en.images.length)
+      ? sized(en.images[0].src, HERO_W) : null;
   }
-  function applyMark(en) {
-    const wm   = en && en.wordmark;
-    const hero = (!wm && en && en.images && en.images.length) ? en.images[0] : null;
-    markEl.classList.toggle('hero', !!hero);
-    if (wm) {
-      const url = 'url("' + markURL(en) + '")';
-      markEl.style.webkitMaskImage = url;
-      markEl.style.maskImage       = url;
-      markEl.style.backgroundImage = '';
-    } else if (hero) {
-      markEl.style.webkitMaskImage = '';
-      markEl.style.maskImage       = '';
-      markEl.style.backgroundImage = 'url("' + markURL(en) + '")';
-    } else {
-      markEl.style.webkitMaskImage = '';
-      markEl.style.maskImage       = '';
-      markEl.style.backgroundImage = '';
+  function applyHero(en) {
+    const url = heroURL(en);
+    const r = url && en.images[0].ratio;
+    for (const el of [heroEl, heroColEl]) {
+      if (url) el.src = url; else el.removeAttribute('src');
+      // the box has its shape before the picture arrives (portrait sizes by it)
+      el.style.aspectRatio = r ? r[0] + ' / ' + r[1] : '';
     }
-    const src = wm || hero;
-    markEl.style.visibility = src ? '' : 'hidden';
-    markEl.setAttribute('aria-label', src ? (src.alt || '') : '');
-    // tier 2: the strip's off-screen thumbs wait for this as well — but only
-    // where the slot is drawn. In portrait it is display:none, and asking for
-    // it there would download a picture nobody is shown.
-    markLoad = (src && markEl.offsetWidth) ? warm(markURL(en)) : null;
+    // the phone's copy rides in the open entry, between the title and the
+    // facts — moved, not cloned, so there is only ever one
+    if (url) (en.el.querySelector('.sibs') || en.el.querySelector('.hd')).after(heroColEl);
+    // tier 2: the strip's off-screen thumbs wait for this as well
+    heroLoad = url ? warm(url) : null;
   }
 
   /* TIER 1: EVERY PROJECT'S FIRST SCREEN, before anyone taps. Run once the
@@ -4564,10 +4619,10 @@ void main() {
      that, and if the guess matched, the answer is already in memory.
 
      'grid' entries get only tier 2 — their cell width comes from a column
-     rule that cannot be read off a hidden box. No grid project exists yet.
+     rule that cannot be read off a hidden box.
 
-     The hero only on a landscape screen: the CSS rule that draws the slot is
-     landscape-only, and a picture nobody sees is not worth the bytes.
+     The hero in both orientations: since UX-4 the phone draws it too, under
+     the title. A wordmark in every layout, for the same reason.
 
      Skipped entirely when the visitor has asked their browser to save data. */
   const WARM_AT_ONCE = 4;
@@ -4577,11 +4632,11 @@ void main() {
     const reach = winEl.getBoundingClientRect().width;   // a strip is never wider:
                                      // in landscape it is half this, so a thumb or
                                      // two too many are warmed, never too few
-    const wide  = matchMedia('(orientation: landscape)').matches;
     const urls  = [];
     winEntries.forEach(en => {
+      if (en.wordmark) urls.push(sized(en.wordmark.src, MARK_W));
       if (!en.images || !en.images.length || en.layout !== 'standard') return;
-      if (wide) urls.push(markURL(en));
+      urls.push(heroURL(en));
       let x = 0;
       for (const im of en.images) {
         if (x > reach || !carH || !im.ratio) break;
@@ -4606,7 +4661,7 @@ void main() {
     if (next.car) { next.car.style.display = ''; carHost.style.display = ''; }
     else carHost.style.display = 'none';        // no strip -> full-height text
     applyLayout(next);                          // l-<name> restructures the window
-    applyMark(next);                            // wordmark hard-cuts with the entry
+    applyHero(next);                            // the hero hard-cuts with the entry
     setMore(false);                             // every entry opens clamped
     winTxt.scrollTop = 0;                       // each entry opens at its top
     winActive = i;
@@ -4627,7 +4682,7 @@ void main() {
   fitThumbs(winEntries[0]);                     // entry 0 is the visible one at boot,
                                                 // so it is the one with a measurable strip
   applyLayout(winEntries[0]);                   // entry 0 is built visible; seed
-  applyMark(winEntries[0]);                     // its layout class and wordmark
+  applyHero(winEntries[0]);                     // its layout class and hero
   setMore(false); updateMore();
 
   // ---------------------------------------------- expanded image (per entry)
@@ -4654,6 +4709,8 @@ void main() {
     expIdx = k;
     expImg.src = sized(im.src, EXPAND_W);
     expImg.alt = im.alt || '';
+    // the box has the picture's shape before it arrives (portrait sizes by it)
+    expImg.style.aspectRatio = im.ratio ? im.ratio[0] + ' / ' + im.ratio[1] : '';
     expCap.textContent = im.caption || '';
     // STATIC caption: visible iff this image has content — no interaction
     expCap.style.visibility = im.caption ? 'visible' : 'hidden';
@@ -4670,7 +4727,11 @@ void main() {
     if (xTarget === 1) syncRoute(true);
   }
   function expandTo(k) {
-    expHd.textContent = winEntries[winActive].hd;
+    // a collection's place, before anything below can scroll it — unless the
+    // copy is open, which already kept it
+    if (!winEl.classList.contains('more')) keepPlace(winEntries[winActive]);
+    // the SAME words as the overview's heading, so the title row holds still
+    expHd.textContent = winEntries[winActive].head;
     setExpandIndex(k);
     winEntries[winActive].car.classList.add('expanded');
     fitThumbs(winEntries[winActive]);           // l-grid's cells become a filmstrip on
@@ -4703,7 +4764,9 @@ void main() {
   }
   function applyExpand(xe, moving) {
     const on = xe >= 0.5;                       // midpoint hard cut, both directions
+    const was = winEl.classList.contains('x');
     winEl.classList.toggle('x', on);            // display swap: text view <-> expand view
+    if (was && !on) returnToPlace(winEntries[winActive]);   // the grid is back
     if (churnOff() || on) return;   // no churn -> the display swap is the whole move
     churn(winEntries[winActive].spans, Math.max(0, 1 - xe * 2), moving);
   }
@@ -4739,7 +4802,7 @@ void main() {
     d.className = 'form-entry';
     d.style.display = 'none';
     d.innerHTML =
-      `<span class="hd">CONTACT</span><br><br>` +
+      `<h2 class="hd">CONTACT</h2>` +
       `<label>NAME<input id="nl-f-name" type="text" autocomplete="name"></label>` +
       `<label>EMAIL<input id="nl-f-email" type="email" autocomplete="email"></label>` +
       `<label>MESSAGE<textarea id="nl-f-msg" rows="3"></textarea></label>` +

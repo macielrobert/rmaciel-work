@@ -267,7 +267,7 @@ const digest = (s) => crypto.createHash('sha1').update(s).digest('hex');
    changed in it against GitHub's copy; and, apart, edits NOT included because
    they are not saved yet — Publish sends files, so those stay behind. */
 const FIELD_WORDS = { title: 'title', section: 'section', order: 'position', draft: 'held back', part_of: 'sub-project of', client: 'client name', details: 'detail lines',
-  layout: 'layout', expand: 'image expand', icon_type: 'grid icon', icon_glyph: 'grid icon', icon_image: 'grid icon', wordmark: 'wordmark',
+  layout: 'layout', expand: 'image expand', crop: 'collection crop', icon_type: 'grid icon', icon_glyph: 'grid icon', icon_image: 'grid icon', wordmark: 'wordmark',
   share_description: 'share description', nicknames: 'working titles', email: 'email address', intro: 'intro copy', site_title: 'site title', copyright: 'copyright' };
 function whatChanged(was, now) {
   if (!was) return ['new'];
@@ -605,6 +605,7 @@ async function saveProject(slug, v, newBody) {
     details: (x) => { next.details = lines(x); },   // Keystatic always writes the list, even empty
     layout: (x) => { if (!['standard', 'grid', 'text'].includes(x)) throw new Error('Pick a layout.'); next.layout = x; },
     expand: (x) => { next.expand = !!x; },
+    crop: (x) => { next.crop = !!x; },
     icon_type: (x) => { if (!['glyph', 'image'].includes(x)) throw new Error('Pick a kind of grid icon.'); next.icon_type = x; },
     icon_glyph: (x) => optional('icon_glyph', str(x)),
     share_description: (x) => optional('share_description', str(x)),

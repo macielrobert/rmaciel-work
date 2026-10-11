@@ -6,12 +6,11 @@ for and where it goes. **`tools/specimen.html`** shows every piece at actual
 size, in both themes, today's version next to the proposed one. Open it
 served, not as a file (see the comment at its top).
 
-**Status, 2026-10-10: UX-1 done (third draft); UX-2 adopted the editor
-values in Harvest.** Robert answered the five questions and corrected the
-zigzag; his decisions are at the end of this file. **DECIDED** marks a value
-he has chosen, and **LIVE** a value that is already in the site or in
-Harvest. **PROPOSED** marks a value that still waits for the task that adopts
-it: UX-4 for the window's text.
+**Status, 2026-10-11: UX-1 done (third draft); UX-2 adopted the editor
+values in Harvest; UX-4 adopted the window's text on the site.** Robert
+answered the five questions and corrected the zigzag; his decisions are at
+the end of this file. **DECIDED** marks a value he has chosen, and **LIVE** a
+value that is already in the site or in Harvest.
 Where this file and the code disagree, the code describes what is live and
 this file describes where it is going.
 
@@ -94,10 +93,10 @@ who cannot see the difference in tone.
 
 | Role | Site | Harvest |
 |---|---|---|
-| Body text | **DECIDED** 12px Book, line height 1.7, tracking .02em (adopted with UX-4). Today: 11px, 1.9, .05em | **LIVE** 13px Book, 1.5, .01em. Was 11px **Light**, 1.7, .05em |
-| Title | **PROPOSED** body size, uppercase as written, tracking .08em, in ink. Today: 11px in grey | **LIVE** project name 16px, tracking .06em |
-| Details and facts | **PROPOSED** 11px `--text-2`, line height 1.5 | — |
-| Caption, help and meta text | **PROPOSED** 11px `--text-2` | **LIVE** 12px `--text-2` |
+| Body text | **LIVE** 12px Book, line height 1.7, tracking .02em (UX-4). Was 11px, 1.9, .05em | **LIVE** 13px Book, 1.5, .01em. Was 11px **Light**, 1.7, .05em |
+| Title | **LIVE** body size, uppercase as written, tracking .08em, in ink, 20px above what follows (UX-4). Was 11px in grey | **LIVE** project name 16px, tracking .06em |
+| Details and facts | **LIVE** 11px `--text-2`, line height 1.5; the client's wordmark opens them, 160 x 24 at most, in ink | — |
+| Caption, help and meta text | **LIVE** 11px `--text-2`: captions, form labels | **LIVE** 12px `--text-2` |
 | Region labels | — | **LIVE** 11px uppercase, tracking .12em, `--text-2` |
 | Footer labels | 11px uppercase, tracking .15em. Settled. **LIVE**: `--text-2`. The chosen one carries the zigzag (below) | — |
 | Glyph controls (×, ←, the caret) | 13px. Settled | — |
@@ -115,9 +114,10 @@ The rules behind the table:
 - **Tracking follows size and case.** Uppercase needs .08–.15em. Mixed case
   needs .02em at 12px and .01em at 13px. The .05em everywhere today was compensation for
   11px type.
-- **The measure** (`--measure: 33em`) is in em, so it grows with the body
-  size: 396px at 12px. After adopting the new size, count the characters on a
-  full line again, as `AGENTS.md` says. Never re-tune it by arithmetic.
+- **The measure** (`--measure: 31em`) is in em, so it grows with the body
+  size: 372px at 12px. Re-counted when the body went to 12px: 33em held 71
+  characters on an average full line, so it came down to 31em, which holds
+  66. Never re-tune it by arithmetic.
 - **Descriptions are previewed in the site's own numbers.** Harvest's
   description preview is set at 13px against the site's 11px today. UX-5 fixes
   that by reading the same tokens (below).
@@ -273,7 +273,11 @@ The rules behind the table:
 
 **The site:** settled. The icon row and footer are at the bottom, the window
 above, and every text column starts at the left margin (`AGENTS.md`, Layout).
-UX-4 works inside the window only.
+Inside the window (UX-4): **title, then facts, then description**, in that
+order in every layout. A Project's pictures have one place, the stage — the
+left column on a wide screen, under the title on a phone — and an opened
+picture is drawn exactly where the first one was. Pictures, like text, start
+at the left edge of their column.
 
 **Harvest:** each kind of control has one home. This is the plan's table;
 **LIVE** since UX-2:
@@ -335,8 +339,8 @@ Copying is cheap, and the check is what keeps the copies honest.
    bold for keyboard focus in place of an outline, and in the footer only.
    **Live.** Extended to Harvest's tabs the same day, at his request, with
    the same bold focus.
-4. **The site's body text: 12px.** It is adopted with **UX-4**, because the
-   body size moves the window's layout and UX-4 rebuilds that anyway.
+4. **The site's body text: 12px.** **Live** since **UX-4**, which rebuilt the
+   window's layout anyway.
 5. **A keyboard focus outline on the site's controls: yes**, except the
    footer labels, whose focus is the bold zigzag. **Live.**
 
