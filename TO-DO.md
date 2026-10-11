@@ -474,30 +474,94 @@ project details can remain only on screen, and Write to project executes
 several writes that can partially succeed. Publish applies across projects,
 even while a different project is selected.
 
-- [ ] Map the actual storage behavior before changing labels. Define visible
+- [x] Map the actual storage behavior before changing labels. Define visible
       states for unsaved edits, material kept in Harvest, saved local project
       files, and published content. Keep project visibility (held back) separate
       from whether edits are saved. Never describe every persisted state as
       “on the site.”
-- [ ] Provide one clearly scoped Save project action and persistent status.
+- [x] Provide one clearly scoped Save project action and persistent status.
       Preserve unsaved work across mode/project changes or explicitly offer
       save/discard/cancel. Show which parts saved if a later step fails;
       preflight applicable validation before writes where practical. Do not
       imply the current multi-step write is one all-or-nothing operation.
-- [ ] Surface missing requirements next to their fields and link a concise
+- [x] Surface missing requirements next to their fields and link a concise
       summary to the affected item. Keep NOISE's existing alt-text gate and
       hold unchanged; this task is not permission to fill or bypass it.
-- [ ] Design a site-wide publishing review that names included projects and
+- [x] Design a site-wide publishing review that names included projects and
       changes, distinguishing saved work from newer unsaved edits. Reconcile
       Harvest's direct-push implementation with the required pull-request flow.
       Distinguish submitted/merged, deploying, deployed, and failure; a push
       alone is not evidence that visitors see the new content.
-- [ ] Keep publishing tests isolated while Harvest output is held. Provide
+- [x] Keep publishing tests isolated while Harvest output is held. Provide
       actionable error recovery without losing local work or including unrelated
       edits. No real content publication is needed to complete this UX task.
 
 **Done when:** switching projects, reopening the app, a validation failure, and
 a failed publish all leave the user able to tell what was retained and where.
+
+**Record, 2026-10-11 — Claude. UX-3 DONE.** Branch `ux-3-save-publish`.
+Scope: Harvest (`tools/harvest.js`, `tools/harvest/page.*`) and the docs that
+describe it. No content touched; nothing published.
+- **The storage map, as found:** typed fields lived only in the page (lost on
+  reload or quit; switching project asked "Discard them?"); review decisions,
+  kept pictures and passages, and the works' order / alt / captions / turns /
+  removals lived in Harvest's `state.json`, invisible as "not saved"; Save
+  project wrote the files on this Mac; Publish committed and pushed straight to
+  `main` — which the ruleset has refused since 2026-10-09, so **Publish could
+  not have worked**, and a refused push would have left the commit stranded
+  where the next Publish read "nothing new".
+- **What changed.** The project header says where the chosen project's (or
+  ABOUT's, CONTACT's) edits are, in both modes: *Not saved: …* naming the parts
+  (edited fields, N new works, works taken off, changes to the works, kept
+  pictures, kept passages), *Saved on this Mac, not published*, the publish
+  stages, *Published*; and apart, *Held back: the site does not show it*. The
+  Projects column says it in short under each name. On screen "draft" became
+  "held back" everywhere: a draft is now also what unsaved fields are kept as.
+  **Unsaved fields are kept** (`state.drafts`), so switching project or mode,
+  reloading or quitting loses nothing and nothing asks; reopening puts back
+  only the fields the draft changed. **Discard unsaved fields** in the header.
+  **Save project checks before it writes**: every work without alt text is
+  named in one summary with a link to each (tiles marked, the first opened),
+  a turned GIF and pictures coming off the site are asked before the fields
+  are written. A field build.js refuses on a project now opens its tab marked,
+  as ABOUT and CONTACT already did. **Publish… opens a review**: what goes and
+  what changed in each against GitHub's copy, what stays behind because it is
+  not saved (flagged when newer than what goes), and how the last publish
+  went. **Publish is a pull request**: commit content/ and images/ on main,
+  rebase, build.js on exactly that commit in a worktree, push `harvest/<time>`,
+  `gh pr create`, `gh pr merge --merge`; then the live page is fetched until
+  it is byte-identical to that build (checked possible first: origin/main
+  built locally matched the live page byte for byte). Ten minutes without a
+  match says *not confirmed*, with the deploy preview's verdict if it failed.
+  It refuses on another branch, or with a non-Harvest commit ahead of GitHub.
+  Saves wait while a publish runs.
+- **Checks, on an isolated rig** (a clone with a local bare repo as GitHub, a
+  stub `gh` that opens and merges pull requests there and builds the merged
+  main as the "live" page, a scratch HOME): edit BUS STOP's title, switch to
+  CANOPY and back — kept, no prompt; restart the server — still there in
+  Collect and Edit; Save — *Saved on this Mac, not published*; Discard —
+  fields back; three kept pictures without alt text plus a field edit — Save
+  wrote nothing (git status read), summary linked Work 1–3, links open each
+  with its field focused; a two-character icon — Layout tab, field marked.
+  Publish: review listed both projects and the newer CANOPY fields as staying
+  behind; merge refused — PR left open, *Sent to GitHub, not merged*, commit
+  kept; publish again — PR #2 carried the earlier commit, merged, *Published*;
+  broken build, a clash with a "phone" commit, GitHub unreachable, another
+  branch, a foreign commit ahead — each refused with nothing lost, commit
+  undone, no conflict marks, worktree removed; deploy never appearing,
+  Harvest reopened past ten minutes — *Merged, not confirmed live* with the
+  preview's failure. Both themes at 1440. `check-harvest` passes. Read-only
+  against Robert's real `state.json`: every project shown as not saved has
+  real kept pictures waiting, none falsely.
+- **Fixed in passing, found while testing:** a file's stray trailing space in
+  alt text made untouched works read as changed (now compared trimmed, as
+  Save writes them).
+- **Not checked:** the real `gh` and SSH push from Harvest.app's environment —
+  never exercised, since nothing may be published while his output is held.
+  The first real Publish is the test; its failure messages say what to do.
+- **Not done:** choosing which saved items go in one publish (all saved
+  content goes; the review names it all); reverting the works to the file
+  (Discard covers typed fields only).
 
 ### UX-4 — Refine the site's content layouts
 

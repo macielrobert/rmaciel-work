@@ -46,9 +46,19 @@
      purpose: none of it is site content, and a re-crawl must remember what
      you already rejected or the queue refills with it.
 
+   WHERE A CHANGE IS (UX-3, 2026-10-11) — four places, and the page names each:
+     NOT SAVED      in Harvest's memory only: typed fields (kept as a draft,
+                    so quitting loses nothing), kept pictures and passages,
+                    and the works' order, alt text, captions and turns.
+     SAVED          in the project's file on this Mac. Save project puts it there.
+     PUBLISHING     sent to GitHub as a pull request, merged, Netlify building.
+     PUBLISHED      the live page matches what was sent.
+   Held back is none of these: it says whether the site SHOWS a project, not
+   where its edits are.
+
    WHAT IT DOES NOT DO
-     No git and no publishing. It only writes files into the repo; going live
-     is one step, done the usual way. */
+     It never commits anything but content/ and images/, and never publishes
+     code. See PUBLISH below. */
 
 'use strict';
 const http = require('http');
@@ -150,10 +160,10 @@ const sh = (cmd, args) => new Promise((ok, no) =>
 const isRemote = (p) => /^https?:\/\//.test(p);
 const present = (p) => isRemote(p) || fs.existsSync(p);
 
-function readMdoc(file) {
-  const s = fs.readFileSync(file, 'utf8');
+function readMdoc(file) { return parseMdoc(fs.readFileSync(file, 'utf8'), path.basename(file)); }
+function parseMdoc(s, name) {
   const m = s.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) throw new Error(`${path.basename(file)} has no frontmatter`);
+  if (!m) throw new Error(`${name} has no frontmatter`);
   return { data: JSON.parse(m[1]), body: m[2] };
 }
 
@@ -172,28 +182,52 @@ function writeMdoc(file, data, body) {
 
 /* ------------------------------------------------------------- publishing */
 
-/* PUBLISH — the same steps Claude takes, behind one button.
-     1. Only content/ and images/ are committed. Code is never published from
-        here, so a half-finished change to the site cannot ride along.
-     2. build.js must pass first. A build that fails on Netlify stops every
-        later deploy until it is fixed — the BUS STOP alt-text stall.
-     3. Pull (rebasing on top of any edits saved from the phone), then push to
-        main, which Netlify deploys. A clash stops with a message and changes
-        nothing on GitHub.
-   Which projects are waiting is read from git once at start, then kept up to
-   date by writeMdoc, rather than asking git on every poll. */
+/* PUBLISH — the steps Claude takes, behind one button. Since 2026-10-09 main
+   refuses a direct push (a ruleset), so a publish is a pull request, merged
+   at once: the one way in that every change takes (UX-3, 2026-10-11).
+     1. Only content/ and images/ are committed, on main, as "Harvest: <names>".
+        Code is never published from here. The copy must be on main, and any
+        commit already ahead of GitHub must be Harvest's own (left by a merge
+        GitHub refused) — anything else would ride along in the pull request.
+     2. Rebased onto GitHub's main, for edits saved from the phone. A clash
+        undoes the commit and changes nothing on GitHub.
+     3. build.js runs on exactly that commit, in a worktree of its own — not
+        on the working copy, which can hold edits that are not being sent. A
+        build that fails on Netlify stops every later deploy until it is fixed.
+     4. Pushed as a branch, harvest/<time>; a pull request opened and merged.
+     5. Not "published" until it is. Netlify reports nothing to GitHub for a
+        production deploy, so the live page is fetched until it is byte for
+        byte the page step 3 built — identical when checked, 2026-10-11. Ten
+        minutes without a match is reported as not confirmed, with the deploy
+        preview's verdict when that failed (it is built from the same commit).
+   Until the merge, a failure undoes the commit, so the changes still show as
+   waiting; a merge GitHub refuses leaves the pull request open, and says so.
+   Which projects are waiting is read from git at start and after a publish,
+   then kept up to date by writeMdoc, rather than asking git on every poll. */
 const git = (...a) => sh('git', ['-C', REPO, ...a]);
 const unpublished = new Set();
-// a new or changed section counts too, named as one, so Publish lights for it
-const changedProjects = (porcelain) => porcelain.split('\n').map(l => {
-  const f = l.slice(3);
+// a new or changed section counts too, named as one, so Publish lights for it;
+// anything else under content/ or images/ is committed too, so it is named too
+const itemKey = (f) => {
   const m = f.match(/^(?:content\/projects\/([^/]+)\.mdoc|images\/([^/]+)\/)/);
   if (m) return m[1] || m[2];
   const sec = f.match(/^content\/sections\/([^/]+)\.json/);
   if (sec) return sec[1] + ' (section)';
   const doc = f.match(/^content\/(about)\.mdoc$|^content\/(contact)\.json$/);   // ABOUT and CONTACT, by name
-  return doc ? doc[1] || doc[2] : null;
-}).filter(Boolean);
+  if (doc) return doc[1] || doc[2];
+  return f === 'content/site.json' ? 'site settings' : /^(content|images)\//.test(f) ? f : null;
+};
+const statusFiles = (porcelain) => porcelain.split('\n').filter(l => l.trim()).map(l => l.slice(3).replace(/^.* -> /, ''));
+const changedProjects = (porcelain) => statusFiles(porcelain).map(itemKey).filter(Boolean);
+// saved and not yet merged on GitHub: changed files, and commits a refused merge left
+async function unpublishedFiles() {
+  const files = statusFiles(await git('status', '--porcelain', '-uall', '--', 'content', 'images'));
+  return [...new Set([...files, ...(await git('diff', '--name-only', 'origin/main...HEAD', '--', 'content', 'images')).split('\n').filter(Boolean)])];
+}
+async function refreshUnpublished() {
+  try { const keys = (await unpublishedFiles()).map(itemKey).filter(Boolean); unpublished.clear(); keys.forEach(k => unpublished.add(k)); }
+  catch (e) { console.warn('could not read what is waiting to be published: ' + e.message.split('\n')[0]); }
+}
 // CATCH UP — the latest from GitHub immediately before anything is written
 // into the repo (Write, Organize's Save, a new project), not only at launch:
 // Keystatic saves from the phone land on GitHub, and writing onto an old copy
@@ -201,34 +235,179 @@ const changedProjects = (porcelain) => porcelain.split('\n').map(l => {
 // or with this Mac's unpublished edits in the way of an incoming one, it is
 // skipped and logged — a rebase there would leave conflict marks inside a
 // project file, which is worse than the clash it was meant to prevent.
-const catchUp = () => new Promise((ok) => execFile('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000 }, (e, out, err) => {
+// A save waits while a publish runs: its commit, rebase and pull are moving
+// the same files, and a write between two of them is lost or caught in a clash.
+const catchUp = () => publishing ? Promise.reject(new Error('Not saved: Harvest is publishing. Save again in a moment — your edits are still here.')) : new Promise((ok) => execFile('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000 }, (e, out, err) => {
   if (e) console.warn('not caught up with GitHub before writing: ' + String(err || e.message).trim().split('\n')[0]);
   projectsCache = null;   // the pull may have changed any project
   ok();
 }));
 
-async function publish() {
-  const changed = await git('status', '--porcelain', '--', 'content', 'images');
-  if (!changed.trim()) { unpublished.clear(); return { message: 'Nothing new to publish.' }; }
-  try { await buildSite(); }
-  catch (e) { throw new Error('The site would not build, so nothing was published: ' + String(e.stderr || e.message).trim().split('\n').pop()); }
-  const slugs = [...new Set(changedProjects(changed))];
-  await git('add', '--', 'content', 'images');
-  await git('commit', '-q', '-m', `Harvest: ${slugs.join(', ') || 'content'}`);
-  try { await git('pull', '-q', '--rebase', '--autostash'); }
-  catch {
-    // back to exactly where it started: the commit is undone and its changes
-    // left in place, so they still show as waiting and a later Publish (or
-    // Claude) picks them up — a commit left behind would read "nothing new"
-    await git('rebase', '--abort').catch(() => {});
-    await git('reset', '--soft', 'HEAD~1').catch(() => {});
-    for (const s of slugs) unpublished.add(s);
-    throw new Error('GitHub has edits that clash with these. Nothing was published — ask Claude to publish.');
+// Harvest.app starts with the Finder's PATH, which has neither Homebrew folder.
+// HARVEST_GH and HARVEST_LIVE point a test copy at stand-ins (never GitHub).
+const GH = process.env.HARVEST_GH || ['/opt/homebrew/bin/gh', '/usr/local/bin/gh'].find(f => fs.existsSync(f)) || 'gh';
+const gh = (...a) => new Promise((ok, no) => execFile(GH, a, { cwd: REPO, timeout: 120000 }, (e, out, err) =>
+  e ? no(new Error(e.code === 'ENOENT' ? 'the GitHub command-line tool, gh, is not installed' : String(err || e.message).trim().split('\n').pop())) : ok(out)));
+// what a failed command said, as one sentence: git's own reason (its first
+// "fatal:" line — the last is advice), else the last line, which is build.js's
+const lastLine = (e) => {
+  const ls = String(e.stderr || e.message).split('\n').map(l => l.trim()).filter(Boolean);
+  return (ls.find(l => /^(fatal|error|ssh):/.test(l)) || ls.pop() || '').replace(/^(fatal|error): /, '').replace(/([^.])$/, '$1.');
+};
+const count = (n, one) => n + ' ' + one + (n === 1 ? '' : 's');
+const digest = (s) => crypto.createHash('sha1').update(s).digest('hex');
+
+/* THE REVIEW, before Publish: each thing that would go, named, with what
+   changed in it against GitHub's copy; and, apart, edits NOT included because
+   they are not saved yet — Publish sends files, so those stay behind. */
+const FIELD_WORDS = { title: 'title', section: 'section', order: 'position', draft: 'held back', part_of: 'sub-project of', client: 'client name', details: 'detail lines',
+  layout: 'layout', expand: 'image expand', icon_type: 'grid icon', icon_glyph: 'grid icon', icon_image: 'grid icon', wordmark: 'wordmark',
+  share_description: 'share description', nicknames: 'working titles', email: 'email address', intro: 'intro copy', site_title: 'site title', copyright: 'copyright' };
+function whatChanged(was, now) {
+  if (!was) return ['new'];
+  if (!now) return ['deleted'];
+  const out = new Set(), { images: wi = [], ...w } = was.data, { images: ni = [], ...n } = now.data;
+  for (const k of new Set([...Object.keys(w), ...Object.keys(n)])) if (JSON.stringify(w[k]) !== JSON.stringify(n[k])) out.add(FIELD_WORDS[k] || k);
+  if (String(was.body).trim() !== String(now.body).trim()) out.add('description');
+  const ws = wi.map(i => i.src), ns = ni.map(i => i.src);
+  const added = ns.filter(s => !ws.includes(s)).length, gone = ws.filter(s => !ns.includes(s)).length;
+  if (added) out.add(count(added, 'picture') + ' added');
+  if (gone) out.add(count(gone, 'picture') + ' taken off');
+  if (ns.filter(s => ws.includes(s)).join() !== ws.filter(s => ns.includes(s)).join()) out.add('picture order');
+  if (ni.some(i => { const o = wi.find(x => x.src === i.src); return o && (o.alt !== i.alt || (o.caption || '') !== (i.caption || '')); })) out.add('alt text or captions');
+  return [...out];
+}
+const itemFile = (k) => k.endsWith(' (section)') ? `content/sections/${k.slice(0, -10)}.json` : k === 'about' ? 'content/about.mdoc' : k === 'contact' ? 'content/contact.json'
+  : k === 'site settings' ? 'content/site.json' : k.includes('/') ? k : `content/projects/${k}.mdoc`;
+const asData = (rel, s) => s === null ? null : rel.endsWith('.json') ? { data: JSON.parse(s), body: '' } : parseMdoc(s, path.basename(rel));
+const onDisk = (rel) => { try { return fs.readFileSync(path.join(REPO, rel), 'utf8'); } catch { return null; } };
+function nameOf(k, data) {
+  if (k === 'about' || k === 'contact') return k.toUpperCase();
+  if (k === 'site settings') return 'Site settings';
+  if (k.endsWith(' (section)')) return String(data?.title || k.slice(0, -10)).toUpperCase() + ' (section)';
+  if (k.includes('/')) return k;
+  return data?.title || projects().find(p => p.slug === k)?.title || k;
+}
+async function review() {
+  const groups = new Map();
+  for (const f of await unpublishedFiles()) { const k = itemKey(f); if (k) groups.set(k, [...(groups.get(k) || []), f]); }
+  const items = [];
+  for (const [key, files] of groups) {
+    const rel = itemFile(key);
+    let was = null, now = null, changes;
+    try { was = asData(rel, await git('show', 'origin/main:' + rel).catch(() => null)); now = asData(rel, onDisk(rel)); changes = whatChanged(was, now); }
+    catch { changes = ['changed']; }
+    if (!changes.length && files.some(f => f.startsWith('images/'))) changes.push('picture files');   // a turn changes the file, not the record
+    items.push({ key, name: nameOf(key, (now || was)?.data), changes, held: rel.startsWith('content/projects/') && !!now?.data.draft });
   }
-  await git('push', '-q', 'origin', 'HEAD');
-  unpublished.clear();
-  projectsCache = null;   // the pull may have brought in edits from the phone
-  return { message: `Published ${slugs.join(', ')}. Live in about a minute.` };
+  const later = Object.entries(unsavedAll()).map(([key, what]) => ({ key, name: nameOf(key), what, also: groups.has(key) }));
+  return { items, later, publish: publishView() };
+}
+
+const DEPLOY_WAIT = 10 * 60e3;
+let publishing = false;
+const publishView = () => state.publish && (({ expect, ...p }) => p)(state.publish);
+async function publish() {
+  if (publishing) throw new Error('Already publishing.');
+  publishing = true;
+  const started = Date.now();
+  try { return await publishSteps(); }
+  catch (e) {
+    // refused before it began (wrong branch, offline): said in the review too, not an older failure
+    if (!(state.publish?.at >= started)) { state.publish = { stage: 'failed', keys: [], names: [], at: Date.now(), message: e.message }; persist(); }
+    throw e;
+  }
+  finally { publishing = false; projectsCache = null; await refreshUnpublished(); }
+}
+async function publishSteps() {
+  const branch = (await git('rev-parse', '--abbrev-ref', 'HEAD')).trim();
+  if (branch !== 'main') throw new Error(`Nothing was published: this copy of the site is on "${branch}", not main, and its work would go too. Nothing was lost. Ask Claude to publish.`);
+  try { await git('fetch', '-q', 'origin', 'main'); }
+  catch (e) { throw new Error('Nothing was published: GitHub could not be reached: ' + lastLine(e) + ' Everything is still saved on this Mac — publish again when online.'); }
+  const ahead = (await git('log', '--format=%s', 'origin/main..HEAD')).split('\n').filter(Boolean);
+  if (ahead.some(s => !s.startsWith('Harvest:'))) throw new Error('Nothing was published: this copy holds commits that are not Harvest\'s, and they would go too. Nothing was lost. Ask Claude to publish.');
+  const changed = await git('status', '--porcelain', '-uall', '--', 'content', 'images');   // not trimmed: the first line's status column starts with a space
+  if (!changed.trim() && !ahead.length) return { message: 'Nothing saved is waiting to be published.' };
+  const { items } = await review();
+  const set = (stage, extra) => { state.publish = { stage, keys: items.map(i => i.key), names: items.map(i => i.name), at: Date.now(), ...extra }; persist(); };
+  set('checking');
+  let mine = false;   // a commit made here, undone if the publish stops before GitHub has it
+  try {
+    if (changed.trim()) {
+      await git('add', '-A', '--', 'content', 'images');
+      await git('commit', '-q', '-m', 'Harvest: ' + [...new Set(changedProjects(changed))].join(', '));
+      mine = true;
+    }
+    try { await git('rebase', '-q', '--autostash', 'origin/main'); }
+    catch { await git('rebase', '--abort').catch(() => {}); throw new Error('Nothing was published: GitHub has edits that clash with these. Everything is still saved on this Mac. Ask Claude to publish.'); }
+    let html;
+    try { html = await buildCommit(); }
+    catch (e) { throw new Error('Nothing was published: the site would not build — ' + lastLine(e) + ' Everything is still saved on this Mac; fix that, save, and publish again.'); }
+    set('sending');
+    const head = 'harvest/' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    try { await git('push', '-q', 'origin', 'HEAD:refs/heads/' + head); }
+    catch (e) { throw new Error('Nothing was published: GitHub refused the upload: ' + lastLine(e) + ' Everything is still saved on this Mac. Publish again, or ask Claude.'); }
+    let url;
+    const list = items.map(i => `- **${i.name}**: ${i.changes.join(', ')}${i.held ? ' (held back: not shown on the site)' : ''}`).join('\n');
+    try { url = (await gh('pr', 'create', '--base', 'main', '--head', head, '--title', 'Harvest: ' + items.map(i => i.name).join(', '), '--body', `Published from Harvest.\n\n${list}\n`)).trim().split('\n').pop(); }
+    catch (e) { await git('push', '-q', 'origin', '--delete', head).catch(() => {}); throw new Error('Nothing was published: the pull request could not be opened (' + e.message + '). Everything is still saved on this Mac. Ask Claude to publish.'); }
+    mine = false;   // GitHub has it now: undoing it here would hide what is there
+    const pr = +(url.match(/\/pull\/(\d+)/) || [])[1];
+    set('merging', { pr, url });
+    try { await gh('pr', 'merge', url, '--merge'); }
+    catch (e) {
+      const message = `Sent to GitHub as pull request #${pr}, but GitHub did not merge it, so nothing is live: ${e.message.replace(/\.$/, '')}. Everything is still saved on this Mac. Ask Claude to merge it, or publish again.`;
+      set('submitted', { pr, url, message });
+      throw new Error(message);
+    }
+    await git('push', '-q', 'origin', '--delete', head).catch(() => {});
+    await git('pull', '-q', '--ff-only').catch(e => console.warn('after publishing, main did not catch up: ' + lastLine(e)));
+    set('deploying', { pr, url, merged: Date.now(), expect: digest(html) });
+    watchDeploy();
+    return { message: `Pull request #${pr} merged. Netlify is building the site now — about a minute. The line beside Publish says when visitors can see it.` };
+  } catch (e) {
+    if (mine) await git('reset', '-q', '--soft', 'HEAD~1').catch(() => {});   // back to waiting, changes and all
+    if (state.publish?.stage !== 'submitted') set('failed', { message: e.message });
+    throw e;
+  }
+}
+// build.js on HEAD as committed, in a worktree of its own; returns the page it built
+async function buildCommit() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-publish-'));
+  try {
+    await git('worktree', 'add', '-q', '--detach', dir, 'HEAD');
+    fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(dir, 'node_modules'));
+    await sh(process.execPath, [path.join(dir, 'build.js')]);
+    return fs.readFileSync(path.join(dir, 'dist', 'index.html'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    await git('worktree', 'prune').catch(() => {});
+  }
+}
+// LIVE YET? Checked at once, then every 15 s, for ten minutes from the merge.
+// Also run at start, so a publish Harvest was closed during is still followed.
+let watching = false;
+async function watchDeploy() {
+  if (watching) return;
+  watching = true;
+  try {
+    const p = () => state.publish;
+    while (p()?.stage === 'deploying') {
+      try { if (digest(await fetchText(LIVE + '?harvest=' + Date.now())) === p().expect) { state.publish = { ...p(), stage: 'live', live: Date.now() }; persist(); return; } }
+      catch (e) { console.warn('could not read the live site: ' + e.message); }
+      if (Date.now() - p().merged > DEPLOY_WAIT) break;
+      await new Promise(r => setTimeout(r, 15000));
+    }
+    if (p()?.stage !== 'deploying') return;
+    let why = 'Netlify may still be building it, or the deploy failed.';
+    try {
+      const sha = (await gh('pr', 'view', String(p().pr), '--json', 'headRefOid', '--jq', '.headRefOid')).trim();
+      const st = JSON.parse(await gh('api', `repos/{owner}/{repo}/commits/${sha}/status`)).statuses.find(s => /netlify/i.test(s.context));
+      if (st && st.state !== 'success') why = `Netlify's preview of the same pull request says: ${st.description || st.state}.`;
+    } catch (e) { console.warn('could not ask GitHub how the deploy went: ' + e.message); }
+    state.publish = { ...p(), stage: 'unconfirmed', message: why };
+    persist();
+  } finally { watching = false; }
 }
 
 // Matches Keystatic's slug for a new entry: lowercase letters and digits,
@@ -321,8 +500,10 @@ fs.mkdirSync(MOVED, { recursive: true });
 function sweep() {
   const live = new Set(Object.values(state.findings).filter(f => f.status === 'pending' || f.status === 'accepted').map(f => f.path));
   for (const n of fs.readdirSync(MOVED)) if (!live.has(path.join(MOVED, n))) fs.rmSync(path.join(MOVED, n), { force: true });
-  for (const n of fs.readdirSync(UPLOADS)) { const f = path.join(UPLOADS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5) fs.rmSync(f, { force: true }); }
+  const drafted = JSON.stringify(state.drafts || {});   // an upload an unsaved draft still names is not abandoned
+  for (const n of fs.readdirSync(UPLOADS)) { const f = path.join(UPLOADS, n); if (Date.now() - fs.statSync(f).mtimeMs > 864e5 && !drafted.includes(f)) fs.rmSync(f, { force: true }); }
 }
+const dropDraft = (k) => { if (state.drafts?.[k]) { delete state.drafts[k]; persist(); } };
 const MARK_EXT = new Set(['.png', '.svg']);   // alpha is the shape: build.js refuses anything else for an icon
 const lines = (v) => String(v ?? '').split('\n').map(x => x.trim()).filter(Boolean);
 
@@ -555,7 +736,7 @@ function projects() {
     const { data } = readMdoc(path.join(PROJECTS, f));
     return {
       slug: f.slice(0, -5), title: data.title || f, section: data.section, order: data.order ?? 10,
-      draft: !!data.draft, nicknames: data.nicknames || [], part_of: data.part_of || null,
+      draft: !!data.draft, nicknames: data.nicknames || [], part_of: data.part_of || null, images: data.images || [],
       siteImages: (data.images || []).map(i => path.join(REPO, String(i.src || '').replace(/^\/+/, ''))),
     };
   }).sort((a, b) => rank(a.section) - rank(b.section) || a.order - b.order || a.title.localeCompare(b.title));
@@ -1678,23 +1859,35 @@ async function turn(src, deg) {
   return src.replace(/\.webp$/i, '.jpg');
 }
 
-async function saveOrganize(slug, confirmed) {
+/* WHAT WOULD STOP THE WORKS' SAVE, found before anything is written (UX-3):
+   Save project asks this first, so a missing alt text no longer arrives after
+   the project's fields were already saved — and names EVERY work that needs
+   one, not the first. The save asks again, for anything changed since. */
+async function worksCheck(slug) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Edit first.');
-  await catchUp();
   const ms = await members(slug), byKey = new Map(ms.map(m => [m.key, m]));
   const keep = o.stacks.filter(t => !t.removed && byKey.has(t.keeper));
-  const missing = keep.findIndex(t => !String(t.alt || '').trim() || !realName(t.alt.trim()));
-  if (missing >= 0) throw new Error(`Work ${o.stacks.indexOf(keep[missing]) + 1} needs alt text — what is in the picture, in words, not a filename.`);
+  const n = (t) => o.stacks.indexOf(t) + 1;
+  const missing = keep.filter(t => !String(t.alt || '').trim() || !realName(t.alt.trim()));
   // turn() goes through sips, which writes one frame of a GIF: refused here,
   // before anything is copied, rather than flattening the animation
   const isGif = (m) => { const p = String(m.path || m.src); return /\.gif$/i.test(isRemote(p) ? p.split(/[?#]/)[0] : p); };
-  const turnedGif = keep.findIndex(t => t.rotate && isGif(byKey.get(t.keeper)));
-  if (turnedGif >= 0) throw new Error(`Work ${o.stacks.indexOf(keep[turnedGif]) + 1} is a GIF, and turning one would keep a single frame. Turn it back, or turn the GIF itself before adding it.`);
+  const turnedGif = keep.find(t => t.rotate && isGif(byKey.get(t.keeper)));
+  const problem = turnedGif ? `Work ${n(turnedGif)} is a GIF, and turning one would keep a single frame. Turn it back, or turn the GIF itself before adding it.` : null;
   const file = path.join(PROJECTS, slug + '.mdoc');
   const { data, body } = readMdoc(file);
   const keptSite = new Set(keep.map(t => byKey.get(t.keeper)).filter(m => m.kind === 'site').map(m => m.src));
   const dropped = (data.images || []).map(i => i.src).filter(src => !keptSite.has(src));
+  return { o, byKey, keep, n, missing, problem, file, data, body, dropped };
+}
+
+async function saveOrganize(slug, confirmed) {
+  if (!state.organize?.[slug]) throw new Error('Open the project in Edit first.');
+  await catchUp();
+  const { o, byKey, keep, n, missing, problem, file, data, body, dropped } = await worksCheck(slug);
+  if (missing.length) throw new Error(`Work ${n(missing[0])} needs alt text — what is in the picture, in words, not a filename.`);
+  if (problem) throw new Error(problem);
   if (dropped.length && !confirmed) return { confirm: dropped.length };
 
   const images = [], copied = [];
@@ -1834,9 +2027,49 @@ function stateView() {
   const pending = {};
   for (const f of Object.values(state.findings)) if (f.status === 'pending') pending[f.project] = (pending[f.project] || 0) + 1;
   return { root: state.root, home: HOME, job, rev, unpublished: [...unpublished], preview: PREVIEW, live: LIVE,
+    unsaved: unsavedAll(), publish: publishView(),
     site: state.site && { start: state.site.start, pages: state.site.pages.map(({ url, title }) => ({ url, title })) },
     sections: sections(),
-    projects: projects().map(({ siteImages, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
+    projects: projects().map(({ siteImages, images, order, ...pr }) => ({ ...pr, pending: pending[pr.slug] || 0 })) };
+}
+/* NOT SAVED, per project (or 'about' / 'contact'): what Save project would
+   still write, in the words the page shows. Fields typed and not saved are a
+   DRAFT kept in Harvest's memory (state.drafts), so switching project or
+   quitting loses nothing — the page sends them as they are typed. */
+function unsavedAll() {
+  const out = {}, put = (k, w) => (out[k] ||= []).push(w), kept = {};
+  const stacked = new Set(Object.values(state.organize || {}).flatMap(o => o.stacks.flatMap(t => t.members)));
+  for (const f of Object.values(state.findings)) {
+    // accepted = kept and not yet through Save. A picture already in a work is
+    // counted with the works below; a passage placed by hand (caption,
+    // organize) is source material, not waiting.
+    if (f.status !== 'accepted' || !(f.kind === 'image' ? !stacked.has(f.id) : f.kind === 'text' && !['caption', 'organize'].includes(f.target))) continue;
+    (kept[f.project] ||= [0, 0])[f.kind === 'image' ? 0 : 1]++;
+  }
+  for (const k of Object.keys(state.drafts || {})) put(k.replace(/^site:/, ''), 'edited fields');
+  for (const p of projects()) {
+    worksWords(p.slug, p.images).forEach(w => put(p.slug, w));
+    const [pics, texts] = kept[p.slug] || [0, 0];
+    if (pics) put(p.slug, count(pics, 'kept picture'));
+    if (texts) put(p.slug, count(texts, 'kept passage'));
+  }
+  return out;
+}
+// The works as Save project would write them, against the file: new works,
+// works taken off, and any other change to the ones on the site (kept copy,
+// alt, caption, turn, order). Trimmed, as Save trims: a stray space is not an edit.
+function worksWords(slug, images) {
+  const o = state.organize?.[slug];
+  if (!o) return [];
+  const keep = o.stacks.filter(t => !t.removed), onSite = keep.filter(t => t.keeper.startsWith('site:'));
+  const staying = new Set(onSite.map(t => t.keeper.slice(5)));
+  const row = (keeper, alt, caption, turn) => JSON.stringify([keeper, String(alt || '').trim(), String(caption || '').trim(), turn || 0]);
+  const added = keep.length - onSite.length, gone = images.filter(i => !staying.has(i.src)).length;
+  const words = [];
+  if (added) words.push(count(added, 'new work'));
+  if (gone) words.push(count(gone, 'work') + ' taken off');
+  if (onSite.map(t => row(t.keeper, t.alt, t.caption, t.rotate)).join() !== images.filter(i => staying.has(i.src)).map(i => row('site:' + i.src, i.alt, i.caption)).join()) words.push('changes to the works');
+  return words;
 }
 let lastSent = '', lastFinder = '';
 // THE FINDER MENU'S PROJECT LIST. Finder's "Harvest ›" menu is drawn by an
@@ -1859,7 +2092,7 @@ setInterval(() => {
 
 let ORIGIN = '';
 // where the right-click menu's "View on live site" goes. Becomes https://rmaciel.work/ at the DNS cutover (PUNCH-LIST).
-const LIVE = 'https://rmaciel-work.netlify.app/';
+const LIVE = process.env.HARVEST_LIVE || 'https://rmaciel-work.netlify.app/';
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (code, type, data) => { res.writeHead(code, { 'content-type': type }); res.end(data); };
@@ -1900,8 +2133,10 @@ const server = http.createServer(async (req, res) => {
       const hidden = url.searchParams.get('hidden') === '1';
       return json(Object.values(state.findings).filter(f => f.project === slug && (hidden || !f.cleared) && present(f.path)));
     }
-    if (p === '/api/project' && req.method === 'GET') return json(projectData(url.searchParams.get('project')));
-    if (p === '/api/site' && req.method === 'GET') return json(siteDocData(url.searchParams.get('doc')));
+    // with the draft, if the fields hold edits not saved: the page puts them back in the form
+    if (p === '/api/project' && req.method === 'GET') { const slug = url.searchParams.get('project'); return json({ ...projectData(slug), draft: state.drafts?.[slug] }); }
+    if (p === '/api/site' && req.method === 'GET') { const d = url.searchParams.get('doc'); return json({ ...siteDocData(d), draft: state.drafts?.['site:' + d] }); }
+    if (p === '/api/publish/review') return json(await review());
     // a mark as it is, transparency and all: the site's own icons and wordmarks, and uploads waiting for Save
     if (p === '/raw') {
       const q = url.searchParams.get('p') || '';
@@ -1989,8 +2224,18 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/extract') return json(await extractText(b.project, b.stack));
     if (p === '/api/pagepicture') return json(await pagePicture(b.id));
     if (p === '/api/organize/save') return json(await saveOrganize(b.project, !!b.confirm));
-    if (p === '/api/project') return json(await saveProject(b.project, b.data || {}, b.body));
-    if (p === '/api/site') return json(await saveSiteDoc(b.doc, b.data || {}, b.body));
+    if (p === '/api/organize/check') { const c = await worksCheck(b.project); return json({ missing: c.missing.map(t => ({ id: t.id, n: c.n(t) })), problem: c.problem, drop: c.dropped.length }); }
+    // `draft`: Save project's own save, which leaves no draft behind. A
+    // right-click Rename or Hold back saves one field and leaves the draft be.
+    if (p === '/api/project') { const r = await saveProject(b.project, b.data || {}, b.body); if (b.draft) dropDraft(b.project); return json(r); }
+    if (p === '/api/site') { const r = await saveSiteDoc(b.doc, b.data || {}, b.body); if (b.draft) dropDraft('site:' + b.doc); return json(r); }
+    if (p === '/api/draft') {
+      const k = String(b.key || '');
+      if (!/^(site:)?[a-z0-9-]+$/.test(k)) throw new Error('No such project.');
+      if (b.now) (state.drafts ||= {})[k] = { base: b.base, now: b.now }; else dropDraft(k);
+      persist();
+      return json({ ok: true });
+    }
     if (p === '/api/project/upload') return json({ upload: upload(b.name, b.data) });
     if (p === '/api/preview') { try { return json({ html: preview(b.body) }); } catch (e) { return json({ html: '', error: 'No preview: ' + e.message.split('\n')[0] }); } }
     if (p === '/api/newproject') { await catchUp(); const slug = newProject(b.title, b.section); persist(); return json({ slug }); }
@@ -2085,7 +2330,11 @@ function body(req) {
 // land there, not here. Quietly skipped offline or with local changes in the
 // way. Here, not in a launcher, so the app and Harvest.command both get it.
 try { execFileSync('git', ['-C', REPO, 'pull', '-q', '--ff-only'], { timeout: 20000, stdio: 'ignore' }); } catch {}
-try { for (const s of changedProjects(execFileSync('git', ['-C', REPO, 'status', '--porcelain', '--', 'content', 'images'], { encoding: 'utf8' }))) unpublished.add(s); } catch {}
+refreshUnpublished();
+// a publish Harvest was closed during: one being deployed is followed again;
+// one stopped part-way left its changes saved here, or in an open pull request
+if (state.publish?.stage === 'deploying') watchDeploy();
+else if (['checking', 'sending', 'merging'].includes(state.publish?.stage)) state.publish = { ...state.publish, stage: 'failed', message: 'Harvest was closed while publishing. What was saved is still on this Mac' + (state.publish.pr ? `, and pull request #${state.publish.pr} may be open on GitHub` : '') + ' — review and publish again.' };
 
 /* ---------------------------------------------------------- preview */
 /* THE SITE ITSELF, for Organize's Preview pane: dist/ as build.js makes it,

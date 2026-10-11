@@ -39,6 +39,12 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
       - **Swap the default branch** so Keystatic writes to `content` and
         production deploys from `main`. Free and structural; costs one more
         branch to keep track of.
+
+      **Update, 2026-10-11:** the repository is public and a ruleset
+      (`Require pull request to main`, active) refuses direct pushes, so the
+      rule is in force. Harvest's Publish goes through a pull request since
+      UX-3 (`TO-DO.md`). What Keystatic does when a save to `main` is refused
+      is still untried — branch first in the editor.
 - [ ] **Add `rmaciel.work` to the GitHub App's Callback URLs** at cutover.
       Keystatic builds the redirect from whatever host the request arrived on,
       so a new address cannot log in until its callback is listed. One per

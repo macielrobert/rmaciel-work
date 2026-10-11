@@ -149,7 +149,7 @@
   :is(#projects [data-s], #sitedocs [data-doc]):focus-visible { outline:1px solid var(--ink); outline-offset:-1px; }
   #projects [data-s].drop { color:var(--ink); outline:1px solid var(--ink); outline-offset:-1px; }   /* a work dragged from the grid lands here */
   #projects [data-s] b { margin-left:auto; font-weight:400; font-size:12px; }
-  #projects [data-s] small { display:block; font-size:12px; color:var(--text-2); }
+  :is(#projects [data-s], #sitedocs [data-doc]) small { display:block; font-size:12px; color:var(--text-2); }
   #projects .sec { font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--text-2); padding:20px var(--m) 4px; cursor:default; }
   #projects .sec:first-child { padding-top:0; }
   #projects input.rename { margin:0; padding:0 0 1px; }
@@ -167,8 +167,11 @@
   #work { display:flex; flex-direction:column; min-width:0; }
   #phead { display:flex; gap:12px; align-items:center; padding:12px var(--m); border-bottom:1px solid var(--rule); min-height:57px; }
   #pname { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; max-width:45%; }   /* a long message gives way, not the name */
-  #pstate { color:var(--ink); font-size:12px; white-space:nowrap; }
-  #pstate:not(:empty)::before { content:''; display:inline-block; width:6px; height:6px; border:1px solid var(--ink); margin-right:6px; vertical-align:1px; }
+  /* WHERE THE EDITS ARE (UX-3): grey when everything is saved; ink, with the
+     hollow square, while something is not */
+  #pstate { color:var(--text-2); font-size:12px; white-space:nowrap; }
+  #pstate.waiting { color:var(--ink); }
+  #pstate.waiting::before { content:''; display:inline-block; width:6px; height:6px; border:1px solid var(--ink); margin-right:6px; vertical-align:1px; }
   #orgmsg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-2); }
   /* A FAILURE: a 1px ink rule at its left, in ink */
   #orgmsg.fail { color:var(--ink); border-left:1px solid var(--ink); padding-left:8px; white-space:normal; }
@@ -353,3 +356,24 @@
   #menu .mh { padding:8px 12px 2px; color:var(--text-2); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
   #menu .mt { padding:0 12px 4px; color:var(--text-2); font-size:12px; white-space:normal; max-width:320px; }
   #menu hr { border:0; border-top:1px solid var(--rule); margin:4px 0; }
+
+  /* THE PUBLISHING REVIEW (UX-3). A dialog, not a page: it is a question
+     asked on the way to Publish. The last publish's line beside the button is
+     quiet until it fails; a failure is drawn as one (STYLE-GUIDE.md, Messages). */
+  #pubstate { font-size:12px; }
+  #pubstate.fail { color:var(--ink); border-left:1px solid var(--ink); }
+  #pubdlg { background:var(--bg); color:var(--ink); border:1px solid var(--edge); padding:20px; width:min(560px, calc(100vw - 40px)); max-height:calc(100vh - 80px); overflow:auto; font:inherit; letter-spacing:inherit; }
+  #pubdlg::backdrop { background:rgba(0,0,0,.4); }
+  #pubdlg h2 { font-size:16px; font-weight:400; letter-spacing:.06em; margin:0 0 20px; }
+  #pubdlg h3 { margin:20px 0 4px; }
+  #pubdlg ul { margin:8px 0 0; padding:0; list-style:none; }
+  #pubdlg li { padding:4px 0; border-bottom:1px solid var(--rule); }
+  #pubdlg li b { font-weight:400; }
+  #pubdlg p { margin:0 0 8px; }
+  #pubdlg .pubnow { padding-left:8px; border-left:1px solid var(--rule); margin-bottom:12px; }
+  #pubdlg .pubnow.fail { border-left-color:var(--ink); }
+  #pubdlg .dlgacts { display:flex; gap:8px; margin-top:20px; }
+  #pubdlg .how { margin-top:20px; }
+  /* a work the save stopped for: the error's square and words, under its tile */
+  #stacks .tile.err small { color:var(--ink); }
+  #stacks .tile.err small::before { content:''; display:inline-block; width:6px; height:6px; background:var(--ink); margin-right:6px; vertical-align:1px; }

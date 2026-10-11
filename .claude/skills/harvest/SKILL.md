@@ -30,8 +30,8 @@ in both. Each kind of control has one home (`STYLE-GUIDE.md`, Placement):
 
 | Where | What |
 |---|---|
-| Application header | Collect / Edit, the status line (background work, Stop), **Publish** |
-| Project header | name, **Unsaved changes** (the fields only — see UX-3), the message line, Preview and **Save project** (Edit only) |
+| Application header | Collect / Edit, the status line (background work, Stop), how the last publish went, **Publish…** (opens the review) |
+| Project header | name, **where its edits are** (UX-3, below), Discard unsaved fields, the message line, Preview and **Save project** (Edit only) |
 | Workspace toolbar | Collect: Pending / Kept / Rejected, find, source filters, order, **Clear and forget** menu. Images: count, find, Grid / List, S M L, Show removed |
 | Selection toolbar | always there; its actions wait, readable, until something is selected |
 | Details panel | Images in Grid: the work clicked last, with List's fields for it |
@@ -57,12 +57,22 @@ remembers `imgView` (Grid by default) and Edit its tab as `etab`.
    the project's fields if they hold edits (build-checked), the works (second
    click if pictures come off the site; every kept work needs alt text or it
    stops there — and then that work is selected in Images with its alt text
-   field marked), then kept text not placed elsewhere (`/api/write`). Each step
-   is all-or-nothing; a failure stops the rest and the line says what was
-   saved first. Publish runs
-   build.js, commits ONLY content/ and images/ as "Harvest: <slugs>", pulls with
-   rebase, pushes to main. On a clash it undoes its commit and says "ask Claude
-   to publish" — that is the case below.
+   field marked), then kept text not placed elsewhere (`/api/write`). Before
+   any of them (UX-3) `/api/organize/check` asks what would stop the works —
+   EVERY work without alt text (the line links to each, nothing is written), a
+   turned GIF, pictures coming off the site (the second click) — so none of it
+   arrives after the fields were written. Each step is all-or-nothing; a
+   failure stops the rest and the line says what was saved first.
+   **Publish…** opens a review: what goes, with what changed in each against
+   GitHub's copy, and what stays behind because it is not saved. Publish then
+   commits ONLY content/ and images/ on main as "Harvest: <slugs>", rebases
+   onto GitHub's main, runs build.js on exactly that commit (a worktree in the
+   system temp folder), pushes it as `harvest/<time>`, opens a pull request
+   with `gh` and merges it (`main` refuses a direct push), and fetches the
+   live page until it matches the page it built, for ten minutes. It refuses
+   on a branch other than main, or with a commit ahead of GitHub that is not
+   "Harvest:" — those would ride along. Before the merge a failure undoes the
+   commit; a refused merge leaves the pull request open and says so.
 5. Bulk: tick cards → Keep / Reject / Reset decision / Move to… (moved cards
    arrive kept; the original is kept rejected+hidden so a re-crawl can't refile
    it). **Clear and forget** (toolbar, right) holds the housekeeping, each item
@@ -90,7 +100,8 @@ remembers `imgView` (Grid by default) and Edit its tab as `etab`.
 
 ## What "publish the harvest" means for Claude
 
-Harvest only writes files; it never commits. So:
+Harvest's own **Publish…** does this as a pull request (UX-3). When Robert
+asks Claude instead — a clash, a refused merge, or no Harvest at hand:
 
 1. `git status` — expect changes under `content/projects/*.mdoc` (and maybe
    `content/about.mdoc` or `content/contact.json`) and new files
@@ -99,9 +110,29 @@ Harvest only writes files; it never commits. So:
    lines) and may set `share_description` and `nicknames`. Anything else
    changed is not Harvest's doing — stop and ask.
 3. `node build.js` must pass. If it fails, the error names the file and field.
-4. Commit and push to `main` (standing rule: Robert approves shipping to main
-   without being asked). Then confirm the live site at
-   `https://rmaciel-work.netlify.app/` matches a fresh `dist/index.html`.
+4. Commit on a branch and merge it through a pull request — `main` refuses a
+   direct push (standing rule: Robert approves shipping without being asked).
+   A Harvest pull request left open by a refused merge is merged the same way.
+   Then confirm the live site at `https://rmaciel-work.netlify.app/` matches a
+   fresh `dist/index.html`.
+
+## Where a change is (UX-3, 2026-10-11)
+
+The project header says it for the project or page chosen, in both modes, and
+the Projects column says it in short under each name:
+
+| On screen | Means | Where it is kept |
+|---|---|---|
+| **Not saved:** edited fields, N new works, N works taken off, changes to the works, N kept pictures, N kept passages | what Save project would still write | `state.json` — `drafts` (typed fields, sent after a pause), `organize`, accepted findings |
+| **Saved on this Mac, not published** | in the project file, not on GitHub | the working copy, or a Harvest commit a refused merge left |
+| **Publishing… / Sent to GitHub, not merged / Merged; Netlify is building it / Merged, not confirmed live** | the last publish, per item | `state.publish` |
+| **Published** | none of the above | — |
+| **Held back** | apart from all of them: whether the site shows it | the file's `draft` |
+
+`S.unsaved` (server, `unsavedAll()`), `S.unpublished` (git, refreshed at start
+and after a publish) and `S.publish` feed it. "draft" on screen meant held back
+until UX-3; it is "held back" everywhere now, because a draft is also what
+unsaved fields are kept as.
 
 ## Where things live
 
@@ -282,11 +313,15 @@ fields it changed, so newer edits from GitHub survive. Icon/wordmark uploads wai
 `.../Harvest/uploads/` and are copied to `images/<slug>/<field>.<ext>` only on
 Save; a replaced or removed one's old file is deleted. The file chooser and
 confirm() need HarvestApp.swift's delegates — the app was rebuilt for them.
-Unsaved edits (2026-10-10): the project header shows **Unsaved changes**
-beside Save project (the panel's second button went with UX-2). Picking another
-project asks BEFORE switching; Cancel stays put. It used to ask after the list,
-header and works had moved, so Cancel left one project's details over another's
-works and every click asked again.
+Unsaved fields (UX-3, 2026-10-11) are KEPT, not asked about: the form is
+sent to `/api/draft` after a 400 ms pause (and on `pagehide`) as `{ base, now }`,
+and a project or page opened again puts back only the fields the draft
+changed, so a field edited on the phone since keeps its newer value. Switching
+project, mode, or quitting loses nothing, and nothing asks. Save project's own
+saves send `draft: true`, which drops it once written; **Discard unsaved
+fields** drops it after a confirm(). A right-click Rename or Hold back saves one
+field and leaves the draft be. An upload a draft names is not swept. Until
+UX-3 switching asked "Discard them?" every time.
 
 Edit › Content › **Kept text**: the project's kept passages in a column beside
 the fields. Click (or right-click) one for where it goes: a project field
