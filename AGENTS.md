@@ -258,7 +258,7 @@ understanding why it exists will reintroduce a solved bug.
 - **The taskbar rule.** Things have a fixed size; only the *count* adapts.
   Applied to the icon cell (`CELL_PX` 50), the wordmark (160 x 24), the
   stage (720, the first picture and an opened one alike), the thumbnail strip
-  (96 tall at most), a Collection's cell (200 cropped, a 160 row whole), and
+  (86 tall at most), a Collection's cell (200 cropped, a 160 row whole), and
   body copy (`--measure` 31em). Extra viewport
   becomes space, never a bigger element.
 - **The band is what says where a section ends.** The row always shows every
