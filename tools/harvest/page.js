@@ -1383,12 +1383,14 @@ async function loadProj() {
   // with the project while the header said ABOUT, and Save went to the
   // project (Codex's review of UX-2b, 2026-10-11). loadDoc() checks the same.
   const want = project;
+  flushNotes(); await notesSaving;   // notes typed a moment ago come back with the project
   let d;
   try { d = await api('/api/project?project=' + encodeURIComponent(want)); } catch (e) { if (project === want) tell('⚠ ' + e.message); return; }
   if (project !== want) return;
   pd = d;
   fillProj();
   if (d.draft) restoreDraft(d.draft);
+  drawNotes(want, d.notes);
 }
 function fillProj() {
   clearFieldErr();
@@ -1411,6 +1413,56 @@ function fillProj() {
   // what the form showed when loaded: Save sends only what differs from it
   pd.shown = formValues(); pd.shownBody = $('pbody').value;
 }
+/* ---- NOTES (Edit › Notes): the project's notes and to-do list, Harvest's
+   own (/api/notes in harvest.js) and never in the project file. Saved as
+   typed — 400 ms after the last key, at once for a tick, an add or a
+   removal — each save after the one before, so they arrive in order. Not a
+   draft: nothing here waits for Save project or counts as unsaved. */
+let notes = null, notesTimer = null, notesGo = null, notesSaving = Promise.resolve();
+function drawNotes(slug, n) {
+  notes = { project: slug, text: n?.text || '', todos: (n?.todos || []).map(t => ({ ...t })) };
+  $('nnotes').value = notes.text;
+  drawTodos();
+}
+function drawTodos() {
+  $('ntodos').innerHTML = notes.todos.map((t, i) => '<li data-i="' + i + '"' + (t.done ? ' class="done"' : '') + '>' +
+    '<input type="checkbox" aria-label="Done"' + (t.done ? ' checked' : '') + '><input value="' + esc(t.text) + '" aria-label="To-do">' +
+    '<button class="btn quiet" data-rm>Remove</button></li>').join('');
+  countTodos();
+}
+const countTodos = () => { const n = notes.todos.length; $('ncount').textContent = n ? notes.todos.filter(t => t.done).length + ' of ' + n + ' done' : ''; };
+function saveNotes(now) {
+  clearTimeout(notesTimer);
+  const b = JSON.parse(JSON.stringify(notes));
+  notesGo = () => { notesGo = null; notesSaving = notesSaving.then(() => api('/api/notes', b)).catch(e => tell('⚠ The notes were not kept: ' + e.message)); };
+  if (now) notesGo(); else notesTimer = setTimeout(notesGo, 400);
+}
+const flushNotes = () => { clearTimeout(notesTimer); if (notesGo) notesGo(); };
+addEventListener('pagehide', () => { if (notesGo) navigator.sendBeacon('/api/notes', JSON.stringify(notes)); });
+$('nnotes').addEventListener('input', () => { if (!notes) return; notes.text = $('nnotes').value; saveNotes(); });
+$('nadd').addEventListener('keydown', (e) => {
+  const text = $('nadd').value.trim();
+  if (e.key !== 'Enter' || e.isComposing || !text || !notes) return;
+  e.preventDefault();
+  notes.todos.push({ text, done: false }); $('nadd').value = '';
+  drawTodos(); saveNotes(true);
+});
+$('ntodos').addEventListener('input', (e) => {
+  if (e.target.type === 'checkbox') return;   // a tick is a change, below
+  notes.todos[e.target.closest('li').dataset.i].text = e.target.value; saveNotes();
+});
+$('ntodos').addEventListener('change', (e) => {
+  if (e.target.type !== 'checkbox') return;
+  const li = e.target.closest('li');
+  notes.todos[li.dataset.i].done = e.target.checked; li.classList.toggle('done', e.target.checked);
+  countTodos(); saveNotes(true);
+});
+$('ntodos').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-rm]')) return;
+  const i = +e.target.closest('li').dataset.i;
+  notes.todos.splice(i, 1); drawTodos(); saveNotes(true);
+  ($('ntodos').children[i]?.querySelector('[data-rm]') || $('nadd')).focus();   // the keyboard stays where it was
+});
 // follows the Section menu: it said #build beside a menu reading ART
 const addr = (section) => { $('paddr').textContent = 'Address #' + section + '/' + pd.slug + ' — permanent, it does not change with the title'; };
 /* ABOUT and CONTACT in the form. ABOUT is Content's title, detail lines and

@@ -285,6 +285,13 @@
   .fields > label { max-width:32em; }
   .fields [data-p=title] { font-size:16px; letter-spacing:.06em; }
   #proj textarea[data-p] { min-height:72px; }
+  /* NOTES: the to-do list — a tick, the words as a field, Remove. A done one
+     keeps its tick as the mark (tone is never the only signal) and greys out */
+  #nnotes { min-height:200px; font-size:13px; }
+  #ntodos { list-style:none; margin:4px 0 8px; padding:0; }
+  #ntodos li { display:flex; align-items:center; gap:8px; }
+  #ntodos li > input:not([type=checkbox]) { flex:1; margin-top:0; font-size:13px; }
+  #ntodos li.done > input:not([type=checkbox]) { color:var(--text-2); text-decoration:line-through; }
   #mdbar { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0 4px; }
   #mdbar b, #mdbar i, #mdbar u, #mdbar s { font-size:13px; }
   #mdlink { display:flex; gap:8px; align-items:center; margin:4px 0 8px; max-width:32em; }

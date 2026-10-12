@@ -2166,7 +2166,7 @@ const server = http.createServer(async (req, res) => {
       return json(Object.values(state.findings).filter(f => f.project === slug && (hidden || !f.cleared) && present(f.path)));
     }
     // with the draft, if the fields hold edits not saved: the page puts them back in the form
-    if (p === '/api/project' && req.method === 'GET') { const slug = url.searchParams.get('project'); return json({ ...projectData(slug), draft: state.drafts?.[slug] }); }
+    if (p === '/api/project' && req.method === 'GET') { const slug = url.searchParams.get('project'); return json({ ...projectData(slug), draft: state.drafts?.[slug], notes: state.notes?.[slug] }); }
     if (p === '/api/site' && req.method === 'GET') { const d = url.searchParams.get('doc'); return json({ ...siteDocData(d), draft: state.drafts?.['site:' + d] }); }
     if (p === '/api/publish/review') return json(await review());
     // a mark as it is, transparency and all: the site's own icons and wordmarks, and uploads waiting for Save
@@ -2265,6 +2265,17 @@ const server = http.createServer(async (req, res) => {
       const k = String(b.key || '');
       if (!/^(site:)?[a-z0-9-]+$/.test(k)) throw new Error('No such project.');
       if (b.now) (state.drafts ||= {})[k] = { base: b.base, now: b.now }; else dropDraft(k);
+      persist();
+      return json({ ok: true });
+    }
+    // NOTES (Edit › Notes): Robert's own notes and to-dos for a project. Kept
+    // here and nowhere else — the repository is public, so they never go
+    // into a project file, and neither Save project nor Publish reads them.
+    if (p === '/api/notes') {
+      const k = String(b.project || '');
+      if (!/^[a-z0-9-]+$/.test(k)) throw new Error('No such project.');
+      const text = String(b.text ?? ''), todos = (Array.isArray(b.todos) ? b.todos : []).map(t => ({ text: String(t?.text ?? ''), done: !!t?.done }));
+      if (text.trim() || todos.length) (state.notes ||= {})[k] = { text, todos }; else if (state.notes) delete state.notes[k];
       persist();
       return json({ ok: true });
     }
