@@ -317,6 +317,21 @@ The folder tree also lists pictures and readable documents, each with **Add**
 (`/api/addfile`): a picture goes into the selected project kept; a
 document is read as a job and its passages arrive pending (`from: 'manual'`).
 
+## Edit › Notes (built 2026-10-11)
+
+The tab after Settings: **Notes and comments** (one free text field) and a
+**To-do** list (tick, edit the words in place, Remove; Return in the last
+field adds one; "N of M done" beside the label). Robert's own, per project,
+in `state.notes[slug]` = `{ text, todos: [{ text, done }] }` — **never in the
+project file**, because the repository is public. `POST /api/notes` saves
+it; `GET /api/project` returns it as `notes`. Saved as typed (400 ms after
+the last key, at once for a tick, add or removal, a beacon on `pagehide`),
+so it is not a draft, Save project and Publish never read it, and it does
+not count as unsaved. The panel sits outside `#proj` for that reason:
+`#proj`'s input listener marks the project's fields edited. Hidden for
+ABOUT and CONTACT, like every tab. On this Mac only: deleting the Harvest
+folder deletes the notes with everything else.
+
 ## The project's fields — was the Project panel (built 2026-10-04)
 
 Edit › **Content** (title, detail lines, description), **Layout** (layout,

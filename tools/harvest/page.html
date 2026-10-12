@@ -122,7 +122,7 @@
          #proj (loadProj() fills it), and the pictures are the works in Images. -->
     <div id="edit">
       <p class="help" id="editempty">Pick a project at the left to edit it.</p>
-      <nav id="etabs" aria-label="Part of the project"><button class="btn tab" data-et="content">Content</button><button class="btn tab" data-et="images">Images</button><button class="btn tab" data-et="layout">Layout</button><button class="btn tab" data-et="settings">Settings</button><button class="btn quiet" id="textstoggle" aria-controls="texts" aria-expanded="false" hidden>Show kept text</button></nav>
+      <nav id="etabs" aria-label="Part of the project"><button class="btn tab" data-et="content">Content</button><button class="btn tab" data-et="images">Images</button><button class="btn tab" data-et="layout">Layout</button><button class="btn tab" data-et="settings">Settings</button><button class="btn tab" data-et="notes">Notes</button><button class="btn quiet" id="textstoggle" aria-controls="texts" aria-expanded="false" hidden>Show kept text</button></nav>
       <div id="proj">
         <div class="epanel" data-tab="content">
           <div class="fields">
@@ -199,6 +199,18 @@
           <button class="btn quiet" id="ounpick" disabled>Clear selection</button>
         </div>
         <div class="ibody"><div id="stacks"></div><div class="seam" data-right></div><aside id="wdetail" data-w="detail"></aside></div>
+      </div>
+      <!-- NOTES: Robert's own, kept by Harvest on this Mac and never written
+           to the project file (the repository is public). Outside #proj,
+           which is the project's FILE: saved as typed, so Save project,
+           drafts and the unsaved count never involve them. -->
+      <div class="epanel form" data-tab="notes">
+        <p class="help">Only for you, on this Mac. Never published, and saved as you type.</p>
+        <label>Notes and comments<textarea id="nnotes"></textarea></label>
+        <div class="field">To-do <span class="help" id="ncount"></span>
+          <ul id="ntodos"></ul>
+          <input id="nadd" placeholder="Add a to-do, then Return" aria-label="Add a to-do">
+        </div>
       </div>
     </div>
   </section>
