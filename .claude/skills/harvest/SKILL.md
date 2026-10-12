@@ -77,7 +77,8 @@ line was 0px wide.
    text is optional** (Robert, 2026-10-11; it used to stop the save): the
    check also lists the works without it, and the message after the save
    names them, each a link to its alt text field. build.js and Keystatic take
-   an empty alt; the site labels such a picture "Image 3 of 8". Each step is all-or-nothing; a
+   an empty alt; the site names such a picture by its caption, or "Image 3
+   of 8" with neither. Each step is all-or-nothing; a
    failure stops the rest and the line says what was saved first.
    **Publish…** opens a review: what goes, with what changed in each against
    GitHub's copy, and what stays behind because it is not saved. Publish then
