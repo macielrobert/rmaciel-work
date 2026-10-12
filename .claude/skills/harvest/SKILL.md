@@ -70,13 +70,14 @@ line was 0px wide.
    header and only in Edit — Collect finds and sorts, it does not write;
    Publish is top right). Save is ONE button for three writes, in this order:
    the project's fields if they hold edits (build-checked), the works (second
-   click if pictures come off the site; every kept work needs alt text or it
-   stops there — and then that work is selected in Images with its alt text
-   field marked), then kept text not placed elsewhere (`/api/write`). Before
-   any of them (UX-3) `/api/organize/check` asks what would stop the works —
-   EVERY work without alt text (the line links to each, nothing is written), a
-   turned GIF, pictures coming off the site (the second click) — so none of it
-   arrives after the fields were written. Each step is all-or-nothing; a
+   click if pictures come off the site), then kept text not placed elsewhere
+   (`/api/write`). Before any of them (UX-3) `/api/organize/check` asks what
+   would stop the works — a turned GIF, pictures coming off the site (the
+   second click) — so none of it arrives after the fields were written. **Alt
+   text is optional** (Robert, 2026-10-11; it used to stop the save): the
+   check also lists the works without it, and the message after the save
+   names them, each a link to its alt text field. build.js and Keystatic take
+   an empty alt; the site labels such a picture "Image 3 of 8". Each step is all-or-nothing; a
    failure stops the rest and the line says what was saved first.
    **Publish…** opens a review: what goes, with what changed in each against
    GitHub's copy, and what stays behind because it is not saved. Publish then

@@ -448,7 +448,12 @@ function buildImages(p, label) {
     const where = `${label}: image ${i + 1}`;
     if (!im || typeof im !== 'object') fail(`${where} is not an object`);
     const src = need(im, 'src', where);
-    const alt = need(im, 'alt', where);
+    // OPTIONAL since 2026-10-11 (Robert): a picture can go up before its alt
+    // text is written. The site names one without it "Image 3 of 8" for a
+    // screen reader, and Harvest says which works have none every time the
+    // project is saved — the gap stays in sight, it just no longer stops the
+    // build. It used to be fatal (keystatic.config.tsx has the history).
+    const alt = String(im.alt ?? '').trim();
     const rec = { src, ratio: measure(src, where), alt };
     if (im.caption && String(im.caption).trim()) rec.caption = String(im.caption).trim();
     return rec;

@@ -108,7 +108,7 @@ async function chooseProject(slug) {
   if (!await leaveForm(slug)) return false;
   save();   // anything typed on the previous project goes before its cards do
   project = slug; doc = null; markDocs(); tell(''); remember('pick', slug);
-  shown = 100; ocur = null; altErrs.clear();
+  shown = 100; ocur = null;
   $('psrc').value = '';   // sources differ per project; the search text carries over
   drawProjects(); buttons(); nameProject();
   if (view === 'edit') loadOrg(); else loadFindings();
@@ -142,7 +142,7 @@ $('sitedocs').addEventListener('click', async (e) => {
   const r = e.target.closest('[data-doc]'); if (!r) return;
   if (!await leaveForm('site:' + r.dataset.doc)) return;
   save();   // anything typed on a card goes first, as when switching project
-  doc = r.dataset.doc; project = null; tell(''); ocur = null; altErrs.clear(); disarm(); remember('pick', 'site:' + doc);
+  doc = r.dataset.doc; project = null; tell(''); ocur = null; disarm(); remember('pick', 'site:' + doc);
   drawProjects(); markDocs(); buttons(); nameProject();
   view = 'edit'; loadOrg();
 });
@@ -591,7 +591,6 @@ const KIND_LABEL = { site: 'On the site', web: 'Old website', file: 'File' };
 const opick = new Set();   // selected works, kept across redraws and between List and Grid
 let ocur = null;           // the work in the details panel: the one clicked last
 let oshown = [];           // the works drawn now, after the find box and Show removed
-const altErrs = new Set(); // works Save project stopped for, for their alt text, until each has some
 // Grid by default: the details panel is what makes it the overview. A new key
 // rather than the old one, so a List remembered from before the panel
 // existed does not hide it.
@@ -610,7 +609,7 @@ function orgPicks() {
   $('orgremove').textContent = n && ticked.every(t => t.removed) ? 'Restore' : 'Remove';
   $('orgmove').disabled = $('ounpick').disabled = !n;
 }
-const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '') + (altErrs.has(t.id) ? ' · needs alt text' : '');
+const tileLabel = (t) => t.n + (t.members.length > 1 ? ' · ' + t.members.length + ' copies' : '') + (t.removed ? ' · removed' : '') + (t.rotate ? ' · turned ' + t.rotate + '°' : '');
 function orgLook() {
   document.querySelectorAll('#orgviews [data-ov]').forEach(b => b.classList.toggle('on', b.dataset.ov === orgView));
   document.querySelectorAll('#orgsizes [data-cell]').forEach(b => b.classList.toggle('on', b.dataset.cell === orgCell));
@@ -650,7 +649,6 @@ const keeper = (t) => t.members.find(m => m.key === t.keeper) || t.members[0];
 function stackHTML(t, panel) {
   const k = keeper(t);
   const info = (m) => [KIND_LABEL[m.kind], m.w && m.w + '×' + m.h, m.taken].filter(Boolean).join(' · ');
-  const err = altErrs.has(t.id) && !String(t.alt || '').trim();
   return '<div class="stack' + (t.removed ? ' removed' : '') + '" data-id="' + t.id + '">' +
     '<div><div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
     '<div class="turns"><button class="btn quiet" data-op="rotate" data-dir="-1">↺ Turn left</button><button class="btn quiet" data-op="rotate" data-dir="1">↻ Turn right</button>' + (t.rotate ? '<span class="help">turned ' + t.rotate + '° — applied on Save</span>' : '') + '</div>' +
@@ -662,8 +660,7 @@ function stackHTML(t, panel) {
     '<div class="top">' + (panel ? '' : '<input type="checkbox" class="spick" aria-label="Select work ' + t.n + '"' + (opick.has(t.id) ? ' checked' : '') + '>') + '<b>' + t.n + '</b>' +
     '<button class="btn quiet" data-op="move" data-dir="-1" title="Earlier in the order">↑ Earlier</button><button class="btn quiet" data-op="move" data-dir="1" title="Later in the order">↓ Later</button>' +
     '<button class="btn quiet" data-op="remove">' + (t.removed ? 'Restore' : 'Remove from project') + '</button></div>' +
-    '<label' + (err ? ' class="err"' : '') + '>Alt text — required<input data-f="alt" placeholder="What is in the picture, in words" value="' + esc(t.alt) + '"></label>' +
-    (err ? '<div class="errmsg">Add alt text: what is in the picture, in words. Save project stops until every work has it.</div>' : '') +
+    '<label>Alt text<input data-f="alt" placeholder="What is in the picture, in words" value="' + esc(t.alt) + '"></label>' +
     '<label>Caption<textarea data-f="caption" placeholder="Title, year, medium, size…">' + esc(t.caption) + '</textarea></label>' +
     (t.maybe.length ? '<div class="chips">' + t.maybe.map(x => '<span><button class="btn quiet chip" data-merge="' + x.id + '">Same work as #' + x.n + '? Merge</button> <button class="btn quiet chip" data-apart="' + x.id + '">Not the same</button></span>').join('') + '</div>' : '') +
     (t.suggest.length ? '<div class="chips"><span class="help">Suggested captions — click one to add it</span>' + t.suggest.map(x => '<button class="btn quiet chip" data-sug="' + esc(x.text) + '"><i>' + esc(x.from) + '</i>' + esc(x.text.length > 220 ? x.text.slice(0, 220) + '…' : x.text) + '</button>').join('') + '</div>' : '') +
@@ -687,7 +684,7 @@ function drawOrg() {
   if (orgView === 'grid' && oshown.length) {
     $('stacks').innerHTML = oshown.map(t => {
       const k = keeper(t);
-      return '<div class="tile' + (t.removed ? ' removed' : '') + (altErrs.has(t.id) ? ' err' : '') + (opick.has(t.id) ? ' on' : '') + (t.id === ocur ? ' cur' : '') + '" tabindex="0" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to select, ⌘-click to add to the selection, drag to reorder">' +
+      return '<div class="tile' + (t.removed ? ' removed' : '') + (opick.has(t.id) ? ' on' : '') + (t.id === ocur ? ' cur' : '') + '" tabindex="0" draggable="true" data-id="' + t.id + '" title="' + esc(k.name) + ' — click to select, ⌘-click to add to the selection, drag to reorder">' +
         '<div class="keep" style="--turn:' + t.rotate + 'deg">' + thumb(k.thumb) + '</div>' +
         '<input type="checkbox" class="spick" tabindex="-1" aria-label="Select work ' + t.n + '"' + (opick.has(t.id) ? ' checked' : '') + '>' +
         '<div class="under"><small>' + tileLabel(t) + '</small>' +
@@ -831,12 +828,6 @@ $('images').addEventListener('input', (e) => {
   const f = e.target.dataset.f; if (!f) return;
   const stack = e.target.closest('.stack').dataset.id, value = e.target.value;
   const t = org.stacks.find(x => x.id === stack); t[f] = value;
-  // the error goes as soon as there is something to save
-  if (f === 'alt' && altErrs.has(stack) && value.trim()) {
-    altErrs.delete(stack); e.target.parentElement.classList.remove('err'); e.target.parentElement.nextElementSibling?.classList.contains('errmsg') && e.target.parentElement.nextElementSibling.remove();
-    const tile = document.querySelector('#stacks .tile[data-id="' + stack + '"]');
-    if (tile) { tile.classList.remove('err'); tile.querySelector('small').textContent = tileLabel(t); }
-  }
   clearTimeout(e.target._t); e.target._t = setTimeout(() => orgOp({ op: 'field', stack, field: f, value }, false), 400);
 });
 $('orgmerge').addEventListener('click', async () => {
@@ -927,19 +918,14 @@ $('orgwrite').addEventListener('click', async () => {
   for (const el of document.querySelectorAll('#images [data-f]')) if (el._t) { clearTimeout(el._t); el._t = null; await orgOp({ op: 'field', stack: el.closest('.stack').dataset.id, field: el.dataset.f, value: el.value }, false); }
   flushDraft(); await save();
   const b = $('orgwrite'), confirm = b.dataset.armed === project, done = [];
-  let msg = '', html = '', step = 'check';
+  let msg = '', html = '', step = 'check', noAlt = [];
   busy(1);
   try {
     if (!doc && org && org.stacks.length) {
       const c = await api('/api/organize/check', { project });
-      altErrs.clear(); c.missing.forEach(m => altErrs.add(m.id));
-      if (c.missing.length) {
-        // the summary links to each work; the first is opened with its field marked
-        ocur = c.missing[0].id; opick.clear(); opick.add(ocur); showTab('images');
-        msg = '⚠ Nothing was saved: ' + plural(c.missing.length, 'work needs', 'works need') + ' alt text — what is in the picture, in words.';
-        html = esc(msg) + ' ' + c.missing.map(m => '<button class="btn quiet" data-work="' + m.id + '">Work ' + m.n + '</button>').join(' ');
-        return;
-      }
+      // Alt text no longer stops a save (Robert, 2026-10-11). Which works have
+      // none is said after it, with a link to each, so the gap stays in sight.
+      noAlt = c.missing;
       if (c.problem) throw new Error(c.problem);
       if (c.drop && !confirm) {
         b.dataset.armed = project;
@@ -968,12 +954,13 @@ $('orgwrite').addEventListener('click', async () => {
     if (w.written) done.push(plural(w.written, 'passage', 'passages'));
     delete b.dataset.armed; b.textContent = 'Save project';
     msg = done.length ? 'Saved ' + done.join(', ') + ' on this Mac. Not on the site until you publish.' : 'Nothing new to save.';
+    if (noAlt.length) {
+      msg += ' ' + plural(noAlt.length, 'work has', 'works have') + ' no alt text yet:';
+      html = esc(msg) + ' ' + noAlt.map(m => '<button class="btn quiet" data-work="' + m.id + '">Work ' + m.n + '</button>').join(' ');
+    }
   } catch (e) {
     // what did not happen, what did: "Saved X on this Mac, then stopped", or nothing at all
     msg = '⚠ ' + (done.length ? 'Saved ' + done.join(', ') + ' on this Mac, then stopped: ' : 'Nothing was saved: ') + e.message.replace(/^Not saved(:| —) /, '');
-    // a missing alt text is a FIELD's error: drawn beside that field, the work selected and open
-    const n = +(e.message.match(/^Work (\d+) needs alt text/) || [])[1], t = n && org && org.stacks[n - 1];
-    if (t) { altErrs.add(ocur = t.id); opick.clear(); opick.add(t.id); showTab('images'); }
     if (step === 'details' && (ferr = fieldErrOf(e.message))) msg = '⚠ Nothing was saved: the site would not build. The field marked below says what it needs.';
   }
   finally {
@@ -984,13 +971,12 @@ $('orgwrite').addEventListener('click', async () => {
     if (!pdDirty) pd = null;
     await loadOrg();   // first: reloading clears the message line
     tell(msg, html);
-    if (altErrs.size) document.querySelector('#images label.err input')?.focus();   // label: a marked tile holds a checkbox
     if (ferr) markFieldErr();
     busy(-1);
   }
 });
 const orgWrite = {};
-// the save summary's links: each one opens that work with its alt text field
+// the save message's links to works without alt text: each one opens that work with its alt text field
 $('orgmsg').addEventListener('click', (e) => {
   const w = e.target.closest('[data-work]'); if (!w || !org) return;
   ocur = w.dataset.work; opick.clear(); opick.add(ocur); showTab('images'); drawOrg();

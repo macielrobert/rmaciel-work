@@ -1884,9 +1884,10 @@ async function turn(src, deg) {
 }
 
 /* WHAT WOULD STOP THE WORKS' SAVE, found before anything is written (UX-3):
-   Save project asks this first, so a missing alt text no longer arrives after
-   the project's fields were already saved — and names EVERY work that needs
-   one, not the first. The save asks again, for anything changed since. */
+   Save project asks this first, so a problem no longer arrives after the
+   project's fields were already saved. The save asks again, for anything
+   changed since. `missing` (works without alt text) no longer stops it
+   (Robert, 2026-10-11): Save says which they are, and saves. */
 async function worksCheck(slug) {
   const o = state.organize?.[slug];
   if (!o) throw new Error('Open the project in Edit first.');
@@ -1909,8 +1910,7 @@ async function worksCheck(slug) {
 async function saveOrganize(slug, confirmed) {
   if (!state.organize?.[slug]) throw new Error('Open the project in Edit first.');
   await catchUp();
-  const { o, byKey, keep, n, missing, problem, file, data, body, dropped } = await worksCheck(slug);
-  if (missing.length) throw new Error(`Work ${n(missing[0])} needs alt text — what is in the picture, in words, not a filename.`);
+  const { o, byKey, keep, n, problem, file, data, body, dropped } = await worksCheck(slug);
   if (problem) throw new Error(problem);
   if (dropped.length && !confirmed) return { confirm: dropped.length };
 
@@ -1926,7 +1926,7 @@ async function saveOrganize(slug, confirmed) {
         src = await importImage(m.path, slug, n, m.w, m.h);
       }
       if (t.rotate) src = await turn(src, t.rotate);
-      const rec = { src, alt: t.alt.trim() };
+      const rec = { src, alt: String(t.alt || '').trim() };   // empty until written: build.js and the site take that (see build.js)
       if (String(t.caption || '').trim()) rec.caption = t.caption.trim();
       images.push(rec);
     }
@@ -2419,8 +2419,7 @@ async function previewWorks(slug) {
       src = `/images/${slug}/${PREVIEW_DIR}/${i}${ext(f)}`;
       files.push([src, f]);
     }
-    // build.js wants alt text and Save asks for it; a preview does not stop for it
-    const rec = { src, alt: String(t.alt || '').trim() || 'Alt text to come' };
+    const rec = { src, alt: String(t.alt || '').trim() };   // as Save writes it, empty or not
     if (String(t.caption || '').trim()) rec.caption = t.caption.trim();
     return rec;
   }));
