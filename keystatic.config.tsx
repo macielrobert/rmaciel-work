@@ -305,7 +305,14 @@ export default config({
           description:
             "The client's spelled-out mark, shown small with the detail lines. Transparent PNG or SVG; it is drawn in the site's ink. It never takes a picture's place.",
         }),
-        /* ALT IS REQUIRED, AND THE EDITOR IS THE PLACE TO SAY SO.
+        /* ALT IS OPTIONAL SINCE 2026-10-11 (Robert): a picture can be saved and
+           published before its alt text is written. NOISE's alt text is meant
+           to be a work of its own, and it should not hold the pictures back.
+           The site labels a picture without one "Image 3 of 8"; Harvest names
+           the works without it each time a project is saved. The reasoning
+           below, which made it required, is kept for the record.
+
+           WAS: ALT IS REQUIRED, AND THE EDITOR IS THE PLACE TO SAY SO.
 
            build.js treats a missing `alt` as fatal: it is the only description
            a screen reader ever gets, and an image without one is a hole in the
@@ -337,10 +344,7 @@ export default config({
               publicPath: '/images/',
               validation: { isRequired: true },
             }),
-            alt: fields.text({
-              label: 'Alt text',
-              validation: { isRequired: true },
-            }),
+            alt: fields.text({ label: 'Alt text' }),
             caption: fields.text({ label: 'Caption' }),
           }),
           { label: 'Images', itemLabel: (p) => p.fields.alt.value || 'Image' },

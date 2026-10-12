@@ -245,15 +245,16 @@ The rules behind the table:
   in 12px `--text-2`.
 - The underline is 1px `--edge` at rest and ink on hover. On focus it doubles
   to 2px, drawn as a shadow so nothing below it moves.
-- **A required field says so in its label** ("Alt text — required"), not with
-  an asterisk.
+- **A required field says so in its label** ("Grid icon — required to go on
+  the site"), not with an asterisk.
 - **An error** doubles the line in ink. Under the field goes a small solid
   square and a sentence in ink that says what to do, not what went wrong: "Add
   an icon. A project can't go on the site without one." It appears beside the
   field it belongs to. **The summary at the point of saving** (LIVE, UX-3)
   says in the project header what did not happen and links to each item that
-  stopped it — "Nothing was saved: 3 works need alt text — Work 1, Work 2,
-  Work 3" — and a field build.js refused opens on its tab, marked.
+  stopped it, and a field build.js refused opens on its tab, marked. What is
+  missing but stops nothing is said after the save the same way — "2 works
+  have no alt text yet: Work 1, Work 3" — each a link to the field.
 
 ## Empty places, work in progress, messages
 

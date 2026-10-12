@@ -92,8 +92,9 @@ Keystatic. None of it blocks writing content; all of it blocks launch.
 - [ ] Real icons and wordmarks. **Transparent PNG or SVG with real
       counterforms** — alpha is the shape, so an opaque PNG or any JPG bakes
       as a solid block. Request the mark, not the lockup.
-- [ ] Alt text on every image (the CMS requires it, so this is really a
-      quality check, not a completeness one)
+- [ ] Alt text on every image. Optional since 2026-10-11 — a picture can go
+      up without it — so this is a completeness check again: Harvest names
+      the works without alt text each time a project is saved
 - [ ] Real ABOUT copy
 - [ ] **Combinatorial layout test with the real copy** — a one-line summary and
       an over-long title, in every layout, both orientations. This is the class
