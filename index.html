@@ -624,10 +624,14 @@
     /* under a stage that flexes, the caption is bounded instead: four lines */
     #nl-exp-cap { flex: 0 0 auto; max-height: calc(6em + 8px); }
     #nl-window.l-standard #nl-hero-col { display: none; }
+    /* STRETCHED to its row, not `height: 100%`. WebKit (Safari, the iPhone,
+       Harvest's preview) resolves a percentage height on this grid item
+       against the whole window rather than its row, so a portrait picture
+       ran on under the strip; Chrome got it right, which is why it hid. */
     #nl-window.l-standard:not(.x) #nl-hero {
       display: block;
       grid-column: 1; grid-row: 1;
-      width: 100%; height: 100%;
+      align-self: stretch; justify-self: stretch; min-height: 0;
       max-width: var(--hero-max); max-height: var(--hero-max);
       object-fit: contain; object-position: left top;
     }
@@ -1634,7 +1638,7 @@
   // to the picture. STAGE_FRAC is the tallest a picture may be in portrait,
   // as a share of the window, so the title above it and the caption or copy
   // under it keep room. Both are written as CSS variables by setWinVars().
-  const CAR_H_MAX  = 96;        // px
+  const CAR_H_MAX  = 86;        // px — 96 until 2026-10-11 (Robert: thumbs ~10% shorter)
   const STAGE_FRAC = 0.6;
 
   // GRID REORGANISATION (see NOTES-GRID-MOTION.md). A section switch displaces
