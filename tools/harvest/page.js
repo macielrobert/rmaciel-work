@@ -956,7 +956,8 @@ $('orgwrite').addEventListener('click', async () => {
     msg = done.length ? 'Saved ' + done.join(', ') + ' on this Mac. Not on the site until you publish.' : 'Nothing new to save.';
     if (noAlt.length) {
       msg += ' ' + plural(noAlt.length, 'work has', 'works have') + ' no alt text yet:';
-      html = esc(msg) + ' ' + noAlt.map(m => '<button class="btn quiet" data-work="' + m.id + '">Work ' + m.n + '</button>').join(' ');
+      // the first three, linked; a link per work filled four lines for thirty
+      html = esc(msg) + ' ' + noAlt.slice(0, 3).map(m => '<button class="btn quiet" data-work="' + m.id + '">Work ' + m.n + '</button>').join(', ') + (noAlt.length > 3 ? ' and ' + (noAlt.length - 3) + ' more.' : '.');
     }
   } catch (e) {
     // what did not happen, what did: "Saved X on this Mac, then stopped", or nothing at all
