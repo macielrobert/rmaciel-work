@@ -4442,16 +4442,20 @@ void main() {
           };
           probe.src = thumbURL(im, PROBE_W);
         }
+        // A picture without alt text is named by its CAPTION (Robert,
+        // 2026-10-11: alt text is optional, and for abstract work the title,
+        // year and medium say what a description cannot); only a picture with
+        // neither is "Image 3 of 8".
         if (en.expand === false) {
           // not a control — it opens nothing. No button role, no tab stop,
           // no pointer: the picture is the presentation, not a door.
           ph.classList.add('static');
           ph.setAttribute('role', 'img');
-          ph.setAttribute('aria-label', im.alt || ('Image ' + (k + 1)));
+          ph.setAttribute('aria-label', im.alt || im.caption || ('Image ' + (k + 1)));
         } else {
           ph.setAttribute('role', 'button');
           ph.setAttribute('tabindex', '0');
-          ph.setAttribute('aria-label', im.alt || ('Image ' + (k + 1) + ' of ' + en.images.length));
+          ph.setAttribute('aria-label', im.alt || im.caption || ('Image ' + (k + 1) + ' of ' + en.images.length));
           ph.addEventListener('click', () => thumbTap(i, k));
           // TIER 3: the full-size picture starts on the way DOWN. The tap
           // commits on the way up, and that gap is the head start. A swipe
@@ -4745,7 +4749,7 @@ void main() {
     const en = winEntries[winActive], im = en.images[k];
     expIdx = k;
     expImg.src = sized(im.src, EXPAND_W);
-    expImg.alt = im.alt || '';
+    expImg.alt = im.alt || '';   // no alt: the caption printed under it is read instead — once, not twice
     // the box has the picture's shape before it arrives (portrait sizes by it)
     expImg.style.aspectRatio = im.ratio ? im.ratio[0] + ' / ' + im.ratio[1] : '';
     expCap.textContent = im.caption || '';
