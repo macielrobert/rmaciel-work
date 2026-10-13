@@ -636,14 +636,41 @@
       object-fit: contain; object-position: left top;
     }
 
-    /* expanded overrides */
-    #nl-window.x { grid-template-rows: auto minmax(0, 1fr) var(--car-h, 25%); }
-    #nl-window.x #nl-expand { display: contents; }
-    #nl-window.x #nl-exp-top   { grid-column: 2; grid-row: 1; }
-    #nl-window.l-standard.x #nl-exp-cap { grid-column: 2; grid-row: 2; align-self: start;
-                                 max-height: 100%; padding-top: 0; }
-    #nl-window.x #nl-exp-stage { grid-column: 1; grid-row: 1 / span 2; }
-    #nl-window.x #nl-car       { grid-row: 3; }
+    /* THE PICTURE VIEW (Robert, 2026-10-12): opening a picture changes the
+       PICTURE and nothing else. The right column keeps the title, facts and
+       description, and the caption of whichever picture is up sits at the
+       column's foot, beside the strip, as "← caption": the arrow points at
+       the picture it describes. One grid in both views — [picture | words]
+       over [strip | caption] — so the overview's first picture has its
+       caption there too.
+       Until then opening a picture swapped the whole column for "← TITLE"
+       and the caption, so clicking through the strip hid the words about the
+       work. That ← went back to the overview; it is not drawn here, because
+       the two views now differ only in which picture is up — a thumb moves
+       between them, and Esc still pops a level. The phone's picture view, a
+       column of its own, is unchanged. The other layouts never get here:
+       Text has no pictures, and Collection is a flex column (above). */
+    #nl-window.l-standard #nl-window-text { grid-row: 1; }   /* row 2 is the caption's */
+    #nl-window.l-standard.x #nl-window-text { display: block; }
+    #nl-window.l-standard #nl-expand { display: contents; }
+    #nl-window.l-standard:not(.x) #nl-exp-stage,
+    #nl-window.l-standard #nl-exp-top { display: none; }
+    #nl-window.l-standard.x #nl-exp-stage { grid-column: 1; grid-row: 1; }
+    /* TOP-aligned with the strip, as the words are with the picture, so the
+       arrow holds still while you click through captions of any length. The
+       12px is the strip's own: #nl-car's `margin: 12px 0 0` comes later in
+       this file than the `margin: 0` above meant to cancel it, so it wins and
+       the strip sits 12px into its row. Matched rather than fixed, because
+       fixing it moves the strip, which nobody asked for. */
+    #nl-window.l-standard #nl-exp-cap {
+      grid-column: 2; grid-row: 2; align-self: start;
+      margin-top: 12px;
+      display: flex; gap: 8px;                 /* a long caption wraps clear of the arrow */
+      max-height: 100%; padding-top: 0;
+    }
+    /* the arrow is a pointer, not a control and not words: kept from screen
+       readers by the empty alternative, where the browser knows the syntax */
+    #nl-window.l-standard #nl-exp-cap::before { content: '\2190'; content: '\2190' / ''; }
   }
 
   /* ------------------------------------------------- the sibling row
@@ -4622,8 +4649,20 @@ void main() {
     return (en && en.layout === 'standard' && en.images && en.images.length)
       ? sized(en.images[0].src, HERO_W) : null;
   }
+  // THE CAPTION of the picture that is up: under it on a phone, at the foot
+  // of the words on a wide screen, where the overview's first picture has
+  // one too (see "THE PICTURE VIEW"). STATIC: shown iff the record has one.
+  const capEl = document.getElementById('nl-exp-cap');
+  function showCap(im) {
+    capEl.textContent = (im && im.caption) || '';
+    capEl.style.visibility = im && im.caption ? 'visible' : 'hidden';
+  }
+  // the wide Project layout keeps its words up while a picture is open
+  const landscapeMQ = matchMedia('(orientation: landscape)');
+  const wordsStay = () => landscapeMQ.matches && winEl.classList.contains('l-standard');
   function applyHero(en) {
     const url = heroURL(en);
+    showCap(url && en.images[0]);
     const r = url && en.images[0].ratio;
     for (const el of [heroEl, heroColEl]) {
       if (url) el.src = url; else el.removeAttribute('src');
@@ -4740,12 +4779,14 @@ void main() {
   //   tap the ACTIVE thumb / <- -> collapse (back to the project overview)
   //   tap another thumb         -> jump
   //   Escape                    -> pops one level (image, then window)
+  // On a wide screen the Project layout keeps its words up and only the
+  // picture changes (wordsStay(), "THE PICTURE VIEW" in the CSS): no ←, and
+  // tapping the active thumb does nothing.
   // Everything this view shows comes from the entry's image RECORD:
   // src, alt, caption — the same record the thumb was built from.
   const expHd    = document.getElementById('nl-exp-hd');
   const expStage = document.getElementById('nl-exp-stage');
   const expImg   = document.getElementById('nl-exp-img');
-  const expCap   = document.getElementById('nl-exp-cap');
   let xMix = 0, xTarget = 0, xDirty = true;
   let expIdx = 0;
 
@@ -4756,9 +4797,7 @@ void main() {
     expImg.alt = im.alt || '';   // no alt: the caption printed under it is read instead — once, not twice
     // the box has the picture's shape before it arrives (portrait sizes by it)
     expImg.style.aspectRatio = im.ratio ? im.ratio[0] + ' / ' + im.ratio[1] : '';
-    expCap.textContent = im.caption || '';
-    // STATIC caption: visible iff this image has content — no interaction
-    expCap.style.visibility = im.caption ? 'visible' : 'hidden';
+    showCap(im);
     en.thumbs.forEach((t, j) => t.classList.toggle('on', j === k));
     en.thumbs[k].scrollIntoView({ block: 'nearest', inline: 'nearest' });
     // TIER 4: one swipe either way (it wraps) is already in hand when it
@@ -4789,6 +4828,7 @@ void main() {
   }
   function collapseExpand() {
     const en = winEntries[winActive];
+    showCap(en.images && en.images[0]);        // the overview's picture is the first
     if (en.car) en.car.classList.remove('expanded');
     en.thumbs && en.thumbs.forEach(t => t.classList.remove('on'));
     xTarget = 0;
@@ -4803,7 +4843,11 @@ void main() {
     if (i !== winActive) return;                // strip is only visible for the active entry
     if (winEntries[i].expand === false) return; // this entry's images don't open
     if (xTarget === 1) {
-      if (k === expIdx) { collapseExpand(); syncRoute(false); }   // tap the coherent thing -> dissolve
+      if (k === expIdx) {                       // tap the coherent thing -> dissolve,
+        if (wordsStay()) return;                // except where that would only put the
+                                                // first picture back under the same words
+        collapseExpand(); syncRoute(false);
+      }
       else setExpandIndex(k);                   // jump (hard cut)
     } else expandTo(k);
   }
@@ -4812,7 +4856,8 @@ void main() {
     const was = winEl.classList.contains('x');
     winEl.classList.toggle('x', on);            // display swap: text view <-> expand view
     if (was && !on) returnToPlace(winEntries[winActive]);   // the grid is back
-    if (churnOff() || on) return;   // no churn -> the display swap is the whole move
+    if (churnOff() || on || wordsStay()) return;   // no churn -> the display swap is the whole move;
+                                                    // words that stay up have nothing to churn
     churn(winEntries[winActive].spans, Math.max(0, 1 - xe * 2), moving);
   }
 

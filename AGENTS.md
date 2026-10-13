@@ -228,7 +228,11 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
    back on brings that back — give the split copy a plain twin for screen
    readers in the same change.
 5. **Image expand.** In-flow view swap inside the window; swipe to navigate;
-   two-scope exits (`←` local, `×` global).
+   two-scope exits (`←` local, `×` global). **Except the Project layout on a
+   wide screen** (Robert, 2026-10-12): there opening a picture changes only
+   the picture — the words stay, the caption sits at their foot beside the
+   strip as `← caption`, and there is no `←` control (Esc still pops a
+   level). `wordsStay()` in `index.html`, "THE PICTURE VIEW" in its CSS.
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
    shader uniform recolor everything. The greys are neither, and nothing
    theme-swaps them: `--text-2` (117,117,126) is the grey of WORDS, the one
