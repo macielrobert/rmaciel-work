@@ -231,7 +231,7 @@ commits end in `[skip ci]`. All content, publishing, and DNS holds still apply.
    two-scope exits (`←` local, `×` global). **Except the Project layout on a
    wide screen** (Robert, 2026-10-12): there opening a picture changes only
    the picture — the words stay, the caption sits at their foot beside the
-   strip as `← caption`, and there is no `←` control (Esc still pops a
+   strip as `↖ caption`, and there is no `←` control (Esc still pops a
    level). `wordsStay()` in `index.html`, "THE PICTURE VIEW" in its CSS.
 6. **Theme.** Follows device `prefers-color-scheme`. Two CSS variables plus one
    shader uniform recolor everything. The greys are neither, and nothing

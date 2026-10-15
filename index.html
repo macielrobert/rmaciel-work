@@ -639,8 +639,8 @@
     /* THE PICTURE VIEW (Robert, 2026-10-12): opening a picture changes the
        PICTURE and nothing else. The right column keeps the title, facts and
        description, and the caption of whichever picture is up sits at the
-       column's foot, beside the strip, as "← caption": the arrow points at
-       the picture it describes. One grid in both views — [picture | words]
+       column's foot, beside the strip, as "↖ caption": the arrow points at
+       the picture it describes, which is up and to the left of it. One grid in both views — [picture | words]
        over [strip | caption] — so the overview's first picture has its
        caption there too.
        Until then opening a picture swapped the whole column for "← TITLE"
@@ -669,8 +669,10 @@
       max-height: 100%; padding-top: 0;
     }
     /* the arrow is a pointer, not a control and not words: kept from screen
-       readers by the empty alternative, where the browser knows the syntax */
-    #nl-window.l-standard #nl-exp-cap::before { content: '\2190'; content: '\2190' / ''; }
+       readers by the empty alternative, where the browser knows the syntax.
+       ↖ (Robert, 2026-10-14; it was ←), the typeface's own: measured in it
+       whatever the fallback, unlike the caret's two codepoints (see there) */
+    #nl-window.l-standard #nl-exp-cap::before { content: '\2196'; content: '\2196' / ''; }
   }
 
   /* ------------------------------------------------- the sibling row
