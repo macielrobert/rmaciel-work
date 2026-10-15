@@ -281,7 +281,7 @@ order in every layout. A Project's pictures have one place, the stage — the
 left column on a wide screen, under the title on a phone — and an opened
 picture is drawn exactly where the first one was. Pictures, like text, start
 at the left edge of their column. On a wide screen a Project's caption sits
-at the foot of the words, level with the strip, as `← caption` in the text
+at the foot of the words, level with the strip, as `↖ caption` in the text
 grey: the arrow points at the picture it describes (2026-10-12).
 
 **Harvest:** each kind of control has one home. This is the plan's table;
