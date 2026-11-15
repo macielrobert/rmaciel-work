@@ -1209,6 +1209,74 @@ plays in every browser as-is; what it gives up is the quality switching.
 
 ---
 
+## LATER — Instagram feed page (planned 2026-11-09, not started)
+
+**The ask** (a handoff from another thread): a page that recreates the
+Instagram feed as a photo grid, reached by a `&` on the right of the footer.
+No likes, comments, follower counts or Instagram branding. Source: the
+Instagram data export (JSON, high quality), every `posts_N.json` merged,
+newest first. Captions sit in `title`, on the media item or on the post for
+carousels; every string needs the export's encoding fix
+(`s.encode('latin-1').decode('utf-8')`, skipped if it fails). Three tiles per
+row at every width, about 3px apart, square crops. A small mark in the corner
+for carousels and videos. A tap opens the picture at its own shape with the
+caption (line breaks kept, links clickable, hashtags and @mentions plain) and
+the date. Arrows or a swipe step through a carousel, Shift+arrows or buttons
+go to the next post, Esc closes. Room for a header (name and short bio).
+Re-running after a new export skips what is already done. Report the post
+count and any entries that failed to read.
+
+**How it fits — answered before building:**
+
+- [ ] **Harvest is not involved.** Harvest curates loose files into
+      projects; the feed was curated when it was posted. Thousands of posts
+      through Harvest or Keystatic would make both slow. Instead: an import
+      script run on the Mac for each new export, writing the post list and
+      pictures into the repo; `build.js` makes the page from them.
+- [ ] **The import runs on the Mac, not on Netlify.** Netlify publishes
+      `dist/` from `build.js`, so the handoff's `build.py` and `./site/` do
+      not fit. Netlify has no ffmpeg, and re-processing years of pictures on
+      every deploy would use up the free plan's 300 credits a month.
+- [ ] **No ready-made thumbnails or 2000px copies.** Netlify's image service
+      already resizes and converts every picture when it is asked for
+      (`IMAGE_TRANSFORM` in `index.html`). Instagram stores pictures about
+      1080px wide, so a "2000px" copy would be the same picture saved again.
+
+**What years of pictures means:**
+
+- [ ] **It stays public.** The repo is public and 23 MB (2026-11-09). A few
+      thousand pictures is probably 0.5–2 GB — a guess until the export is
+      measured. Every file stays in GitHub's history for good: taking a post
+      off the page does not take it off GitHub.
+- [ ] **Slower deploys.** Every deploy downloads the whole repo and copies
+      all of `images/` into `dist/`.
+- [ ] **Videos wait for R2.** Videos go on Cloudflare R2, not in the repo
+      (NEXT — Video and audio players, above), and R2 waits on the go for a
+      second domain for media. Reels wait with it.
+- [ ] **Loading on demand.** `loading="lazy"` is on the rejected list in
+      `AGENTS.md` ("everything lands at once"). With thousands of tiles that
+      rule cannot hold; this page needs the exception written down.
+- [ ] **Private data.** The export also holds DMs, contacts and login
+      history. It never goes inside the repo folder, and the import reads
+      only the posts file and the media.
+
+**To decide before building** (recommendation first):
+
+- [ ] **Build system:** a Node import script feeding `build.js`, not Python
+      plus `./site/`. One build.
+- [ ] **Thumbnails:** Netlify's image service, not stored WebP copies.
+- [ ] **Typeface:** PP Neue Montreal, not the handoff's system fonts — the
+      style guide's one typeface.
+- [ ] **Videos:** photos first; Reels once R2 is set up.
+- [ ] **Separate page:** the feed at its own address, so `index.html` stays
+      the one-file site and nothing the feed weighs reaches a visitor who
+      never taps `&`.
+- [ ] **Getting the export to the agent:** it cannot come through GitHub,
+      because the repo is public. Either run the import on the Mac, or upload
+      a copy holding only the posts file and the media.
+
+---
+
 ## DEFERRED
 
 Not now; revisit if the conditions appear.
