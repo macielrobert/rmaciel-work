@@ -3,6 +3,13 @@
 Product work, code debt, and the domain/email migration. The v70–v80 labels
 below identify historical work; Git records the current version.
 
+> **North star, 2026-11-15 (Robert): launch the finished site.** Work goes to
+> the site's aesthetics and layout and to `PUNCH-LIST.md`. Harvest refinement
+> is paused as a distraction: the source-matching follow-up and the Harvest
+> half of video/audio wait until after launch. Harvest gets fixes only where
+> a launch task is blocked by it. The two-site Netlify split is approved
+> (HANDOFF — Netlify build cost, below).
+>
 > **Where work happens now.** Phases 1–3 are finished: the repository, the
 > Netlify build, the CMS, and the Claude Code loop all exist and work. The
 > current job is populating real work and improving the portfolio and Harvest
@@ -423,6 +430,7 @@ Branch `ux-2b-review-fixes`.
 ### Harvest follow-up — Match source artwork and reuse source text as image data
 
 **Requested by Robert, 2026-10-10; backlog, not part of active UX-2b.**
+**Deferred until after launch (Robert, 2026-11-15).**
 DAILY SHAPES has generic JPEG names such as `IMG_0002.jpg`, while the
 corresponding Illustrator filenames hold the intended title/date/time
 (for example `Design 10-12-2016 23.01 PM.ai`). The screenshot shows a local
@@ -1335,7 +1343,10 @@ A one-word content edit costs ~30–40 s of build for ~1.5 s of real work.
 so the site build cannot tell the editor's 719 packages from the one it
 needs.**
 
-### Recommended direction — awaiting approval
+### Recommended direction — approved by Robert, 2026-11-15
+
+The blocker below still holds: nothing merges until a real deploy of each
+site has run. Creating the second site is a step in his Netlify dashboard.
 
 **Split into two Netlify sites.** Portfolio builds
 `npm ci --omit=dev && node build.js` (two packages, seconds, no serverless
